@@ -311,9 +311,18 @@ if missing:
 else:
     print("33 个指定软件包已经全部存在，不重复添加")
 
-# 再次检查：所有续行必须顶格，且指定软件包必须全部存在。
-for i in range(start + 1, end + len(missing)):
-    if make_lines[i].startswith((b" ", b"\t")):
+# 只检查 DEFAULT_PACKAGES 区块中的续行。
+# 第一行是 Makefile 变量定义，不参与顶格检查。
+final_end = end + len(missing)
+
+for i in range(start + 1, final_end):
+    line = make_lines[i]
+
+    # 忽略空行和纯注释行。
+    if not line.strip() or line.lstrip().startswith(b"#"):
+        continue
+
+    if line.startswith((b" ", b"\t")):
         raise RuntimeError(
             f"x86 Makefile 第 {i + 1} 行仍存在行首空格或 Tab"
         )
