@@ -1,0 +1,102 @@
+name: Temporary - Clean Git History
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_cleanup:
+        description: '确认重写默认分支历史并删除其他分支和标签'
+        required: true
+        type: choice
+        options:
+          - NO
+          - YES_DELETE_ALL_OLD_HISTORY
+        default: NO
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-clean-git-history
+  cancel-in-progress: false
+
+jobs:
+  clean-history:
+    if: ${{ inputs.confirm_cleanup == 'YES_DELETE_ALL_OLD_HISTORY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout current default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Rewrite repository history to one clean commit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "${DEFAULT_BRANCH}" ]]; then
+            echo "无法读取仓库默认分支名称。" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 私有构建覆盖目录不得进入公开仓库的新初始提交。
+          rm -rf -- files
+          touch .gitignore
+          if ! grep -Fxq "/files/" .gitignore; then
+            printf "\n# Local/private firmware overlay; never commit this directory.\n/files/\n" >> .gitignore
+          fi
+
+          echo "准备将默认分支 ${DEFAULT_BRANCH} 重写为单个全新提交。"
+          echo "当前工作区文件会保留；旧提交历史不会保留在新默认分支中。"
+
+          git checkout --orphan history-cleanup-temp
+          git add --all
+
+          if git diff --cached --quiet; then
+            echo "工作区没有可提交文件，停止操作。" >&2
+            exit 1
+          fi
+
+          git commit -m "Initial commit: clean repository history"
+
+          # 先更新默认分支。若仓库规则禁止强制推送，此处会失败并停止。
+          git push --force origin "HEAD:refs/heads/${DEFAULT_BRANCH}"
+
+          # 删除除默认分支以外的所有远程分支，避免它们继续暴露旧提交。
+          while IFS= read -r ref; do
+            [[ -z "${ref}" ]] && continue
+            branch="${ref#refs/heads/}"
+            if [[ "${branch}" == "${DEFAULT_BRANCH}" ]]; then
+              continue
+            fi
+            echo "删除旧分支：${branch}"
+            git push origin --delete "${branch}"
+          done < <(git ls-remote --heads origin | awk '{print $2}')
+
+          # 删除所有标签，避免标签继续引用旧提交。
+          while IFS= read -r ref; do
+            [[ -z "${ref}" ]] && continue
+            tag="${ref#refs/tags/}"
+            echo "删除旧标签：${tag}"
+            git push origin --delete "refs/tags/${tag}"
+          done < <(git ls-remote --tags --refs origin | awk '{print $2}')
+
+          echo "历史重写完成。默认分支：${DEFAULT_BRANCH}"
+          echo "请在 GitHub 仓库页面确认分支、标签、Release 和文件内容后，再将仓库设为公开。"
+
+      - name: Verify remaining remote refs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "剩余远程分支："
+          git ls-remote --heads origin || true
+          echo "剩余远程标签："
+          git ls-remote --tags --refs origin || true
