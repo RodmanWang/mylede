@@ -267,6 +267,8 @@ max_width = max(valid_lines, default=120)
 print(f"x86 软件包原有最大行宽：{max_width} 字符")
 
 # 无论是否有缺失包，都保留格式修正结果。
+added_line_count = 0
+
 if missing:
     last = make_lines[end - 1]
 
@@ -282,13 +284,12 @@ if missing:
 
     body = body.rstrip()
 
-    # 确保原有最后一行变成续行。
     if body.endswith(b"\\"):
         body = body[:-1].rstrip()
 
     make_lines[end - 1] = body + b" \\" + ending
 
-    # 新增包全部顶格，每个包之间只保留一个普通空格。
+    # 新增包全部顶格，按照原有行宽排列。
     new_lines = []
     current = b""
 
@@ -305,20 +306,25 @@ if missing:
     if current:
         new_lines.append(current + ending)
 
+    # 这里记录实际新增的 Makefile 行数，而不是软件包数量。
+    added_line_count = len(new_lines)
+
     make_lines[end:end] = new_lines
 
-    print(f"新增 x86 软件包：{len(missing)} 个")
+    print(
+        f"新增 x86 软件包：{len(missing)} 个，"
+        f"新增 Makefile 行数：{added_line_count} 行"
+    )
 else:
     print("33 个指定软件包已经全部存在，不重复添加")
 
-# 只检查 DEFAULT_PACKAGES 区块中的续行。
-# 第一行是 Makefile 变量定义，不参与顶格检查。
-final_end = end + len(missing)
+# 正确计算最终 DEFAULT_PACKAGES 区块的结束位置。
+final_end = end + added_line_count
 
+# 只检查 DEFAULT_PACKAGES 区块内的续行。
 for i in range(start + 1, final_end):
     line = make_lines[i]
 
-    # 忽略空行和纯注释行。
     if not line.strip() or line.lstrip().startswith(b"#"):
         continue
 
@@ -327,7 +333,9 @@ for i in range(start + 1, final_end):
             f"x86 Makefile 第 {i + 1} 行仍存在行首空格或 Tab"
         )
 
-final_block = b"".join(make_lines[start:end + len(missing)])
+# 检查指定软件包是否全部存在。
+final_block = b"".join(make_lines[start:final_end])
+
 final_tokens = set(
     re.findall(rb"[A-Za-z0-9_.+-]+", final_block)
 )
@@ -343,6 +351,14 @@ if not_found:
     )
 
 staged[makefile][1] = b"".join(make_lines)
+
+print("x86 Makefile 软件包检查通过：")
+print(f"  指定软件包总数：{len(packages)}")
+print(f"  本次新增数量：{len(missing)}")
+print(f"  实际新增行数：{added_line_count}")
+print("  续行格式：全部顶格")
+print("  重复追加：已避免")
+
 
 print("x86 Makefile 软件包检查通过：")
 print(f"  指定软件包总数：{len(packages)}")
