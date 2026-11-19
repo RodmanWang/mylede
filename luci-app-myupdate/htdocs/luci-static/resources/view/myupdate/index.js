@@ -44,11 +44,11 @@ return view.extend({
 		token.setAttribute('placeholder', cfg.token_configured ? '已配置；输入新 Token 可替换' : '仅 Private 仓库需要');
 		var statusText = E('p', { id: 'myupdate-status' }); showStatus(statusText, status);
 		var statusPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', '升级状态'), statusText,
-			E('p', '升级固定使用 LEDE sysupgrade -n，不保留旧系统配置。只接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'),
+			E('p', '升级使用 LEDE sysupgrade 默认配置备份与恢复机制。只接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'),
 			E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() { return callCheck().then(function(r) { if (!r || !r.ok) ui.addNotification(null, E('p', '检查任务启动失败'), 'error'); }); } }, '检查更新'), ' ',
 			E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() { return callDownload().then(function(r) { if (!r || !r.ok) ui.addNotification(null, E('p', '下载任务启动失败'), 'error'); }); } }, '下载并验证'), ' ',
 			E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
-				if (!confirm('确定升级吗？设备将执行不保留配置的系统升级并自动重启。请确保有本地或带外访问方式。')) return;
+				if (!confirm('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。')) return;
 				return callUpgrade().then(function(r) { if (!r || !r.ok) ui.addNotification(null, E('p', '升级任务启动失败，请先下载并验证固件'), 'error'); });
 			} }, '执行升级')
 		]);

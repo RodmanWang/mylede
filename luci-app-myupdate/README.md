@@ -9,7 +9,7 @@
 - 使用 Release 中的 `manifest.json` 和 `manifest.minisig`。
 - 下载前验证 Minisign 签名、设备兼容性、版本、资产名和大小；下载后验证文件大小及 SHA256。
 - 刷写前再次校验 SHA256，并执行 `sysupgrade -T`。
-- 正式升级固定执行 `sysupgrade -n -v`，不保留旧系统配置。不保留旧配置，也不提供旧 overlay 内的伪备份。
+- 正式升级执行 `sysupgrade -v`，使用 LEDE 默认配置备份与恢复机制。实际恢复的文件取决于设备的 sysupgrade 配置备份规则。
 - 自动模式只自动检查，不会无人值守自动刷写。
 
 ## 必需的构建版本标记
@@ -32,7 +32,7 @@
 - 不执行 `dd`，不自行写入磁盘分区；由 LEDE 自带 `sysupgrade` 平台升级机制处理 x86 combined 镜像。
 - 只支持当前明确配置的 squashfs + UEFI x86_64 镜像，不接受 BIOS、ext4、其他架构或其他资产名。
 - `sysupgrade -T` 失败时拒绝刷写。
-- 使用 `sysupgrade -n`，旧配置不会恢复；`backup_config=1` 时只在升级前保存一份备份。
+- 不使用 `sysupgrade -n`；升级时由系统默认配置备份与恢复机制处理配置。配置保留范围取决于 `/etc/sysupgrade.conf` 及系统识别的配置文件列表；这不等于保留已安装软件包或整个 overlay。
 - 刷写中断、电源故障或底层存储故障仍可能导致设备无法启动；该插件不提供硬件级回滚保证。远程升级应确保有本地/带外恢复手段。
 
 ## Release Manifest
