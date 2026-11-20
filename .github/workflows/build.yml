@@ -837,7 +837,15 @@ jobs:
                   'source_fingerprint': fingerprint,
                   'lede_commit': lede_commit,
                   'mylede_commit': mylede_commit,
-                  'build_target': os.environ.get('BUILD_TARGET', 'x86_64')
+                  'build_target': os.environ.get('BUILD_TARGET', 'x86_64'),
+                  # This workflow builds only the LEDE x86/64 target.
+                  # Keep release compatibility metadata explicit instead of
+                  # depending on optional fields in version.buildinfo.
+                  'compatibility': {
+                      'target': 'x86',
+                      'subtarget': '64',
+                      'arch': 'x86_64'
+                  }
               }, f, ensure_ascii=False, indent=2)
               f.write('\n')
           PY
@@ -982,15 +990,41 @@ jobs:
               if match:
                   info_values[match.group(1)] = next((v for v in match.groups()[1:] if v is not None), '')
 
-          target = info_values.get('DISTRIB_TARGET', '')
-          arch = info_values.get('DISTRIB_ARCH', '')
-          parts = target.split('/')
-          if len(parts) != 2 or not arch:
-              raise SystemExit(f'Invalid firmware compatibility metadata: target={target!r}, arch={arch!r}')
+          # The build workflow is intentionally fixed to LEDE x86/64.
+          # Read compatibility from build-meta.json, which we generate ourselves,
+          # rather than relying on version.buildinfo to contain optional fields.
+          compatibility = meta.get('compatibility') or {}
+          target = compatibility.get('target', '')
+          subtarget = compatibility.get('subtarget', '')
+          arch = compatibility.get('arch', '')
+
+          expected = {'target': 'x86', 'subtarget': '64', 'arch': 'x86_64'}
+          actual = {'target': target, 'subtarget': subtarget, 'arch': arch}
+          if actual != expected:
+              raise SystemExit(
+                  'Invalid firmware compatibility metadata: '
+                  f'expected={expected!r}, actual={actual!r}'
+              )
+
+          # If version.buildinfo does contain compatibility fields, make sure
+          # they agree with the fixed target; missing fields are not fatal.
+          info_target = info_values.get('DISTRIB_TARGET', '').strip()
+          info_arch = info_values.get('DISTRIB_ARCH', '').strip()
+          if info_target and info_target != f'{target}/{subtarget}':
+              raise SystemExit(
+                  f'version.buildinfo target mismatch: {info_target!r} '
+                  f'!= {target}/{subtarget}'
+              )
+          if info_arch and info_arch != arch:
+              raise SystemExit(
+                  f'version.buildinfo arch mismatch: {info_arch!r} != {arch}'
+              )
 
           images = list(Path('release-input').glob('openwrt-x86-64-generic-squashfs-combined-efi.img.gz'))
           if len(images) != 1 or images[0].stat().st_size == 0:
               raise SystemExit('Expected exactly one non-empty combined EFI image.')
+          if target != 'x86' or subtarget != '64' or arch != 'x86_64':
+              raise SystemExit('Firmware image and compatibility target do not match.')
           image = images[0]
           digest = hashlib.sha256()
           with image.open('rb') as stream:
