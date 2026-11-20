@@ -1071,7 +1071,7 @@ jobs:
             exit 1
           fi
           KEY_FILE="$RUNNER_TEMP/minisign.key"
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$KEY_FILE"
+          printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
           minisign -S -W -s "$KEY_FILE" \
             -m "$GITHUB_WORKSPACE/release-input/manifest.json" \
