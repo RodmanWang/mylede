@@ -1037,8 +1037,8 @@ jobs:
               'tag': meta['tag'],
               'channel': 'stable',
               'compatibility': {
-                  'target': parts[0],
-                  'subtarget': parts[1],
+                  'target': target,
+                  'subtarget': subtarget,
                   'arch': arch,
                   'device_policy': 'target',
                   'devices': []
