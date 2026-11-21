@@ -578,8 +578,8 @@ jobs:
           # Use the actual build date in China Standard Time (UTC+8).
           # Keep the workflow run number in the tag so multiple builds on the
           # same day still get unique Git tags.
-          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d')"
-          TAG="v${VERSION}-run${GITHUB_RUN_NUMBER}-r${GITHUB_RUN_ATTEMPT}"
+          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d').${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          TAG="v${VERSION}"
           mkdir -p /home/ubuntu/files/etc/myupdate
           printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
           chmod 0644 /home/ubuntu/files/etc/myupdate/build-version
