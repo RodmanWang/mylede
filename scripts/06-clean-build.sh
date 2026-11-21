@@ -7,7 +7,7 @@ trap 'status=$?; echo "错误：清理旧编译产物在第 ${LINENO} 行执行�
 TOPDIR="${TOPDIR:-/home/ubuntu/lede}"
 DL_SRC="${DL_SRC:-/home/ubuntu/dl}"
 
-echo "========== 5/6 清理旧的 SmartDNS 编译产物 =========="
+echo "========== 6/7 清理旧的 SmartDNS 编译产物 =========="
 
 for root in "$TOPDIR/build_dir" "$TOPDIR/staging_dir"; do
     [[ -d "$root" ]] || continue
@@ -43,4 +43,4 @@ else
     echo "提示：下载缓存目录不存在，跳过清理：$DL_SRC"
 fi
 
-echo "========== 5/6 旧编译产物清理完成 =========="
+echo "========== 6/7 旧编译产物清理完成 =========="
