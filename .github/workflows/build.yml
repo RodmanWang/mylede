@@ -3,6 +3,21 @@ name: MyLEDE Configurable Staged Build and Release
 on:
   workflow_dispatch:
     inputs:
+      kernel_version:
+        description: 固件 Linux 内核版本（留空自动选择 LEDE x86 目录中最高可用版本；也可手动填写，例如 6.6 或 6.12）
+        type: string
+        required: false
+        default: ''
+      kernel_partsize:
+        description: 内核分区大小 MB（MyLEDE 固定编译为 256 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
+        type: string
+        required: false
+        default: '256'
+      rootfs_partsize:
+        description: 根文件系统分区大小 MB（MyLEDE 固定编译为 4096 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
+        type: string
+        required: false
+        default: '4096'
       change_lan_ip:
         description: 是否修改固件默认 LAN 管理地址
         type: boolean
@@ -60,6 +75,9 @@ jobs:
       actions: read
     outputs:
       lede_commit: ${{ steps.detect.outputs.lede_commit }}
+      smartdns_commit: ${{ steps.detect.outputs.smartdns_commit }}
+      smartdns_webui_commit: ${{ steps.detect.outputs.smartdns_webui_commit }}
+      luci_app_smartdns_commit: ${{ steps.detect.outputs.luci_app_smartdns_commit }}
       openclash_commit: ${{ steps.detect.outputs.openclash_commit }}
       fingerprint: ${{ steps.detect.outputs.fingerprint }}
       skip_build: ${{ steps.decision.outputs.skip_build }}
@@ -73,13 +91,16 @@ jobs:
         id: detect
         env:
           BUILD_TARGET: x86_64
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          # Validate the optional LAN override before any build stage starts.
+          # These UI inputs are informational only; the actual partition layout is fixed below.
           if [[ "$CHANGE_LAN_IP" == 'true' ]]; then
             python3 - "$LAN_IP" <<'PY'
           import ipaddress, sys
@@ -137,6 +158,9 @@ jobs:
               if url:
                   add(f'feed:{name}', url, ref)
 
+          add('smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
+          add('luci-app-smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
+          add('smartdns-webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
           add('OpenClash', 'https://github.com/vernesong/OpenClash.git', 'refs/heads/dev')
 
           with output_file.open('w', encoding='utf-8') as stream:
@@ -164,6 +188,9 @@ jobs:
             printf 'FEEDS_CONF_SHA256\t%s\n' "$FEEDS_SHA256"
             printf 'MYLEDE_COMMIT\t%s\n' "$GITHUB_SHA"
             printf 'BUILD_TARGET\t%s\n' "$BUILD_TARGET"
+            printf 'KERNEL_VERSION\t%s\n' "$KERNEL_VERSION"
+            printf 'KERNEL_PARTSIZE\t256\n'
+            printf 'ROOTFS_PARTSIZE\t4096\n'
             printf 'CHANGE_LAN_IP\t%s\n' "$CHANGE_LAN_IP"
             if [[ "$CHANGE_LAN_IP" == 'true' ]]; then printf 'LAN_IP\t%s\n' "$LAN_IP"; fi
             sort "$RUNNER_TEMP/source-revisions.tsv"
@@ -180,11 +207,27 @@ jobs:
             awk -F '\t' -v url="$wanted_url" '$2 == url {print $4; exit}' \
               "$RUNNER_TEMP/source-revisions.tsv"
           }
+          SMARTDNS_COMMIT="$(get_revision 'https://github.com/pymumu/smartdns.git')"
+          SMARTDNS_WEBUI_COMMIT="$(get_revision 'https://github.com/pymumu/smartdns-webui.git')"
+          LUCI_APP_SMARTDNS_COMMIT="$(get_revision 'https://github.com/pymumu/luci-app-smartdns.git')"
           OPENCLASH_COMMIT="$(get_revision 'https://github.com/vernesong/OpenClash.git')"
-          if [[ ! "$OPENCLASH_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo '::error::Cannot resolve the OpenClash feed revision.'
-            exit 1
-          fi
+
+          for entry in \
+            "smartdns:$SMARTDNS_COMMIT" \
+            "smartdns-webui:$SMARTDNS_WEBUI_COMMIT" \
+            "luci-app-smartdns:$LUCI_APP_SMARTDNS_COMMIT" \
+            "OpenClash:$OPENCLASH_COMMIT"; do
+            name="${entry%%:*}"
+            sha="${entry#*:}"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Cannot resolve a full 40-character commit for $name."
+              exit 1
+            fi
+          done
+
+          echo "smartdns_commit=$SMARTDNS_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "smartdns_webui_commit=$SMARTDNS_WEBUI_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "luci_app_smartdns_commit=$LUCI_APP_SMARTDNS_COMMIT" >> "$GITHUB_OUTPUT"
           echo "openclash_commit=$OPENCLASH_COMMIT" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
@@ -336,6 +379,7 @@ jobs:
       - name: Run preparation scripts 01 through 04 on a cold toolchain build
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
@@ -579,6 +623,7 @@ jobs:
 
       - name: Run preparation scripts 01 through 04 and cleanup script 06
         env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
@@ -589,32 +634,72 @@ jobs:
             01-check-env.sh \
             02-update-source.sh \
             03-update-feeds.sh \
-            04-configure.sh; do
+            04-configure.sh \
+            06-clean-build.sh; do
             echo "========== Running $script =========="
             bash "/home/ubuntu/scripts/$script"
             df -hT /
           done
 
-          # Capture the OpenClash revision actually checked out by feeds update.
-          OPENCLASH_DIR=/home/ubuntu/lede/feeds/OpenClash
-          [[ -d "$OPENCLASH_DIR/.git" ]] || { echo '::error::OpenClash feed checkout is missing.'; exit 1; }
-          OPENCLASH_ACTUAL_COMMIT="$(git -C "$OPENCLASH_DIR" rev-parse HEAD)"
-          [[ "$OPENCLASH_ACTUAL_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid OpenClash checkout commit.'; exit 1; }
-          echo "$OPENCLASH_ACTUAL_COMMIT" > "$RUNNER_TEMP/openclash-actual-commit.txt"
+      - name: Read and display partition defaults from pinned LEDE source
+        id: partition_defaults
+        env:
+          KERNEL_PARTSIZE_INPUT: ${{ inputs.kernel_partsize }}
+          ROOTFS_PARTSIZE_INPUT: ${{ inputs.rootfs_partsize }}
+          LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /home/ubuntu/lede
 
-          # Run the existing OpenClash customization script without changing its repository copy.
-          OPENCLASH_SCRIPT=/home/ubuntu/scripts/05-openclash.sh
-          if [[ ! -f "$OPENCLASH_SCRIPT" && -f "$GITHUB_WORKSPACE/05-openclash.sh" ]]; then
-            OPENCLASH_SCRIPT="$GITHUB_WORKSPACE/05-openclash.sh"
-          fi
-          [[ -f "$OPENCLASH_SCRIPT" ]] || { echo '::error::05-openclash.sh was not found in scripts/ or the repository root.'; exit 1; }
-          sed "s#vernesong/OpenClash/dev/#vernesong/OpenClash/${OPENCLASH_ACTUAL_COMMIT}/#g" \
-            "$OPENCLASH_SCRIPT" > "$RUNNER_TEMP/05-openclash-pinned.sh"
-          bash "$RUNNER_TEMP/05-openclash-pinned.sh" "$OPENCLASH_DIR"
+          # Resolve Kconfig defaults from the exact pinned LEDE checkout used by this build.
+          # This intentionally mirrors the clean make defconfig performed by scripts/07-build.sh.
+          rm -rf tmp .config
+          make defconfig
+          [[ -s .config ]] || { echo '::error::make defconfig did not generate .config'; exit 1; }
 
-          echo '========== Running 06-clean-build.sh =========='
-          bash /home/ubuntu/scripts/06-clean-build.sh
-          df -hT /
+          python3 - .config "$KERNEL_PARTSIZE_INPUT" "$ROOTFS_PARTSIZE_INPUT" "$LEDE_COMMIT" <<'PY'
+          from pathlib import Path
+          import re, sys
+
+          config = Path(sys.argv[1]).read_text(encoding='utf-8')
+          kernel_input, rootfs_input, commit = (x.strip() for x in sys.argv[2:])
+          # Fixed MyLEDE layout; UI values never override these constants.
+          kernel_fixed = '256'
+          rootfs_fixed = '4096'
+
+          def read_value(symbol):
+              matches = re.findall(rf'^{re.escape(symbol)}=(\d+)$', config, re.M)
+              if len(matches) != 1:
+                  raise SystemExit(f'无法从本次 LEDE make defconfig 结果中唯一读取 {symbol}，停止以免显示错误默认值')
+              return matches[0]
+
+          kernel_default = read_value('CONFIG_TARGET_KERNEL_PARTSIZE')
+          rootfs_default = read_value('CONFIG_TARGET_ROOTFS_PARTSIZE')
+          kernel_effective = kernel_fixed
+          rootfs_effective = rootfs_fixed
+
+          output = Path(__import__('os').environ['GITHUB_OUTPUT'])
+          with output.open('a', encoding='utf-8') as f:
+              f.write(f'kernel_default={kernel_default}\n')
+              f.write(f'rootfs_default={rootfs_default}\n')
+              f.write(f'kernel_effective={kernel_effective}\n')
+              f.write(f'rootfs_effective={rootfs_effective}\n')
+
+          summary = Path(__import__('os').environ['GITHUB_STEP_SUMMARY'])
+          with summary.open('a', encoding='utf-8') as f:
+              f.write('## LEDE 分区大小（来自本次固定源码版本）\n\n')
+              f.write(f'- LEDE commit：`{commit}`\n\n')
+              f.write('| 项目 | 本次远程 LEDE 源码原始默认值 | Actions 输入框显示值 | MyLEDE 实际编译值 | 用途 |\\n')
+              f.write('|---|---:|---:|---:|---|\\n')
+              f.write(f'| 内核分区 | {kernel_default} MB | {kernel_input or "未填写"} | **固定 {kernel_effective} MB** | 存放启动内核及启动相关内容 |\\n')
+              f.write(f'| 根文件系统分区 | {rootfs_default} MB | {rootfs_input or "未填写"} | **固定 {rootfs_effective} MB** | 存放系统文件和安装的软件 |\\n\\n')
+              f.write('注意：Actions 输入框默认显示 256 / 4096，仅用于提示 MyLEDE 固定布局。即使手动改成其他数字，实际编译仍强制使用 256 MB / 4096 MB，不会跟随上游默认值变化。\\n')
+
+          print(f'LEDE commit: {commit}')
+          print(f'内核分区：源码默认 {kernel_default} MB；本次采用 {kernel_effective} MB')
+          print(f'根文件系统分区：源码默认 {rootfs_default} MB；本次采用 {rootfs_effective} MB')
+          PY
 
       - name: Calculate stable toolchain cache namespace
         id: firmware_toolchain_key
@@ -775,7 +860,10 @@ jobs:
           BUILD_TAG: ${{ steps.build_version.outputs.tag }}
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
-          MYLEDE_COMMIT: ${{ github.sha }}
+          SMARTDNS_COMMIT: ${{ needs.source_check.outputs.smartdns_commit }}
+          SMARTDNS_WEBUI_COMMIT: ${{ needs.source_check.outputs.smartdns_webui_commit }}
+          LUCI_APP_SMARTDNS_COMMIT: ${{ needs.source_check.outputs.luci_app_smartdns_commit }}
+          OPENCLASH_COMMIT: ${{ needs.source_check.outputs.openclash_commit }}
           BUILD_TARGET: x86_64
         run: |
           set -Eeuo pipefail
@@ -795,21 +883,13 @@ jobs:
           cp -f "${IMAGES[0]}" "$RELEASE_INPUT/"
           cp -f "$TARGET_DIR/version.buildinfo" "$RELEASE_INPUT/version.buildinfo"
           python3 - "$RELEASE_INPUT/build-meta.json" "$BUILD_VERSION" "$BUILD_TAG" "$SOURCE_FINGERPRINT" "$LEDE_COMMIT" "$GITHUB_SHA" <<'PY'
-          import json, os, sys, subprocess
-          from pathlib import Path
+          import json, os, sys
           output, version, tag, fingerprint, lede_commit, mylede_commit = sys.argv[1:]
-          openclash_commit = Path('/home/ubuntu/lede/feeds/OpenClash/.git').exists()
-          if not openclash_commit:
-              raise SystemExit('OpenClash feed checkout is missing; cannot record actual source revision.')
-          openclash_commit = subprocess.check_output(
-              ['git', '-C', '/home/ubuntu/lede/feeds/OpenClash', 'rev-parse', 'HEAD'], text=True
-          ).strip()
-          local_commit = os.environ['MYLEDE_COMMIT']
           sources = {
-              'smartdns_local_package': local_commit,
-              'luci_app_smartdns_local_package': local_commit,
-              'luci_app_myupdate_local_package': local_commit,
-              'openclash': openclash_commit,
+              'smartdns': os.environ['SMARTDNS_COMMIT'],
+              'smartdns_webui': os.environ['SMARTDNS_WEBUI_COMMIT'],
+              'luci_app_smartdns': os.environ['LUCI_APP_SMARTDNS_COMMIT'],
+              'openclash': os.environ['OPENCLASH_COMMIT'],
           }
           for name, commit in sources.items():
               if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
@@ -1034,10 +1114,20 @@ jobs:
                       'commit': meta['lede_commit'],
                       'short_commit': meta['lede_commit'][:7]
                   },
-                  'MyLEDE local packages (smartdns, luci-app-smartdns, luci-app-myupdate)': {
-                      'ref': 'repository commit',
-                      'commit': meta['mylede_commit'],
-                      'short_commit': meta['mylede_commit'][:7]
+                  'pymumu/smartdns': {
+                      'ref': 'HEAD',
+                      'commit': meta['sources']['smartdns'],
+                      'short_commit': meta['sources']['smartdns'][:7]
+                  },
+                  'pymumu/smartdns-webui': {
+                      'ref': 'HEAD',
+                      'commit': meta['sources']['smartdns_webui'],
+                      'short_commit': meta['sources']['smartdns_webui'][:7]
+                  },
+                  'pymumu/luci-app-smartdns': {
+                      'ref': 'HEAD',
+                      'commit': meta['sources']['luci_app_smartdns'],
+                      'short_commit': meta['sources']['luci_app_smartdns'][:7]
                   },
                   'vernesong/OpenClash': {
                       'ref': 'dev',
@@ -1100,8 +1190,10 @@ jobs:
           [[ -n "$IMAGE" ]] || { echo '::error::Firmware image missing from release input.'; exit 1; }
           META="$(cat release-input/build-meta.json)"
           LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
+          SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
+          SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
+          LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
           OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
-          MYLEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["mylede_commit"])' <<< "$META")"
 
           cat > release-input/release-notes.md <<EOF
           Automated MyLEDE x86-64 firmware build.
@@ -1114,10 +1206,10 @@ jobs:
           ### Source commits used for this build
 
           - LEDE (master): [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
-          - SmartDNS local package sources: MyLEDE [${MYLEDE_COMMIT:0:7}](https://github.com/${GITHUB_REPOSITORY}/commit/${MYLEDE_COMMIT})
-          - LuCI App SmartDNS local package: MyLEDE [${MYLEDE_COMMIT:0:7}](https://github.com/${GITHUB_REPOSITORY}/commit/${MYLEDE_COMMIT})
-          - LuCI App MyUpdate local package: MyLEDE [${MYLEDE_COMMIT:0:7}](https://github.com/${GITHUB_REPOSITORY}/commit/${MYLEDE_COMMIT})
-          - OpenClash (actual checkout): [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash (dev): [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
           EOF
           gh release create "$RELEASE_TAG" \
             "$IMAGE" \
