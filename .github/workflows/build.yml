@@ -83,6 +83,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Run OTA version contract tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
+          sh -n luci-app-myupdate/root/usr/libexec/myupdate/task.sh
+          sh -n luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh
+
       - name: Detect LEDE, feeds and custom package revisions
         id: detect
         env:
@@ -199,6 +207,14 @@ jobs:
 
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
+      - name: Upload immutable source revision lock
+        uses: actions/upload-artifact@v7
+        with:
+          name: mylede-source-revisions
+          path: ${{ runner.temp }}/source-revisions.tsv
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Prepare successful-build cache directory
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/lede-build-state"
@@ -271,6 +287,17 @@ jobs:
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
+
+      - name: Download and install immutable source revision lock
+        uses: actions/download-artifact@v7
+        with:
+          name: mylede-source-revisions
+          path: ${{ runner.temp }}/source-lock
+      - name: Install source revision lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
 
       - name: Calculate stable toolchain cache namespace
         id: toolchain_key
@@ -350,6 +377,7 @@ jobs:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+          MYLEDE_SOURCE_LOCK: /home/ubuntu/source-revisions.tsv
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -362,6 +390,8 @@ jobs:
       - name: Build tools and toolchain only when both caches miss
         id: toolchain_build
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        env:
+          MYLEDE_SOURCE_LOCK: /home/ubuntu/source-revisions.tsv
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -561,6 +591,17 @@ jobs:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
 
+      - name: Download and install immutable source revision lock
+        uses: actions/download-artifact@v7
+        with:
+          name: mylede-source-revisions
+          path: ${{ runner.temp }}/source-lock
+      - name: Install source revision lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
+
       - name: Restore LEDE download cache from toolchain stage
         id: firmware_dl_cache
         uses: actions/cache/restore@v6
@@ -575,11 +616,10 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          # Use the actual build date in China Standard Time (UTC+8).
-          # Keep the workflow run number in the tag so multiple builds on the
-          # same day still get unique Git tags.
-          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d')"
-          TAG="v${VERSION}-run${GITHUB_RUN_NUMBER}-r${GITHUB_RUN_ATTEMPT}"
+          # Date + Actions run number + attempt form a numeric, comparable OTA version.
+          # The Release tag is exactly "v<version>" and is checked against the signed manifest.
+          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d').${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          TAG="v${VERSION}"
           mkdir -p /home/ubuntu/files/etc/myupdate
           printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
           chmod 0644 /home/ubuntu/files/etc/myupdate/build-version
@@ -592,6 +632,7 @@ jobs:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+          MYLEDE_SOURCE_LOCK: /home/ubuntu/source-revisions.tsv
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -675,6 +716,13 @@ jobs:
             exit 1
           fi
           OPENCLASH_COMMIT="$(git -C "$OPENCLASH_DIR" rev-parse HEAD)"
+          EXPECTED_OPENCLASH_COMMIT="$(awk -F '\t' '$1=="OpenClash" {print $4; exit}' /home/ubuntu/source-revisions.tsv)"
+          if [[ "$OPENCLASH_COMMIT" != "$EXPECTED_OPENCLASH_COMMIT" ]]; then
+            echo "::error::OpenClash checkout differs from the preflight-pinned SHA."
+            echo "::error::Expected: $EXPECTED_OPENCLASH_COMMIT"
+            echo "::error::Actual:   $OPENCLASH_COMMIT"
+            exit 1
+          fi
           if [[ ! "$OPENCLASH_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Cannot resolve the checked-out OpenClash commit."
             exit 1
@@ -768,6 +816,7 @@ jobs:
           #!/usr/bin/env bash
           set -Eeuo pipefail
           cd /home/ubuntu/lede
+          export MYLEDE_SOURCE_LOCK=/home/ubuntu/source-revisions.tsv
           make defconfig
           # The cached host/toolchain tree may not contain every config-dependent host utility.
           make V=1 -j"$(nproc)" tools/install
@@ -784,6 +833,19 @@ jobs:
           export REAL_GIT SOURCE_COMMIT_CAPTURE
           mkdir -p "$CAPTURE_BIN"
           : > "$SOURCE_COMMIT_CAPTURE"
+          for locked_name in smartdns smartdns-webui luci-app-smartdns; do
+            locked_commit="$(awk -F '\t' -v name="$locked_name" '$1 == name { print $4; exit }' "$MYLEDE_SOURCE_LOCK")"
+            [[ "$locked_commit" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::Missing or invalid pinned SHA for $locked_name."
+              exit 1
+            }
+            case "$locked_name" in
+              smartdns) capture_name=smartdns ;;
+              smartdns-webui) capture_name=smartdns_webui ;;
+              luci-app-smartdns) capture_name=luci_app_smartdns ;;
+            esac
+            printf '%s\t%s\n' "$capture_name" "$locked_commit" >> "$SOURCE_COMMIT_CAPTURE"
+          done
           cat > "$CAPTURE_BIN/git" <<'GIT_WRAPPER'
           #!/usr/bin/env bash
           set -u
@@ -802,21 +864,19 @@ jobs:
             if [[ "$has_head" == true ]]; then source_name="$repo"; fi
           fi
           if [[ -n "$source_name" ]]; then
-            if output="$("$REAL_GIT" "$@")"; then
-              status=0
-            else
-              status=$?
+            lock_name="$source_name"
+            case "$source_name" in
+              smartdns_webui) lock_name='smartdns-webui' ;;
+              luci_app_smartdns) lock_name='luci-app-smartdns' ;;
+            esac
+            commit="$(awk -F '\t' -v name="$lock_name" '$1 == name { print $4; exit }' "$MYLEDE_SOURCE_LOCK")"
+            if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::No valid preflight-pinned SHA found for $source_name." >&2
+              exit 1
             fi
-            if (( status == 0 )); then
-              commit="$(printf '%s\n' "$output" | awk '$2 == "HEAD" { print $1; exit }')"
-              if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-                echo "::error::Could not capture a full commit SHA for $source_name from git ls-remote." >&2
-                exit 1
-              fi
-              printf '%s\t%s\n' "$source_name" "$commit" >> "$SOURCE_COMMIT_CAPTURE"
-            fi
-            printf '%s\n' "$output"
-            exit "$status"
+            printf '%s\t%s\n' "$source_name" "$commit" >> "$SOURCE_COMMIT_CAPTURE"
+            printf '%s HEAD\n' "$commit"
+            exit 0
           fi
           exec "$REAL_GIT" "$@"
           GIT_WRAPPER
@@ -1194,17 +1254,17 @@ jobs:
                       'short_commit': meta['lede_commit'][:7]
                   },
                   'pymumu/smartdns': {
-                      'ref': 'PKG_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'ref': 'preflight source lock commit',
                       'commit': meta['sources']['smartdns'],
                       'short_commit': meta['sources']['smartdns'][:7]
                   },
                   'pymumu/smartdns-webui': {
-                      'ref': 'SMARTDNS_WEBUI_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'ref': 'preflight source lock commit',
                       'commit': meta['sources']['smartdns_webui'],
                       'short_commit': meta['sources']['smartdns_webui'][:7]
                   },
                   'pymumu/luci-app-smartdns': {
-                      'ref': 'PKG_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'ref': 'preflight source lock commit',
                       'commit': meta['sources']['luci_app_smartdns'],
                       'short_commit': meta['sources']['luci_app_smartdns'][:7]
                   },
@@ -1256,6 +1316,14 @@ jobs:
             -x "$GITHUB_WORKSPACE/release-input/manifest.minisig" \
             -t 'MyLEDE firmware release'
           rm -f "$KEY_FILE"
+
+      - name: Validate signed OTA release payload
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$(find release-input -maxdepth 1 -type f -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print -quit)"
+          [[ -n "$IMAGE" ]] || { echo '::error::OTA test image missing.'; exit 1; }
+          python3 tests/ota/validate_release.py release-input/manifest.json "$IMAGE"
 
       - name: Publish firmware release
         env:

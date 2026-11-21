@@ -30,19 +30,9 @@ write_status running '正在查询 GitHub Release' false false false
 REL="$R/release.json"
 TAG="$(jsonfilter -i "$REL" -e '@.tag_name' 2>/dev/null || true)"
 [ -n "$TAG" ] || { write_status error 'Release 中没有可用版本' false false false; exit 1; }
-LATEST="$(printf '%s' "$TAG" | sed 's/^v//; s/-r[0-9][0-9]*$//')"
-case "$LATEST" in *[!0-9.]*|'') write_status error 'Release Tag 版本号格式无效' false false false; exit 1;; esac
-# Current version is embedded into the firmware by the build workflow.
+# The Release tag is an opaque identifier. The signed manifest is the
+# authoritative source of the numeric firmware version.
 UPDATE=false
-if [ "$CURRENT_VERSION" = unknown ] || [ "$CURRENT_VERSION" = "${DISTRIB_RELEASE:-}" ]; then
-	UPDATE=true
-elif [ "$LATEST" != "$CURRENT_VERSION" ]; then
-	if awk -v a="$LATEST" -v b="$CURRENT_VERSION" 'BEGIN { na=split(a,x,"."); nb=split(b,y,"."); n=(na>nb?na:nb); for(i=1;i<=n;i++){ ax=x[i]+0; by=y[i]+0; if(ax>by) exit 0; if(ax<by) exit 1; } exit 1; }'; then
-		UPDATE=true
-	elif [ "$(CFG allow_downgrade 0)" = 1 ]; then
-		UPDATE=true
-	fi
-fi
 ASSET_NAMES="$(jsonfilter -i "$REL" -e '@.assets[*].name' 2>/dev/null || true)"
 ASSET_IDS="$(jsonfilter -i "$REL" -e '@.assets[*].id' 2>/dev/null || true)"
 NAMES_FILE="$R/names"; IDS_FILE="$R/ids"
@@ -61,23 +51,37 @@ VERSION="$(sed -n '1p' "$R/verified-manifest.txt")"
 ASSET="$(sed -n '3p' "$R/verified-manifest.txt")"
 HASH="$(sed -n '4p' "$R/verified-manifest.txt")"
 SIZE="$(sed -n '5p' "$R/verified-manifest.txt")"
-[ "$VERSION" = "$LATEST" ] || { write_status error 'Manifest 版本与 Release Tag 不一致' "$UPDATE" false false; exit 1; }
+LATEST="$VERSION"
+# Compare numeric dot-separated components, including the run number and attempt.
+if [ "$CURRENT_VERSION" = unknown ] || [ "$CURRENT_VERSION" = "${DISTRIB_RELEASE:-}" ]; then
+	UPDATE=true
+elif [ "$LATEST" != "$CURRENT_VERSION" ]; then
+	if awk -v a="$LATEST" -v b="$CURRENT_VERSION" 'BEGIN {
+		na=split(a,x,"."); nb=split(b,y,"."); n=(na>nb?na:nb);
+		for(i=1;i<=n;i++){ ax=x[i]+0; by=y[i]+0; if(ax>by) exit 0; if(ax<by) exit 1; }
+		exit 1;
+	}'; then
+		UPDATE=true
+	elif [ "$(CFG allow_downgrade 0)" = 1 ]; then
+		UPDATE=true
+	fi
+fi
 ASSET_ID=''
 while IFS= read -r name && IFS= read -r id <&3; do [ "$name" = "$ASSET" ] && ASSET_ID="$id"; done < "$NAMES_FILE" 3< "$IDS_FILE"
 [ -n "$ASSET_ID" ] || { write_status error 'Manifest 指定的固件资产不存在' "$UPDATE" false false; exit 1; }
 if [ "$ACTION" = check ]; then
-	if [ "$UPDATE" = true ]; then write_status checked "发现可用更新 $TAG；Manifest 签名和设备兼容性已验证" true false false; else write_status current "当前已是最新版本 $CURRENT_VERSION" false false true; fi
+	if [ "$UPDATE" = true ]; then write_status checked "发现可用更新 $TAG；Manifest 签名和设备兼容性已验证" true false false; else write_status current "当前已是最新版本 $CURRENT_VERSION" false false false; fi
 	exit 0
 fi
-[ "$UPDATE" = true ] || { write_status current '当前已经是最新版本，不需要重复刷写' false false true; exit 1; }
+[ "$UPDATE" = true ] || { write_status current '当前已经是最新版本，不需要重复刷写' false false false; exit 1; }
 if [ "$ACTION" = download ]; then
-	write_status downloading "正在下载 $ASSET" true false true
+	write_status downloading "正在下载 $ASSET" true false false
 	# Avoid filling tmpfs; sysupgrade needs working space while validating and flashing.
 	FREE_KB="$(df -Pk /tmp | awk 'NR==2 {print $4}')"
 	NEED_KB=$(( (SIZE + 1023) / 1024 + 32768 ))
-	[ "$FREE_KB" -ge "$NEED_KB" ] || { write_status error ' /tmp 可用空间不足，无法安全下载和升级' true false true; exit 1; }
-	/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$ASSET_ID" "$R/firmware.bin" || { write_status error '固件下载失败' true false true; exit 1; }
-	/usr/libexec/myupdate/verify-image.sh "$R/firmware.bin" "$HASH" "$SIZE" >/dev/null || { rm -f "$R/firmware.bin"; write_status error '固件大小或 SHA256 校验失败' true false true; exit 1; }
+	[ "$FREE_KB" -ge "$NEED_KB" ] || { write_status error ' /tmp 可用空间不足，无法安全下载和升级' true false false; exit 1; }
+	/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$ASSET_ID" "$R/firmware.bin" || { write_status error '固件下载失败' true false false; exit 1; }
+	/usr/libexec/myupdate/verify-image.sh "$R/firmware.bin" "$HASH" "$SIZE" >/dev/null || { rm -f "$R/firmware.bin"; write_status error '固件大小或 SHA256 校验失败' true false false; exit 1; }
 	printf '%s\n' "$ASSET" > "$R/image-name"; printf '%s\n' "$VERSION" > "$R/image-version"
 	chmod 600 "$R/image-name" "$R/image-version"
 fi

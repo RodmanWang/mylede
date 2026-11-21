@@ -360,12 +360,6 @@ print("  续行格式：全部顶格")
 print("  重复追加：已避免")
 
 
-print("x86 Makefile 软件包检查通过：")
-print(f"  指定软件包总数：{len(packages)}")
-print(f"  本次新增数量：{len(missing)}")
-print("  续行格式：全部顶格")
-print("  重复追加：已避免")
-
 # 5. 所有上游源码修改均在检查完成后统一写入。
 for path, (old, new) in staged.items():
     if old != new:

@@ -1,0 +1,42 @@
+name: MyUpdate OTA contract tests
+
+on:
+  push:
+    branches: [main, "fix/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ota-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Test version ordering and Tag contract
+        run: python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
+
+      - name: Install Minisign for device verifier integration test
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y minisign
+
+      - name: Exercise signed OTA manifest verifier
+        run: bash tests/ota/test_verify_manifest.sh
+
+      - name: Validate shell syntax
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n tests/ota/test_verify_manifest.sh
+          find luci-app-myupdate/root -type f -name '*.sh' -print0 | while IFS= read -r -d '' file; do
+            sh -n "$file"
+          done
+          find scripts .github/ci -type f -name '*.sh' -print0 | while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done
