@@ -1,0 +1,15 @@
+{
+  "luci-app-myupdate": {
+    "description": "MyUpdate firmware update manager",
+    "read": {
+      "ubus": {
+        "myupdate": [ "get_status", "get_config" ]
+      }
+    },
+    "write": {
+      "ubus": {
+        "myupdate": [ "save_config", "set_token", "start_check", "start_download", "start_upgrade" ]
+      }
+    }
+  }
+}
