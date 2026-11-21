@@ -21,13 +21,30 @@ function read_status() {
 function get_config() {
 	let c = cursor(), out = {};
 	for (let key in [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
-		'check_interval', 'minisign_public_key', 'allow_downgrade' ])
+		'check_interval', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
 	out.token_configured = !!(fs.readfile(TOKEN) || '').trim();
 	return out;
 }
 function valid_string(v, max) {
 	return type(v) == 'string' && length(v) <= max && index(v, '\n') < 0 && index(v, '\r') < 0;
+}
+function valid_keep_paths(value) {
+	if (type(value) != 'string' || length(value) > 8192 || index(value, '\r') >= 0)
+		return false;
+	let seen = {};
+	for (let path in split(value, '\n')) {
+		if (path == '') continue;
+		if (!match(path, /^\/[A-Za-z0-9._/@+-]+$/) || path == '/' ||
+		    match(path, /(^|\/)\.\.?($|\/)/))
+			return false;
+		for (let prefix in [ '/proc', '/sys', '/dev', '/tmp', '/rom', '/overlay' ])
+			if (path == prefix || substr(path, 0, length(prefix) + 1) == prefix + '/')
+				return false;
+		if (seen[path]) return false;
+		seen[path] = true;
+	}
+	return true;
 }
 function save_config(args) {
 	let allowed = { repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
@@ -38,6 +55,11 @@ function save_config(args) {
 		let value = args[key];
 		if (!valid_string(value, max)) return { ok: false, error: '配置字段格式错误：' + key };
 		c.set(CONFIG, 'main', key, value);
+	}
+	if ('custom_keep_paths' in args) {
+		if (!valid_keep_paths(args.custom_keep_paths))
+			return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
+		c.set(CONFIG, 'main', 'custom_keep_paths', args.custom_keep_paths);
 	}
 	let visibility = args.repo_visibility ?? c.get(CONFIG, 'main', 'repo_visibility');
 	let channel = args.release_channel ?? c.get(CONFIG, 'main', 'release_channel');
@@ -70,7 +92,8 @@ return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
 	save_config: { args: { repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
-		upgrade_mode: 'String', check_interval: 'String', minisign_public_key: 'String', allow_downgrade: 'String' },
+		upgrade_mode: 'String', check_interval: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
+		custom_keep_paths: 'String' },
 		call: function(request) { return save_config(request.args); } },
 	set_token: { args: { token: 'String' }, call: function(request) { return set_token(request.args); } },
 	start_check: { call: function() { return start_task('check'); } },
