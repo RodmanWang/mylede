@@ -369,6 +369,7 @@ jobs:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+          MYLEDE_SOURCE_LOCK: /home/ubuntu/source-revisions.tsv
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -622,6 +623,7 @@ jobs:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+          MYLEDE_SOURCE_LOCK: /home/ubuntu/source-revisions.tsv
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -806,6 +808,7 @@ jobs:
           # Never allow workflow inputs or upstream defaults to alter the OTA partition layout.
           export KERNEL_PARTSIZE=256
           export ROOTFS_PARTSIZE=4096
+          export MYLEDE_SOURCE_LOCK=/home/ubuntu/source-revisions.tsv
 
           # Capture the exact commit SHAs returned to the unchanged package Makefiles.
           REAL_GIT="$(command -v git)"
