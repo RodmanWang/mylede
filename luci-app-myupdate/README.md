@@ -60,4 +60,4 @@
 
 ## 测试状态
 
-已进行源代码静态检查及 Shell/JSON 语法检查；尚未在用户实际 LEDE 设备上完成安装、GitHub API 联调、`sysupgrade -T` 和真实刷写验证。首次使用必须先在可恢复的测试设备上验证。
+CI 会测试版本排序、Tag/Manifest 一致性、Minisign 正反向验签及 x86_64 UEFI/squashfs 兼容性；发布前会校验固件资产名、大小、SHA256 和源码 SHA。GitHub API 实际下载、设备上的 `sysupgrade -T`、真实刷写与重启尚未在用户设备上验证。首次使用必须先在可恢复的测试设备上验证。
