@@ -4,13 +4,41 @@ set -Eeuo pipefail
 
 trap 'status=$?; echo "错误：源码配置在第 ${LINENO} 行执行失败（退出码：${status}）。" >&2; exit "$status"' ERR
 
+# ==================================================
+# 一、基础配置
+# ==================================================
+
 TOPDIR="${TOPDIR:-/home/ubuntu/lede}"
 CHANGE_LAN_IP="${CHANGE_LAN_IP:-false}"
 LAN_IP="${LAN_IP:-192.168.1.1}"
+
+# ==================================================
+# 二、分区大小配置
+# ==================================================
+# 单位：MB
+# 后续需要修改分区大小时，只需要修改下面两个值。
+# 必须为正整数，不限制具体数值。
+
+KERNEL_PARTSIZE=256
+ROOTFS_PARTSIZE=4096
+
+for variable in KERNEL_PARTSIZE ROOTFS_PARTSIZE; do
+    value="${!variable}"
+
+    if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+        echo "错误：$variable 必须是正整数，当前值：$value" >&2
+        exit 1
+    fi
+done
+
 export TOPDIR CHANGE_LAN_IP LAN_IP
+export KERNEL_PARTSIZE ROOTFS_PARTSIZE
+
 cd "$TOPDIR"
 
 echo "========== 4/7 应用自定义源码配置 =========="
+echo "内核分区大小：${KERNEL_PARTSIZE} MB"
+echo "根文件系统分区大小：${ROOTFS_PARTSIZE} MB"
 echo "提示：配置脚本只修改预先指定的配置项；若目标结构不符合预期会报错停止。"
 
 python3 - <<'PY'
@@ -20,27 +48,64 @@ import os
 import ipaddress
 
 root = Path(os.environ.get("TOPDIR", "/home/ubuntu/lede"))
-change_lan_ip = os.environ.get("CHANGE_LAN_IP", "false").lower() == "true"
+
+change_lan_ip = (
+    os.environ.get("CHANGE_LAN_IP", "false").lower() == "true"
+)
+
 lan_ip = os.environ.get("LAN_IP", "192.168.1.1").strip()
+
+kernel_partsize = os.environ["KERNEL_PARTSIZE"]
+rootfs_partsize = os.environ["ROOTFS_PARTSIZE"]
+
+# 再次检查分区参数，避免非法值进入源码配置。
+for name, value in (
+    ("KERNEL_PARTSIZE", kernel_partsize),
+    ("ROOTFS_PARTSIZE", rootfs_partsize),
+):
+    if not re.fullmatch(r"[1-9][0-9]*", value):
+        raise SystemExit(
+            f"{name} 必须是正整数，当前值：{value}"
+        )
 
 if change_lan_ip:
     try:
         parsed_ip = ipaddress.IPv4Address(lan_ip)
     except ipaddress.AddressValueError as exc:
-        raise SystemExit(f"LAN 地址不是合法 IPv4 地址：{lan_ip}") from exc
-    private_networks = tuple(ipaddress.ip_network(value) for value in (
-        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
-    ))
-    if not any(parsed_ip in network for network in private_networks):
-        raise SystemExit("LAN 地址必须属于 RFC1918 私有 IPv4 地址范围")
-    if parsed_ip.packed[-1] in (0, 255):
-        raise SystemExit("LAN 地址不能使用 .0 或 .255 主机地址")
+        raise SystemExit(
+            f"LAN 地址不是合法 IPv4 地址：{lan_ip}"
+        ) from exc
 
-# 暂存所有配置修改，全部检查通过后再统一写入，避免中途报错造成部分文件已修改。
+    private_networks = tuple(
+        ipaddress.ip_network(value)
+        for value in (
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+        )
+    )
+
+    if not any(parsed_ip in network for network in private_networks):
+        raise SystemExit(
+            "LAN 地址必须属于 RFC1918 私有 IPv4 地址范围"
+        )
+
+    if parsed_ip.packed[-1] in (0, 255):
+        raise SystemExit(
+            "LAN 地址不能使用 .0 或 .255 主机地址"
+        )
+
+# ==================================================
+# 暂存配置修改
+# 所有检查通过后再统一写入，避免中途报错造成部分文件已修改。
+# ==================================================
+
 staged = {}
+
 
 def load(rel):
     path = root / rel
+
     if not path.is_file():
         raise RuntimeError(f"找不到文件：{path}")
 
@@ -50,14 +115,18 @@ def load(rel):
 
     return path, staged[path][1]
 
+
 def save_if_changed(path, old, new):
     if path not in staged:
         staged[path] = [old, old]
 
     if staged[path][1] != old:
-        raise RuntimeError(f"{path} 的暂存内容与待修改内容不一致，停止写入。")
+        raise RuntimeError(
+            f"{path} 的暂存内容与待修改内容不一致，停止写入。"
+        )
 
     staged[path][1] = new
+
 
 def commit_changes():
     for path, (original, updated) in staged.items():
@@ -67,18 +136,27 @@ def commit_changes():
         else:
             print(f"无需修改：{path}")
 
-# --------------------------------------------------
+
+# ==================================================
 # 一、config/Config-images.in
-# --------------------------------------------------
+# 设置内核分区和根文件系统分区大小
+# ==================================================
 
 path, original = load("config/Config-images.in")
 lines = original.splitlines(keepends=True)
 
+
 def set_x86_default(lines, name, value):
     pattern = re.compile(
-        rb"^[ \t]*config[ \t]+" + name.encode() + rb"[ \t]*(?:\r?\n)?$"
+        rb"^[ \t]*config[ \t]+"
+        + name.encode()
+        + rb"[ \t]*(?:\r?\n)?$"
     )
-    starts = [i for i, line in enumerate(lines) if pattern.match(line)]
+
+    starts = [
+        i for i, line in enumerate(lines)
+        if pattern.match(line)
+    ]
 
     if len(starts) != 1:
         raise RuntimeError(
@@ -86,17 +164,23 @@ def set_x86_default(lines, name, value):
         )
 
     start = starts[0]
+
     end = next(
         (
             i for i in range(start + 1, len(lines))
-            if re.match(rb"^[ \t]*(?:config|menuconfig)[ \t]+", lines[i])
+            if re.match(
+                rb"^[ \t]*(?:config|menuconfig)[ \t]+",
+                lines[i]
+            )
         ),
         len(lines),
     )
 
     candidates = []
+
     for i in range(start + 1, end):
         active_line = lines[i].partition(b"#")[0]
+
         if (
             re.match(rb"^[ \t]*default[ \t]+", active_line)
             and re.search(rb"\bTARGET_x86\b", active_line)
@@ -110,6 +194,7 @@ def set_x86_default(lines, name, value):
         )
 
     i = candidates[0]
+
     updated, count = re.subn(
         rb"^([ \t]*default[ \t]+)[0-9]+",
         lambda m: m.group(1) + str(value).encode(),
@@ -118,25 +203,57 @@ def set_x86_default(lines, name, value):
     )
 
     if count != 1:
-        raise RuntimeError(f"无法安全修改 {name} 的默认值。")
+        raise RuntimeError(
+            f"无法安全修改 {name} 的默认值。"
+        )
 
     lines[i] = updated
 
-set_x86_default(lines, "TARGET_KERNEL_PARTSIZE", 256)
-set_x86_default(lines, "TARGET_ROOTFS_PARTSIZE", 4096)
 
-save_if_changed(path, original, b"".join(lines))
+# 使用脚本顶部的变量设置分区大小。
+# 不限制具体数值，只要求为正整数。
 
-# --------------------------------------------------
+set_x86_default(
+    lines,
+    "TARGET_KERNEL_PARTSIZE",
+    int(kernel_partsize),
+)
+
+set_x86_default(
+    lines,
+    "TARGET_ROOTFS_PARTSIZE",
+    int(rootfs_partsize),
+)
+
+print(
+    f"内核分区默认值已设置为：{kernel_partsize} MB"
+)
+
+print(
+    f"根文件系统分区默认值已设置为：{rootfs_partsize} MB"
+)
+
+save_if_changed(
+    path,
+    original,
+    b"".join(lines)
+)
+
+
+# ==================================================
 # 二、include/target.mk
-# --------------------------------------------------
+# 调整默认路由器软件包
+# ==================================================
 
 path, original = load("include/target.mk")
 lines = original.splitlines(keepends=True)
 
 starts = [
     i for i, line in enumerate(lines)
-    if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*:?=", line)
+    if re.match(
+        rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*:?=",
+        line
+    )
 ]
 
 if len(starts) != 1:
@@ -147,7 +264,10 @@ if len(starts) != 1:
 start = starts[0]
 end = start + 1
 
-while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
+while (
+    end < len(lines)
+    and lines[end - 1].rstrip(b"\r\n").endswith(b"\\")
+):
     end += 1
 
 allowed = {
@@ -160,6 +280,7 @@ allowed = {
 
 for i in range(start, end):
     line = lines[i]
+
     body, marker, comment = line.partition(b"#")
 
     matches = list(
@@ -177,31 +298,44 @@ for i in range(start, end):
 
         a, b = match.span()
 
-        if b < len(body) and body[b:b + 1] in (b" ", b"\t"):
+        if (
+            b < len(body)
+            and body[b:b + 1] in (b" ", b"\t")
+        ):
             b += 1
-        elif a > 0 and body[a - 1:a] in (b" ", b"\t"):
+
+        elif (
+            a > 0
+            and body[a - 1:a] in (b" ", b"\t")
+        ):
             a -= 1
 
         body = body[:a] + body[b:]
 
     lines[i] = body + marker + comment
 
+
 for i in range(end - 1, start - 1, -1):
     line = lines[i]
     body = line.rstrip(b"\r\n")
+
     if re.fullmatch(rb"[ \t]*\\[ \t]*", body):
         del lines[i]
         end -= 1
 
+
 section = b"\n".join(
-    line.partition(b"#")[0] for line in lines[start:end]
+    line.partition(b"#")[0]
+    for line in lines[start:end]
 )
 
 missing = [
-    package for package in sorted(allowed)
+    package
+    for package in sorted(allowed)
     if not re.search(
-        rb"(?<![A-Za-z0-9_.+-])" + re.escape(package) +
-        rb"(?![A-Za-z0-9_.+-])",
+        rb"(?<![A-Za-z0-9_.+-])"
+        + re.escape(package)
+        + rb"(?![A-Za-z0-9_.+-])",
         section,
     )
 ]
@@ -212,8 +346,10 @@ if missing:
 
     if line.endswith(b"\r\n"):
         ending, body = b"\r\n", line[:-2]
+
     elif line.endswith(b"\n"):
         ending, body = b"\n", line[:-1]
+
     else:
         ending, body = b"", line
 
@@ -225,6 +361,7 @@ if missing:
             prefix += b" "
 
         body = prefix + b" ".join(missing) + b" " + suffix
+
     else:
         if body and body[-1:] not in (b" ", b"\t"):
             body += b" "
@@ -233,11 +370,17 @@ if missing:
 
     lines[i] = body + ending
 
-save_if_changed(path, original, b"".join(lines))
 
-# --------------------------------------------------
+save_if_changed(
+    path,
+    original,
+    b"".join(lines)
+)
+
+
+# ==================================================
 # 三、默认系统描述
-# --------------------------------------------------
+# ==================================================
 
 path, original = load(
     "package/lean/default-settings/files/zzz-default-settings"
@@ -261,54 +404,102 @@ if (
         "系统描述配置无法确认已正确设置；停止操作，请检查文件内容。"
     )
 
-save_if_changed(path, original, new)
+save_if_changed(
+    path,
+    original,
+    new
+)
 
-# --------------------------------------------------
+
+# ==================================================
 # 四、可选修改默认 LAN 管理地址
-# --------------------------------------------------
+# ==================================================
 
 if change_lan_ip:
     rel = "package/base-files/files/bin/config_generate"
+
     path, original = load(rel)
     lines = original.splitlines(keepends=True)
 
     lan_pattern = re.compile(
         rb'^[ \t]*lan\) ipad=\$\{ipaddr:-"192\.168\.1\.1"\} ;;[ \t]*(?:\r?\n)?$'
     )
+
     other_pattern = re.compile(
         rb'^[ \t]*\*\) ipad=\$\{ipaddr:-"192\.168\.\$\(\(addr_offset\+\+\)\)\.1"\} ;;[ \t]*(?:\r?\n)?$'
     )
-    lan_hits = [i for i, line in enumerate(lines) if lan_pattern.match(line)]
-    other_hits = [i for i, line in enumerate(lines) if other_pattern.match(line)]
+
+    lan_hits = [
+        i for i, line in enumerate(lines)
+        if lan_pattern.match(line)
+    ]
+
+    other_hits = [
+        i for i, line in enumerate(lines)
+        if other_pattern.match(line)
+    ]
 
     if len(lan_hits) != 1 or len(other_hits) != 1:
         raise RuntimeError(
             f"{rel} 中 LAN 地址模板匹配数量异常："
-            f"lan 模板 {len(lan_hits)} 处，其他接口模板 {len(other_hits)} 处"
+            f"lan 模板 {len(lan_hits)} 处，"
+            f"其他接口模板 {len(other_hits)} 处"
         )
 
     lan_index, other_index = lan_hits[0], other_hits[0]
+
     if other_index <= lan_index:
-        raise RuntimeError(f"{rel} 中 LAN 地址模板顺序异常")
+        raise RuntimeError(
+            f"{rel} 中 LAN 地址模板顺序异常"
+        )
 
     prefix = ".".join(lan_ip.split(".")[:2])
-    for index, value in ((lan_index, lan_ip), (other_index, prefix + ".$((addr_offset++)).1")):
-        ending = b"\r\n" if lines[index].endswith(b"\r\n") else b"\n"
-        indent = re.match(rb"^([ \t]*)", lines[index]).group(1)
+
+    for index, value in (
+        (lan_index, lan_ip),
+        (other_index, prefix + ".$((addr_offset++)).1"),
+    ):
+        ending = (
+            b"\r\n"
+            if lines[index].endswith(b"\r\n")
+            else b"\n"
+        )
+
+        indent = re.match(
+            rb"^([ \t]*)",
+            lines[index]
+        ).group(1)
+
         if index == lan_index:
-            body = f'lan) ipad=${{ipaddr:-"{value}"}} ;;'.encode()
+            body = (
+                f'lan) ipad=${{ipaddr:-"{value}"}} ;;'
+            ).encode()
+
         else:
-            body = f'*) ipad=${{ipaddr:-"{value}"}} ;;'.encode()
+            body = (
+                f'*) ipad=${{ipaddr:-"{value}"}} ;;'
+            ).encode()
+
         lines[index] = indent + body + ending
 
-    save_if_changed(path, original, b"".join(lines))
-    print(f"默认 LAN 地址已设置为 {lan_ip}")
-else:
-    print("LAN 地址保持 LEDE 上游默认值 192.168.1.1")
+    save_if_changed(
+        path,
+        original,
+        b"".join(lines)
+    )
 
-# --------------------------------------------------
+    print(f"默认 LAN 地址已设置为 {lan_ip}")
+
+else:
+    print(
+        "LAN 地址保持 LEDE 上游默认值 192.168.1.1"
+    )
+
+
+# ==================================================
 # 五、target/linux/x86/Makefile
-# --------------------------------------------------
+# 添加 x86 默认软件包
+# ==================================================
 
 path, original = load("target/linux/x86/Makefile")
 lines = original.splitlines(keepends=True)
@@ -350,16 +541,22 @@ required = [
     b"nstat",
 ]
 
+
 def has_token(data, token):
     return re.search(
-        rb"(?<![A-Za-z0-9_.+-])" + re.escape(token) +
-        rb"(?![A-Za-z0-9_.+-])",
+        rb"(?<![A-Za-z0-9_.+-])"
+        + re.escape(token)
+        + rb"(?![A-Za-z0-9_.+-])",
         data,
     ) is not None
 
+
 starts = [
     i for i, line in enumerate(lines)
-    if re.match(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*\+=", line)
+    if re.match(
+        rb"^[ \t]*DEFAULT_PACKAGES[ \t]*\+=",
+        line
+    )
 ]
 
 if len(starts) != 1:
@@ -378,11 +575,13 @@ while (
     end += 1
 
 section = b"\n".join(
-    line.partition(b"#")[0] for line in lines[start:end]
+    line.partition(b"#")[0]
+    for line in lines[start:end]
 )
 
 missing = [
-    package for package in required
+    package
+    for package in required
     if not has_token(section, package)
 ]
 
@@ -392,8 +591,10 @@ if missing:
 
     if line.endswith(b"\r\n"):
         ending, body = b"\r\n", line[:-2]
+
     elif line.endswith(b"\n"):
         ending, body = b"\n", line[:-1]
+
     else:
         ending, body = b"", line
 
@@ -403,7 +604,11 @@ if missing:
         body += b" \\"
 
     if not ending:
-        ending = b"\r\n" if b"\r\n" in original else b"\n"
+        ending = (
+            b"\r\n"
+            if b"\r\n" in original
+            else b"\n"
+        )
 
     lines[i] = body + ending
 
@@ -414,14 +619,23 @@ if missing:
     for package in missing:
         if not current_line:
             current_line = package
-        elif len(current_line) + 1 + len(package) <= max_line_length:
+
+        elif (
+            len(current_line) + 1 + len(package)
+            <= max_line_length
+        ):
             current_line += b" " + package
+
         else:
-            additions.append(current_line + b" \\" + ending)
+            additions.append(
+                current_line + b" \\" + ending
+            )
             current_line = package
 
     if current_line:
-        additions.append(current_line + ending)
+        additions.append(
+            current_line + ending
+        )
 
     lines[end:end] = additions
 
@@ -429,14 +643,22 @@ if missing:
         f"新增 {len(missing)} 个默认软件包，"
         "按照原 Makefile 格式自动换行。"
     )
+
 else:
-    print("x86 默认软件包均已存在，无需添加。")
+    print(
+        "x86 默认软件包均已存在，无需添加。"
+    )
 
-save_if_changed(path, original, b"".join(lines))
+save_if_changed(
+    path,
+    original,
+    b"".join(lines)
+)
 
-# --------------------------------------------------
+
+# ==================================================
 # 六、关闭 Rclone / SSR-Plus 的二级功能默认启用项
-# --------------------------------------------------
+# ==================================================
 
 def disable_named_config_defaults(rel, names):
     path, original = load(rel)
@@ -444,7 +666,10 @@ def disable_named_config_defaults(rel, names):
 
     starts = [
         i for i, line in enumerate(lines)
-        if re.match(rb"^[ \t]*(?:config|menuconfig)[ \t]+", line)
+        if re.match(
+            rb"^[ \t]*(?:config|menuconfig)[ \t]+",
+            line
+        )
     ]
 
     if not starts:
@@ -453,7 +678,10 @@ def disable_named_config_defaults(rel, names):
         )
 
     boundaries = starts + [len(lines)]
-    section_map = {name: [] for name in names}
+    section_map = {
+        name: [] for name in names
+    }
+
     changed = 0
 
     for pos, section_start in enumerate(starts):
@@ -462,7 +690,9 @@ def disable_named_config_defaults(rel, names):
 
         for name in names:
             if name.lower() in config_header:
-                section_map[name].append((section_start, section_end))
+                section_map[name].append(
+                    (section_start, section_end)
+                )
 
     for name, matches in section_map.items():
         if len(matches) != 1:
@@ -488,18 +718,30 @@ def disable_named_config_defaults(rel, names):
                 changed += count
 
     if changed == 0:
-        print(f"提示：{rel} 指定子功能没有 default y，无需修改。")
+        print(
+            f"提示：{rel} 指定子功能没有 default y，无需修改。"
+        )
 
-    save_if_changed(path, original, b"".join(lines))
+    save_if_changed(
+        path,
+        original,
+        b"".join(lines)
+    )
 
     print(
-        f"{rel}：已将 {changed} 个指定子功能的 default y 改为 default n。"
+        f"{rel}：已将 {changed} 个指定子功能的 "
+        "default y 改为 default n。"
     )
+
 
 disable_named_config_defaults(
     "feeds/luci/applications/luci-app-rclone/Makefile",
-    [b"rclone-webui", b"rclone-ng"],
+    [
+        b"rclone-webui",
+        b"rclone-ng",
+    ],
 )
+
 
 def disable_ssr_x86_64_defaults(rel):
     path, original = load(rel)
@@ -511,7 +753,11 @@ def disable_ssr_x86_64_defaults(rel):
         active_line = line.partition(b"#")[0]
 
         if (
-            re.match(rb"^[ \t]*default[ \t]+y\b", active_line, re.IGNORECASE)
+            re.match(
+                rb"^[ \t]*default[ \t]+y\b",
+                active_line,
+                re.IGNORECASE
+            )
             and re.search(
                 rb"(?<![A-Za-z0-9_])x86_64(?![A-Za-z0-9_])",
                 active_line,
@@ -525,47 +771,88 @@ def disable_ssr_x86_64_defaults(rel):
                 count=1,
                 flags=re.IGNORECASE,
             )
+
             changed += count
 
     if changed == 0:
-        print(f"提示：{rel} 未发现包含 x86_64 的 default y 配置项。")
-    else:
-        print(f"{rel}：已将 {changed} 个 x86_64 条件默认启用项改为 default n。")
+        print(
+            f"提示：{rel} 未发现包含 x86_64 的 default y 配置项。"
+        )
 
-    save_if_changed(path, original, b"".join(lines))
+    else:
+        print(
+            f"{rel}：已将 {changed} 个 x86_64 条件默认启用项改为 default n。"
+        )
+
+    save_if_changed(
+        path,
+        original,
+        b"".join(lines)
+    )
+
 
 disable_ssr_x86_64_defaults(
     "feeds/helloworld/luci-app-ssr-plus/Makefile"
 )
 
-# --------------------------------------------------
+
+# ==================================================
 # 七、自动同步 x86 最高可用内核版本
-# --------------------------------------------------
+# ==================================================
 
 x86_dir = root / "target/linux/x86"
+
+if not x86_dir.is_dir():
+    raise RuntimeError(
+        f"x86 目标目录不存在：{x86_dir}"
+    )
+
 versions = []
 
 for item in x86_dir.iterdir():
-    match = re.fullmatch(r"config-(\d+(?:\.\d+)+)", item.name)
+    match = re.fullmatch(
+        r"config-(\d+(?:\.\d+)+)",
+        item.name
+    )
 
     if match and item.is_file():
         version = match.group(1)
+
         versions.append(
-            (tuple(int(part) for part in version.split(".")), version)
+            (
+                tuple(
+                    int(part)
+                    for part in version.split(".")
+                ),
+                version,
+            )
         )
 
 if not versions:
-    raise RuntimeError("找不到 target/linux/x86/config-版本文件。")
+    raise RuntimeError(
+        "找不到 target/linux/x86/config-版本文件。"
+    )
 
 max_version = max(versions)[1]
-print(f"x86 最高内核配置版本：{max_version}")
 
-path, original = load("target/linux/x86/Makefile")
+print(
+    f"x86 最高可用内核配置版本：{max_version}"
+)
+
+path, original = load(
+    "target/linux/x86/Makefile"
+)
+
 lines = original.splitlines(keepends=True)
 
-for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
+for variable in (
+    b"KERNEL_PATCHVER",
+    b"KERNEL_TESTING_PATCHVER",
+):
     pattern = re.compile(
-        rb"^([ \t]*" + variable + rb"[ \t]*:?=[ \t]*)"
+        rb"^([ \t]*"
+        + variable
+        + rb"[ \t]*:?=[ \t]*)"
         rb"([0-9]+(?:\.[0-9]+)+)"
         rb"([ \t]*(?:\#.*)?)"
         rb"(\r?\n)?$"
@@ -592,11 +879,28 @@ for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
         + (match.group(4) or b"")
     )
 
-save_if_changed(path, original, b"".join(lines))
+save_if_changed(
+    path,
+    original,
+    b"".join(lines)
+)
 
-# 所有目标文件均检查通过后，统一写入实际文件。
+
+# ==================================================
+# 八、统一提交修改
+# ==================================================
+
 commit_changes()
-print("自定义配置检查完成。")
+
+print("")
+print("========== 自定义源码配置完成 ==========")
+print(f"内核分区默认值：{kernel_partsize} MB")
+print(f"根文件系统分区默认值：{rootfs_partsize} MB")
+print(f"自动选择的内核版本：{max_version}")
+print("KERNEL_PATCHVER 已同步")
+print("KERNEL_TESTING_PATCHVER 已同步")
+print("所有配置检查通过。")
+
 PY
 
 echo "========== 4/7 源码配置完成 =========="
