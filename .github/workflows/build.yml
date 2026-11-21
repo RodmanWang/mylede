@@ -298,7 +298,6 @@ jobs:
           prefix: /home/ubuntu/lede
           mixkey: ${{ steps.toolchain_key.outputs.mixkey }}
 
-```yaml
       - name: Restore toolchain from Release fallback
         id: toolchain_release_fallback
         if: steps.toolchain_cache.outputs.hit != '1'
@@ -369,7 +368,6 @@ jobs:
           cd /home/ubuntu/lede
           rm -rf tmp .config
           make defconfig
-
           BUILD_LOG="$RUNNER_TEMP/lede-toolchain-build.log"
           setsid bash -o pipefail -c \
             'timeout --signal=INT --kill-after=30s 315m make V=1 -j"$(nproc)" tools/install toolchain/install 2>&1 | tee "$1"' \
@@ -503,7 +501,6 @@ jobs:
             [[ -n "$cache_id" ]] || continue
             gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
           done < "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
-
   firmware:
     name: Runner 2 - Build feeds, packages, kernel and firmware
     needs: [source_check, toolchain]
@@ -598,8 +595,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          cd /home/ubuntu         
-            for script in \
+          cd /home/ubuntu
+          for script in \
             01-check-env.sh \
             02-update-source.sh \
             03-update-feeds.sh \
@@ -609,6 +606,54 @@ jobs:
             bash "/home/ubuntu/scripts/$script"
             df -hT /
           done
+
+      - name: Read and display partition defaults from pinned LEDE source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LEDE_DIR=/home/ubuntu/lede
+          [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::Pinned LEDE Makefile is missing: $LEDE_DIR"; exit 1; }
+          cd "$LEDE_DIR"
+          echo '========== Pinned LEDE source partition defaults =========='
+          # Ask the pinned LEDE build system to resolve its own defaults.
+          # This is diagnostic only: the actual MyLEDE build remains fixed at 256/4096 MB.
+          if ! make -s printvars VARS='KERNEL_PARTSIZE ROOTFS_PARTSIZE' 2>&1; then
+            echo '::warning::LEDE printvars could not resolve partition defaults; showing source definitions instead.'
+            grep -RInE '(^|[[:space:]])(KERNEL_PARTSIZE|ROOTFS_PARTSIZE)[[:space:]]*[:?+]?=' \
+              target/linux/x86 include/target.mk target/Makefile 2>/dev/null | head -80 || true
+          fi
+          echo '========== Fixed MyLEDE partition layout =========='
+          echo 'Kernel partition: 256 MB'
+          echo 'Root filesystem partition: 4096 MB'
+          echo 'Note: this step only displays upstream defaults; it does not write to GITHUB_STEP_SUMMARY or change the build configuration.'
+
+      - name: Record the exact LEDE commit used by this build
+        id: lede_revision
+        env:
+          EXPECTED_LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LEDE_DIR=/home/ubuntu/lede
+          if ! git -C "$LEDE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "::error::LEDE is not a valid Git working tree: $LEDE_DIR"
+            exit 1
+          fi
+          ACTUAL_LEDE_COMMIT="$(git -C "$LEDE_DIR" rev-parse HEAD)"
+          if [[ ! "$ACTUAL_LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid actual LEDE commit: $ACTUAL_LEDE_COMMIT"
+            exit 1
+          fi
+          if [[ "$ACTUAL_LEDE_COMMIT" != "$EXPECTED_LEDE_COMMIT" ]]; then
+            echo "::error::Actual LEDE commit differs from the pinned preflight commit."
+            echo "::error::Expected: $EXPECTED_LEDE_COMMIT"
+            echo "::error::Actual:   $ACTUAL_LEDE_COMMIT"
+            exit 1
+          fi
+          echo "LEDE repository: $LEDE_DIR"
+          echo "LEDE branch: $(git -C "$LEDE_DIR" branch --show-current)"
+          echo "LEDE commit used by firmware build: $ACTUAL_LEDE_COMMIT"
+          echo "commit=$ACTUAL_LEDE_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Record the OpenClash feed commit used by this build
         id: openclash_revision
@@ -733,7 +778,6 @@ jobs:
           export ROOTFS_PARTSIZE=4096
 
           # Capture the exact commit SHAs returned to the unchanged package Makefiles.
-          # The shim is enabled only for scripts/07-build.sh, not for preflight or setup.
           REAL_GIT="$(command -v git)"
           SOURCE_COMMIT_CAPTURE="$RUNNER_TEMP/plugin-source-commits.tsv"
           CAPTURE_BIN="$RUNNER_TEMP/source-capture-bin"
@@ -744,12 +788,18 @@ jobs:
           #!/usr/bin/env bash
           set -u
           source_name=''
-          if [[ "${1:-}" == 'ls-remote' && "${3:-}" == 'HEAD' ]]; then
-            case "${2:-}" in
-              https://github.com/pymumu/smartdns.git) source_name='smartdns' ;;
-              https://github.com/pymumu/smartdns-webui.git) source_name='smartdns_webui' ;;
-              https://github.com/pymumu/luci-app-smartdns.git) source_name='luci_app_smartdns' ;;
-            esac
+          if [[ "${1:-}" == 'ls-remote' ]]; then
+            has_head=false
+            repo=''
+            for arg in "${@:2}"; do
+              [[ "$arg" == 'HEAD' ]] && has_head=true
+              case "$arg" in
+                https://github.com/pymumu/smartdns|https://github.com/pymumu/smartdns.git|http://github.com/pymumu/smartdns|http://github.com/pymumu/smartdns.git|git@github.com:pymumu/smartdns|git@github.com:pymumu/smartdns.git|ssh://git@github.com/pymumu/smartdns|ssh://git@github.com/pymumu/smartdns.git) repo='smartdns' ;;
+                https://github.com/pymumu/smartdns-webui|https://github.com/pymumu/smartdns-webui.git|http://github.com/pymumu/smartdns-webui|http://github.com/pymumu/smartdns-webui.git|git@github.com:pymumu/smartdns-webui|git@github.com:pymumu/smartdns-webui.git|ssh://git@github.com/pymumu/smartdns-webui|ssh://git@github.com/pymumu/smartdns-webui.git) repo='smartdns_webui' ;;
+                https://github.com/pymumu/luci-app-smartdns|https://github.com/pymumu/luci-app-smartdns.git|http://github.com/pymumu/luci-app-smartdns|http://github.com/pymumu/luci-app-smartdns.git|git@github.com:pymumu/luci-app-smartdns|git@github.com:pymumu/luci-app-smartdns.git|ssh://git@github.com/pymumu/luci-app-smartdns|ssh://git@github.com/pymumu/luci-app-smartdns.git) repo='luci_app_smartdns' ;;
+              esac
+            done
+            if [[ "$has_head" == true ]]; then source_name="$repo"; fi
           fi
           if [[ -n "$source_name" ]]; then
             if output="$("$REAL_GIT" "$@")"; then
@@ -881,7 +931,6 @@ jobs:
           with output_path.open('a', encoding='utf-8') as stream:
               stream.write('\n'.join(output) + '\n')
           PY
-
       - name: Select UEFI image and prepare release input
         if: success()
         shell: bash
@@ -889,7 +938,7 @@ jobs:
           BUILD_VERSION: ${{ steps.build_version.outputs.version }}
           BUILD_TAG: ${{ steps.build_version.outputs.tag }}
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
-          LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+          LEDE_COMMIT: ${{ steps.lede_revision.outputs.commit }}
           SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_commit }}
           SMARTDNS_WEBUI_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_webui_commit }}
           LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns_commit }}
@@ -898,6 +947,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           TARGET_DIR=/home/ubuntu/lede/bin/targets/x86/64
+          RELEASE_INPUT="$GITHUB_WORKSPACE/release-input"
           mkdir -p "$RELEASE_INPUT"
           [[ -d "$TARGET_DIR" ]] || { echo "::error::Missing target directory: $TARGET_DIR"; exit 1; }
 
@@ -1249,7 +1299,6 @@ jobs:
             --notes-file release-input/release-notes.md \
             --target "$GITHUB_SHA" \
             --latest
-
       - name: Prepare successful source fingerprint marker
         env:
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
