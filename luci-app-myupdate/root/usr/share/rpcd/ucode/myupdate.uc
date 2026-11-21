@@ -1,0 +1,79 @@
+'use strict';
+
+import * as fs from 'fs';
+import * as uci from 'uci';
+
+const CONFIG = 'myupdate';
+const TOKEN = '/etc/myupdate/token';
+const STATUS = '/tmp/myupdate/status.json';
+const TASK = '/usr/libexec/myupdate/task.sh';
+
+function cursor() { return uci.cursor(); }
+function read_status() {
+	let raw = fs.readfile(STATUS);
+	if (raw == null || raw == '') return {
+		state: 'idle', message: '尚未检查更新', current_version: '', latest_version: '',
+		update_available: false, image_ready: false, image_verified: false, busy: false, updated_at: ''
+	};
+	try { return json(raw); }
+	catch (e) { return { state: 'error', message: '状态文件无法解析', busy: false }; }
+}
+function get_config() {
+	let c = cursor(), out = {};
+	for (let key in [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
+		'check_interval', 'minisign_public_key', 'allow_downgrade' ])
+		out[key] = c.get(CONFIG, 'main', key) ?? '';
+	out.token_configured = !!(fs.readfile(TOKEN) || '').trim();
+	return out;
+}
+function valid_string(v, max) {
+	return type(v) == 'string' && length(v) <= max && index(v, '\n') < 0 && index(v, '\r') < 0;
+}
+function save_config(args) {
+	let allowed = { repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
+		upgrade_mode: 10, check_interval: 6, minisign_public_key: 256, allow_downgrade: 1 };
+	let c = cursor();
+	for (let key, max in allowed) {
+		if (!(key in args)) continue;
+		let value = args[key];
+		if (!valid_string(value, max)) return { ok: false, error: '配置字段格式错误：' + key };
+		c.set(CONFIG, 'main', key, value);
+	}
+	let visibility = args.repo_visibility ?? c.get(CONFIG, 'main', 'repo_visibility');
+	let channel = args.release_channel ?? c.get(CONFIG, 'main', 'release_channel');
+	let mode = args.upgrade_mode ?? c.get(CONFIG, 'main', 'upgrade_mode');
+	let interval = int(args.check_interval ?? c.get(CONFIG, 'main', 'check_interval'));
+	if (![ 'public', 'private' ].includes(visibility)) return { ok: false, error: '仓库可见性无效' };
+	if (channel != 'stable') return { ok: false, error: '更新通道无效' };
+	if (![ 'manual', 'notify', 'auto' ].includes(mode)) return { ok: false, error: '检查模式无效' };
+	if (isNaN(interval) || interval < 900 || interval > 604800) return { ok: false, error: '检查间隔必须为 900 至 604800 秒' };
+	if (!c.commit(CONFIG)) return { ok: false, error: '保存配置失败' };
+	return { ok: true };
+}
+function set_token(args) {
+	let token = args.token;
+	if (!valid_string(token, 512) || !/^(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]+)$/.test(token))
+		return { ok: false, error: 'Token 格式无效' };
+	fs.mkdir('/etc/myupdate', 0o700);
+	if (fs.writefile(TOKEN, token + '\n') == null) return { ok: false, error: '无法写入 Token' };
+	fs.chmod(TOKEN, 0o600);
+	return { ok: true };
+}
+function start_task(action) {
+	if (![ 'check', 'download', 'upgrade' ].includes(action)) return { ok: false, error: '操作无效' };
+	let p = fs.popen("/bin/sh -c '" + TASK + ' ' + action + " >/dev/null 2>&1 &'", 'r');
+	if (p == null) return { ok: false, error: '无法启动后台任务' };
+	p.close();
+	return { ok: true };
+}
+return { myupdate: {
+	get_status: { call: function() { return read_status(); } },
+	get_config: { call: function() { return get_config(); } },
+	save_config: { args: { repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
+		upgrade_mode: 'String', check_interval: 'String', minisign_public_key: 'String', allow_downgrade: 'String' },
+		call: function(request) { return save_config(request.args); } },
+	set_token: { args: { token: 'String' }, call: function(request) { return set_token(request.args); } },
+	start_check: { call: function() { return start_task('check'); } },
+	start_download: { call: function() { return start_task('download'); } },
+	start_upgrade: { call: function() { return start_task('upgrade'); } }
+} };

@@ -1,0 +1,1504 @@
+name: MyLEDE Configurable Staged Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: 固件 Linux 内核版本（留空自动选择 LEDE x86 目录中最高可用版本；也可手动填写，例如 6.6 或 6.12）
+        type: string
+        required: false
+        default: ''
+      kernel_partsize:
+        description: 内核分区大小 MB（MyLEDE 固定编译为 256 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
+        type: string
+        required: false
+        default: '256'
+      rootfs_partsize:
+        description: 根文件系统分区大小 MB（MyLEDE 固定编译为 4096 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
+        type: string
+        required: false
+        default: '4096'
+      change_lan_ip:
+        description: 是否修改固件默认 LAN 管理地址
+        type: boolean
+        required: false
+        default: false
+      lan_ip:
+        description: 自定义 LAN 地址（仅 RFC1918 私有 IPv4 有效，默认 192.168.1.1）
+        type: string
+        required: false
+        default: '192.168.1.1'
+      force_rebuild:
+        description: 忽略成功编译记录，强制重新编译固件
+        type: boolean
+        required: false
+        default: false
+      rebuild_toolchain:
+        description: 强制重新编译基础工具和交叉编译工具链（耗时较长）
+        type: boolean
+        required: false
+        default: false
+      保留天数:
+        description: "保留天数（同时应用于 GitHub Release 和 Actions 运行记录）"
+        required: true
+        default: 7
+        type: number
+      保留数量:
+        description: "保留数量（同时应用于 GitHub Release 和 Actions 运行记录）"
+        required: true
+        default: 30
+        type: number
+  schedule:
+    # Daily at 03:00 China Standard Time (19:00 UTC on the previous day).
+    - cron: '0 19 * * *'
+
+permissions:
+  contents: read
+  actions: write
+
+# 定时任务使用的默认保留规则；手动运行后会同步更新这里和输入框默认值。
+env:
+  DEFAULT_KEEP_DAYS: "7"
+  DEFAULT_KEEP_COUNT: "30"
+
+concurrency:
+  group: mylede-x86_64-staged-build
+  cancel-in-progress: false
+
+jobs:
+  source_check:
+    name: Preflight - pin all source revisions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      lede_commit: ${{ steps.detect.outputs.lede_commit }}
+      fingerprint: ${{ steps.detect.outputs.fingerprint }}
+      skip_build: ${{ steps.decision.outputs.skip_build }}
+    steps:
+      - name: Checkout MyLEDE repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Detect LEDE, feeds and custom package revisions
+        id: detect
+        env:
+          BUILD_TARGET: x86_64
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
+          CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
+          LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # These UI inputs are informational only; the actual partition layout is fixed below.
+          if [[ "$CHANGE_LAN_IP" == 'true' ]]; then
+            python3 - "$LAN_IP" <<'PY'
+          import ipaddress, sys
+          try:
+              ip = ipaddress.IPv4Address(sys.argv[1])
+          except ipaddress.AddressValueError:
+              raise SystemExit('LAN_IP 不是合法 IPv4 地址')
+          private = [ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('172.16.0.0/12'), ipaddress.ip_network('192.168.0.0/16')]
+          if not any(ip in net for net in private):
+              raise SystemExit('LAN_IP 必须属于 RFC1918 私有地址范围：10/8、172.16/12 或 192.168/16')
+          if ip.packed[-1] in (0, 255):
+              raise SystemExit('LAN_IP 不能使用 .0 或 .255 主机地址')
+          PY
+          fi
+
+          LEDE_URL='https://github.com/coolsnowwolf/lede.git'
+          LEDE_REF='refs/heads/master'
+          LEDE_COMMIT="$(git ls-remote "$LEDE_URL" "$LEDE_REF" | awk -v ref="$LEDE_REF" '$2 == ref {print $1; exit}')"
+          if [[ ! "$LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::Cannot resolve coolsnowwolf/lede master.'
+            exit 1
+          fi
+
+          FEEDS_FILE="$RUNNER_TEMP/feeds.conf.default"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "https://raw.githubusercontent.com/coolsnowwolf/lede/${LEDE_COMMIT}/feeds.conf.default" \
+            --output "$FEEDS_FILE"
+          [[ -s "$FEEDS_FILE" ]] || { echo '::error::feeds.conf.default is empty.'; exit 1; }
+          FEEDS_SHA256="$(sha256sum "$FEEDS_FILE" | awk '{print $1}')"
+
+          python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" <<'PY'
+          import sys
+          from pathlib import Path
+
+          feeds_file = Path(sys.argv[1])
+          output_file = Path(sys.argv[2])
+          repositories = {}
+
+          def add(name, url, ref):
+              repositories[(url, ref)] = name
+
+          for raw_line in feeds_file.read_text(encoding='utf-8', errors='replace').splitlines():
+              line = raw_line.strip()
+              if not line or line.startswith('#'):
+                  continue
+              fields = line.split()
+              if len(fields) < 3 or not fields[0].startswith('src-git'):
+                  continue
+              name, source = fields[1], fields[2]
+              if ';' in source:
+                  url, branch = source.rsplit(';', 1)
+                  ref = f'refs/heads/{branch}'
+              else:
+                  url, ref = source, 'HEAD'
+              if url:
+                  add(f'feed:{name}', url, ref)
+
+          add('smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
+          add('luci-app-smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
+          add('smartdns-webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
+          add('OpenClash', 'https://github.com/vernesong/OpenClash.git', 'refs/heads/dev')
+
+          with output_file.open('w', encoding='utf-8') as stream:
+              for (url, ref), name in sorted(repositories.items()):
+                  stream.write(f'{name}\t{url}\t{ref}\n')
+          print(f'Found {len(repositories)} unique source references.')
+          PY
+
+          : > "$RUNNER_TEMP/source-revisions.tsv"
+          while IFS=$'\t' read -r repo_name repo_url repo_ref; do
+            [[ -n "$repo_name" && -n "$repo_url" && -n "$repo_ref" ]] || continue
+            echo "Checking $repo_name ($repo_url, $repo_ref)"
+            remote_output="$(git ls-remote "$repo_url" "$repo_ref")"
+            repo_commit="$(printf '%s\n' "$remote_output" | awk -v ref="$repo_ref" '$2 == ref {print $1; exit}')"
+            if [[ ! "$repo_commit" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Cannot resolve $repo_ref for $repo_name ($repo_url)"
+              exit 1
+            fi
+            printf '%s\t%s\t%s\t%s\n' "$repo_name" "$repo_url" "$repo_ref" "$repo_commit" \
+              >> "$RUNNER_TEMP/source-revisions.tsv"
+          done < "$RUNNER_TEMP/source-repositories.tsv"
+
+          {
+            printf 'LEDE\t%s\n' "$LEDE_COMMIT"
+            printf 'FEEDS_CONF_SHA256\t%s\n' "$FEEDS_SHA256"
+            printf 'MYLEDE_COMMIT\t%s\n' "$GITHUB_SHA"
+            printf 'BUILD_TARGET\t%s\n' "$BUILD_TARGET"
+            printf 'KERNEL_VERSION\t%s\n' "$KERNEL_VERSION"
+            printf 'KERNEL_PARTSIZE\t256\n'
+            printf 'ROOTFS_PARTSIZE\t4096\n'
+            printf 'CHANGE_LAN_IP\t%s\n' "$CHANGE_LAN_IP"
+            if [[ "$CHANGE_LAN_IP" == 'true' ]]; then printf 'LAN_IP\t%s\n' "$LAN_IP"; fi
+            sort "$RUNNER_TEMP/source-revisions.tsv"
+          } > "$RUNNER_TEMP/source-fingerprint-input.txt"
+
+          FINGERPRINT="$(sha256sum "$RUNNER_TEMP/source-fingerprint-input.txt" | awk '{print $1}')"
+          echo "Pinned LEDE: $LEDE_COMMIT"
+          echo "Source fingerprint: $FINGERPRINT"
+          echo "lede_commit=$LEDE_COMMIT" >> "$GITHUB_OUTPUT"
+
+          echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare successful-build cache directory
+        shell: bash
+        run: mkdir -p "$RUNNER_TEMP/lede-build-state"
+
+      - name: Restore successful build marker
+        id: successful_build
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/lede-build-state
+          key: lede-success-${{ steps.detect.outputs.fingerprint }}-${{ github.sha }}
+
+      - name: Decide whether a rebuild is required
+        id: decision
+        env:
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          REBUILD_TOOLCHAIN: ${{ inputs.rebuild_toolchain }}
+          CACHE_HIT: ${{ steps.successful_build.outputs.cache-hit }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "$FORCE_REBUILD" == 'true' || "$REBUILD_TOOLCHAIN" == 'true' ]]; then
+            echo 'skip_build=false' >> "$GITHUB_OUTPUT"
+            echo 'Manual rebuild requested.'
+          elif [[ "$CACHE_HIT" == 'true' ]]; then
+            echo 'skip_build=true' >> "$GITHUB_OUTPUT"
+            echo 'This exact source fingerprint has already been built and published.'
+          else
+            echo 'skip_build=false' >> "$GITHUB_OUTPUT"
+            echo 'A source revision changed or no successful build marker exists.'
+          fi
+
+  toolchain:
+    name: Runner 1 - Restore or build LEDE host tools and toolchain
+    needs: source_check
+    if: needs.source_check.outputs.skip_build != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout MyLEDE repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Free unused runner disk space
+        uses: endersonmenezes/free-disk-space@v4
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: false
+          remove_packages: 'azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*'
+          remove_packages_one_command: true
+          remove_folders: '/usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /opt/pipx /usr/share/swift /usr/share/miniconda /usr/local/julia*'
+          rm_cmd: rm
+          testing: false
+
+      - name: Check disk after cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          df -hT /
+          df -i /
+
+      - name: Clone the exact LEDE revision
+        env:
+          LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+        run: bash .github/ci/clone-pinned-lede.sh
+
+      - name: Calculate stable toolchain cache namespace
+        id: toolchain_key
+        env:
+          REBUILD_TOOLCHAIN: ${{ inputs.rebuild_toolchain }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CONFIG_HASH="$(sha256sum scripts/04-configure.sh .github/ci/install-build-deps.sh | sha256sum | awk '{print $1}')"
+          MIXKEY="ubuntu-24.04-x86_64-${CONFIG_HASH}"
+          if [[ "$REBUILD_TOOLCHAIN" == 'true' ]]; then
+            MIXKEY="${MIXKEY}-forced-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+          echo "config_hash=$CONFIG_HASH" >> "$GITHUB_OUTPUT"
+          echo "mixkey=$MIXKEY" >> "$GITHUB_OUTPUT"
+
+      - name: Restore host tools and cross toolchain cache
+        id: toolchain_cache
+        uses: stupidloud/cachewrtbuild@main
+        with:
+          ccache: false
+          toolchain: true
+          skip: true
+          clean: false
+          prefix: /home/ubuntu/lede
+          mixkey: ${{ steps.toolchain_key.outputs.mixkey }}
+
+      - name: Restore toolchain from Release fallback
+        id: toolchain_release_fallback
+        if: steps.toolchain_cache.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOOLCHAIN_MIXKEY: ${{ steps.toolchain_key.outputs.mixkey }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v zstd >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y zstd
+          fi
+          TOOLCHAIN_HASH="$(git -C /home/ubuntu/lede log --pretty=tformat:%h -n1 tools toolchain)"
+          ASSET_NAME="toolchain-${TOOLCHAIN_MIXKEY}-${TOOLCHAIN_HASH}.tar.zst"
+          echo "Looking for $ASSET_NAME"
+          if gh release download toolchain-cache --repo "$GITHUB_REPOSITORY" \
+              --pattern "$ASSET_NAME" --dir "$RUNNER_TEMP"; then
+            tar --zstd -xf "$RUNNER_TEMP/$ASSET_NAME" -C /home/ubuntu/lede
+            sed -i 's/ $(tool.*\/stamp-compile)//;' /home/ubuntu/lede/Makefile
+            sed -i 's/ $(tool.*\/stamp-install)//;' /home/ubuntu/lede/Makefile
+            echo 'hit=1' >> "$GITHUB_OUTPUT"
+            echo 'Restored toolchain from Release fallback.'
+          else
+            echo 'hit=0' >> "$GITHUB_OUTPUT"
+            echo 'No matching Release fallback found.'
+          fi
+
+      - name: Install shared Ubuntu 24.04 build dependencies on a cold toolchain build
+        if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        run: bash .github/ci/install-build-deps.sh
+
+      - name: Prepare original MyLEDE workspace on a cold toolchain build
+        if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        run: bash .github/ci/prepare-workspace.sh
+
+      - name: Restore LEDE download cache for a cold toolchain build
+        if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        id: toolchain_dl_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /home/ubuntu/dl
+          key: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-toolchain
+          restore-keys: |
+            lede-dl-${{ runner.os }}-
+
+      - name: Run preparation scripts 01 through 04 on a cold toolchain build
+        if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+          CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
+          LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /home/ubuntu
+          for script in 01-check-env.sh 02-update-source.sh 03-update-feeds.sh 04-configure.sh; do
+            echo "========== Running $script =========="
+            bash "/home/ubuntu/scripts/$script"
+          done
+
+      - name: Build tools and toolchain only when both caches miss
+        id: toolchain_build
+        if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /home/ubuntu/lede
+          rm -rf tmp .config
+          make defconfig
+          BUILD_LOG="$RUNNER_TEMP/lede-toolchain-build.log"
+          setsid bash -o pipefail -c \
+            'timeout --signal=INT --kill-after=30s 315m make V=1 -j"$(nproc)" tools/install toolchain/install 2>&1 | tee "$1"' \
+            _ "$BUILD_LOG" &
+          BUILD_PID=$!
+          BUILD_PGID="$(ps -o pgid= -p "$BUILD_PID" | tr -d ' ')"
+          [[ -n "$BUILD_PGID" ]] || { echo '::error::Cannot identify toolchain process group.'; exit 1; }
+
+          (
+            while kill -0 "$BUILD_PID" 2>/dev/null; do
+              sleep 60
+              kill -0 "$BUILD_PID" 2>/dev/null || exit 0
+              AVAILABLE_KB="$(df -Pk / | awk 'NR == 2 {print $4}')"
+              AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
+              echo "Toolchain disk watchdog: ${AVAILABLE_GB}GiB available."
+              if (( AVAILABLE_KB < 5 * 1024 * 1024 )); then
+                echo "::error::Toolchain build stopped: only ${AVAILABLE_GB}GiB disk space remains."
+                kill -TERM -- "-$BUILD_PGID" 2>/dev/null || true
+                sleep 20
+                kill -KILL -- "-$BUILD_PGID" 2>/dev/null || true
+                exit 0
+              fi
+            done
+          ) &
+          WATCHDOG_PID=$!
+
+          set +e
+          wait "$BUILD_PID"
+          BUILD_STATUS=$?
+          set -e
+          kill "$WATCHDOG_PID" 2>/dev/null || true
+          wait "$WATCHDOG_PID" 2>/dev/null || true
+          df -hT /
+          exit "$BUILD_STATUS"
+
+      - name: Upload toolchain log on failure
+        if: always() && steps.toolchain_build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: lede-toolchain-log-${{ github.run_number }}
+          path: ${{ runner.temp }}/lede-toolchain-build.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Save toolchain-stage download cache
+        if: success() && steps.toolchain_build.outcome == 'success'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: /home/ubuntu/dl
+          key: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-toolchain
+
+      - name: Publish or refresh the toolchain Release fallback
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOOLCHAIN_MIXKEY: ${{ steps.toolchain_key.outputs.mixkey }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /home/ubuntu/lede
+          TOOLCHAIN_HASH="$(git log --pretty=tformat:%h -n1 tools toolchain)"
+          ASSET_NAME="toolchain-${TOOLCHAIN_MIXKEY}-${TOOLCHAIN_HASH}.tar.zst"
+
+          if gh release view toolchain-cache --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$ASSET_NAME"; then
+            echo "Matching Release fallback already exists: $ASSET_NAME"
+            exit 0
+          fi
+
+          if ! command -v zstd >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y zstd
+          fi
+          shopt -s nullglob
+          CACHE_PATHS=(staging_dir/host* staging_dir/tool*)
+          if (( ${#CACHE_PATHS[@]} == 0 )); then
+            echo '::warning::No host/toolchain staging directories found; skipping Release fallback.'
+            exit 0
+          fi
+
+          ARCHIVE="$RUNNER_TEMP/$ASSET_NAME"
+          tar --zstd -cf "$ARCHIVE" "${CACHE_PATHS[@]}"
+          ARCHIVE_SIZE="$(stat -c '%s' "$ARCHIVE")"
+          echo "Toolchain fallback size: $ARCHIVE_SIZE bytes"
+          if (( ARCHIVE_SIZE >= 1900000000 )); then
+            echo '::warning::Fallback exceeds the conservative 1.9GB asset limit; Actions cache remains the primary store.'
+            rm -f "$ARCHIVE"
+            exit 0
+          fi
+
+          if ! gh release view toolchain-cache --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create toolchain-cache --repo "$GITHUB_REPOSITORY" \
+              --title 'MyLEDE toolchain cache' \
+              --notes 'Fallback archive for host tools and the x86_64 cross toolchain. Not a firmware release.' \
+              --prerelease --target "$GITHUB_SHA"
+          fi
+
+          gh release upload toolchain-cache "$ARCHIVE" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view toolchain-cache --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' > "$RUNNER_TEMP/toolchain-assets.txt"
+          while IFS= read -r old_asset; do
+            [[ -n "$old_asset" ]] || continue
+            [[ "$old_asset" == toolchain-*.tar.zst ]] || continue
+            [[ "$old_asset" == "$ASSET_NAME" ]] && continue
+            gh release delete-asset toolchain-cache "$old_asset" --repo "$GITHUB_REPOSITORY" --yes || true
+          done < "$RUNNER_TEMP/toolchain-assets.txt"
+
+      - name: Prune obsolete toolchain Actions caches before post-save
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIXKEY: ${{ steps.toolchain_key.outputs.mixkey }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CURRENT_KEY="${MIXKEY}-cache-openwrt-$(git -C /home/ubuntu/lede log --pretty=tformat:%h -n1 tools toolchain)"
+          gh cache list --repo "$GITHUB_REPOSITORY" --key 'ubuntu-24.04-' \
+            --limit 100 --json id,key > "$RUNNER_TEMP/toolchain-caches.json"
+          python3 - "$RUNNER_TEMP/toolchain-caches.json" "$CURRENT_KEY" <<'PY' > "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding='utf-8'))
+          keep = sys.argv[2]
+          for item in data:
+              if item.get('key') != keep:
+                  print(item['id'])
+          PY
+          while IFS= read -r cache_id; do
+            [[ -n "$cache_id" ]] || continue
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
+          done < "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
+  firmware:
+    name: Runner 2 - Build feeds, packages, kernel and firmware
+    needs: [source_check, toolchain]
+    if: needs.source_check.outputs.skip_build != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      NPM_CONFIG_FUND: 'false'
+      NPM_CONFIG_AUDIT: 'false'
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      version: ${{ steps.build_version.outputs.version }}
+      tag: ${{ steps.build_version.outputs.tag }}
+    steps:
+      - name: Checkout MyLEDE repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Free unused runner disk space
+        uses: endersonmenezes/free-disk-space@v4
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: false
+          remove_packages: 'azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*'
+          remove_packages_one_command: true
+          remove_folders: '/usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /opt/pipx /usr/share/swift /usr/share/miniconda /usr/local/julia*'
+          rm_cmd: rm
+          testing: false
+
+      - name: Check disk after cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          df -hT /
+          df -i /
+
+      - name: Install shared Ubuntu 24.04 build dependencies
+        run: bash .github/ci/install-build-deps.sh
+
+      - name: Install Node.js 22 for SmartDNS WebUI
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Prepare original MyLEDE workspace
+        run: bash .github/ci/prepare-workspace.sh
+
+      - name: Clone the exact LEDE revision
+        env:
+          LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+        run: bash .github/ci/clone-pinned-lede.sh
+
+      - name: Restore LEDE download cache from toolchain stage
+        id: firmware_dl_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /home/ubuntu/dl
+          key: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-toolchain
+          restore-keys: |
+            lede-dl-${{ runner.os }}-
+
+      - name: Embed MyUpdate firmware version
+        id: build_version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Use the actual build date in China Standard Time (UTC+8).
+          # Keep the workflow run number in the tag so multiple builds on the
+          # same day still get unique Git tags.
+          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d')"
+          TAG="v${VERSION}-run${GITHUB_RUN_NUMBER}-r${GITHUB_RUN_ATTEMPT}"
+          mkdir -p /home/ubuntu/files/etc/myupdate
+          printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
+          chmod 0644 /home/ubuntu/files/etc/myupdate/build-version
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Embedded MyUpdate version: $VERSION ($TAG)"
+
+      - name: Run preparation scripts 01 through 04 and cleanup script 06
+        env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+          CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
+          LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /home/ubuntu
+          for script in \
+            01-check-env.sh \
+            02-update-source.sh \
+            03-update-feeds.sh \
+            04-configure.sh \
+            06-clean-build.sh; do
+            echo "========== Running $script =========="
+            bash "/home/ubuntu/scripts/$script"
+            df -hT /
+          done
+
+      - name: Read and display partition defaults from pinned LEDE source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LEDE_DIR=/home/ubuntu/lede
+          [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::Pinned LEDE Makefile is missing: $LEDE_DIR"; exit 1; }
+          cd "$LEDE_DIR"
+          echo '========== Pinned LEDE source partition defaults =========='
+          # Ask the pinned LEDE build system to resolve its own defaults.
+          # This is diagnostic only: the actual MyLEDE build remains fixed at 256/4096 MB.
+          if ! make -s printvars VARS='KERNEL_PARTSIZE ROOTFS_PARTSIZE' 2>&1; then
+            echo '::warning::LEDE printvars could not resolve partition defaults; showing source definitions instead.'
+            grep -RInE '(^|[[:space:]])(KERNEL_PARTSIZE|ROOTFS_PARTSIZE)[[:space:]]*[:?+]?=' \
+              target/linux/x86 include/target.mk target/Makefile 2>/dev/null | head -80 || true
+          fi
+          echo '========== Fixed MyLEDE partition layout =========='
+          echo 'Kernel partition: 256 MB'
+          echo 'Root filesystem partition: 4096 MB'
+          echo 'Note: this step only displays upstream defaults; it does not write to GITHUB_STEP_SUMMARY or change the build configuration.'
+
+      - name: Record the exact LEDE commit used by this build
+        id: lede_revision
+        env:
+          EXPECTED_LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LEDE_DIR=/home/ubuntu/lede
+          if ! git -C "$LEDE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "::error::LEDE is not a valid Git working tree: $LEDE_DIR"
+            exit 1
+          fi
+          ACTUAL_LEDE_COMMIT="$(git -C "$LEDE_DIR" rev-parse HEAD)"
+          if [[ ! "$ACTUAL_LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid actual LEDE commit: $ACTUAL_LEDE_COMMIT"
+            exit 1
+          fi
+          if [[ "$ACTUAL_LEDE_COMMIT" != "$EXPECTED_LEDE_COMMIT" ]]; then
+            echo "::error::Actual LEDE commit differs from the pinned preflight commit."
+            echo "::error::Expected: $EXPECTED_LEDE_COMMIT"
+            echo "::error::Actual:   $ACTUAL_LEDE_COMMIT"
+            exit 1
+          fi
+          echo "LEDE repository: $LEDE_DIR"
+          echo "LEDE branch: $(git -C "$LEDE_DIR" branch --show-current)"
+          echo "LEDE commit used by firmware build: $ACTUAL_LEDE_COMMIT"
+          echo "commit=$ACTUAL_LEDE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Record the OpenClash feed commit used by this build
+        id: openclash_revision
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OPENCLASH_DIR=/home/ubuntu/lede/feeds/OpenClash
+          if [[ ! -d "$OPENCLASH_DIR" ]]; then
+            echo "::error::OpenClash feed directory does not exist: $OPENCLASH_DIR"
+            exit 1
+          fi
+          if ! git -C "$OPENCLASH_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "::error::OpenClash feed is not a Git working tree."
+            exit 1
+          fi
+          REMOTE_URL="$(git -C "$OPENCLASH_DIR" remote get-url origin)"
+          if [[ "$REMOTE_URL" != *'vernesong/OpenClash'* ]]; then
+            echo "::error::Unexpected OpenClash feed origin: $REMOTE_URL"
+            exit 1
+          fi
+          OPENCLASH_COMMIT="$(git -C "$OPENCLASH_DIR" rev-parse HEAD)"
+          if [[ ! "$OPENCLASH_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Cannot resolve the checked-out OpenClash commit."
+            exit 1
+          fi
+          echo "OpenClash feed origin: $REMOTE_URL"
+          echo "OpenClash commit used by this build: $OPENCLASH_COMMIT"
+          echo "commit=$OPENCLASH_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate stable toolchain cache namespace
+        id: firmware_toolchain_key
+        env:
+          REBUILD_TOOLCHAIN: ${{ inputs.rebuild_toolchain }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CONFIG_HASH="$(sha256sum scripts/04-configure.sh .github/ci/install-build-deps.sh | sha256sum | awk '{print $1}')"
+          MIXKEY="ubuntu-24.04-x86_64-${CONFIG_HASH}"
+          if [[ "$REBUILD_TOOLCHAIN" == 'true' ]]; then
+            MIXKEY="${MIXKEY}-forced-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+          echo "config_hash=$CONFIG_HASH" >> "$GITHUB_OUTPUT"
+          echo "mixkey=$MIXKEY" >> "$GITHUB_OUTPUT"
+
+      - name: Restore host tools and cross toolchain cache
+        id: firmware_toolchain_cache
+        uses: stupidloud/cachewrtbuild@main
+        with:
+          ccache: false
+          toolchain: true
+          skip: true
+          clean: false
+          prefix: /home/ubuntu/lede
+          mixkey: ${{ steps.firmware_toolchain_key.outputs.mixkey }}
+
+      - name: Restore toolchain from Release fallback
+        id: firmware_release_fallback
+        if: steps.firmware_toolchain_cache.outputs.hit != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOOLCHAIN_MIXKEY: ${{ steps.firmware_toolchain_key.outputs.mixkey }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TOOLCHAIN_HASH="$(git -C /home/ubuntu/lede log --pretty=tformat:%h -n1 tools toolchain)"
+          ASSET_NAME="toolchain-${TOOLCHAIN_MIXKEY}-${TOOLCHAIN_HASH}.tar.zst"
+          if gh release download toolchain-cache --repo "$GITHUB_REPOSITORY" \
+              --pattern "$ASSET_NAME" --dir "$RUNNER_TEMP"; then
+            tar --zstd -xf "$RUNNER_TEMP/$ASSET_NAME" -C /home/ubuntu/lede
+            sed -i 's/ $(tool.*\/stamp-compile)//;' /home/ubuntu/lede/Makefile
+            sed -i 's/ $(tool.*\/stamp-install)//;' /home/ubuntu/lede/Makefile
+            echo 'hit=1' >> "$GITHUB_OUTPUT"
+            echo 'Toolchain restored from Release fallback.'
+          else
+            echo 'hit=0' >> "$GITHUB_OUTPUT"
+            echo 'Toolchain Release fallback was not found.'
+          fi
+
+      - name: Verify toolchain cache is available
+        shell: bash
+        env:
+          ACTIONS_CACHE_HIT: ${{ steps.firmware_toolchain_cache.outputs.hit }}
+          RELEASE_CACHE_HIT: ${{ steps.firmware_release_fallback.outputs.hit }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$ACTIONS_CACHE_HIT" != '1' && "$RELEASE_CACHE_HIT" != '1' ]]; then
+            echo '::error::Toolchain cache is missing in the firmware runner. The separate toolchain runner should have produced it; stopping before a second multi-hour cold build.'
+            exit 1
+          fi
+          echo 'Toolchain cache is ready.'
+          du -sh /home/ubuntu/lede/staging_dir/host* /home/ubuntu/lede/staging_dir/tool* 2>/dev/null || true
+          df -hT /
+
+      - name: Run tools/install and build script 07 with disk watchdog
+        id: firmware_build
+        env:
+          KERNEL_PARTSIZE: '256'
+          ROOTFS_PARTSIZE: '4096'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd /home/ubuntu
+
+          if ! grep -q 'make V=s -j' scripts/07-build.sh; then
+            echo '::error::Expected make V=s command was not found in scripts/07-build.sh.'
+            exit 1
+          fi
+          # Modify only this disposable Runner copy: lower log verbosity for CI; keep the committed script unchanged.
+          sed -i 's/make V=s -j/make V=1 -j/' scripts/07-build.sh
+
+          cat > "$RUNNER_TEMP/run-firmware-build.sh" <<'BUILD_SCRIPT'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          cd /home/ubuntu/lede
+          make defconfig
+          # The cached host/toolchain tree may not contain every config-dependent host utility.
+          make V=1 -j"$(nproc)" tools/install
+          # Keep the original script's semantics: it removes tmp/.config, runs defconfig, then builds.
+          cd /home/ubuntu
+          # Never allow workflow inputs or upstream defaults to alter the OTA partition layout.
+          export KERNEL_PARTSIZE=256
+          export ROOTFS_PARTSIZE=4096
+
+          # Capture the exact commit SHAs returned to the unchanged package Makefiles.
+          REAL_GIT="$(command -v git)"
+          SOURCE_COMMIT_CAPTURE="$RUNNER_TEMP/plugin-source-commits.tsv"
+          CAPTURE_BIN="$RUNNER_TEMP/source-capture-bin"
+          export REAL_GIT SOURCE_COMMIT_CAPTURE
+          mkdir -p "$CAPTURE_BIN"
+          : > "$SOURCE_COMMIT_CAPTURE"
+          cat > "$CAPTURE_BIN/git" <<'GIT_WRAPPER'
+          #!/usr/bin/env bash
+          set -u
+          source_name=''
+          if [[ "${1:-}" == 'ls-remote' ]]; then
+            has_head=false
+            repo=''
+            for arg in "${@:2}"; do
+              [[ "$arg" == 'HEAD' ]] && has_head=true
+              case "$arg" in
+                https://github.com/pymumu/smartdns|https://github.com/pymumu/smartdns.git|http://github.com/pymumu/smartdns|http://github.com/pymumu/smartdns.git|git@github.com:pymumu/smartdns|git@github.com:pymumu/smartdns.git|ssh://git@github.com/pymumu/smartdns|ssh://git@github.com/pymumu/smartdns.git) repo='smartdns' ;;
+                https://github.com/pymumu/smartdns-webui|https://github.com/pymumu/smartdns-webui.git|http://github.com/pymumu/smartdns-webui|http://github.com/pymumu/smartdns-webui.git|git@github.com:pymumu/smartdns-webui|git@github.com:pymumu/smartdns-webui.git|ssh://git@github.com/pymumu/smartdns-webui|ssh://git@github.com/pymumu/smartdns-webui.git) repo='smartdns_webui' ;;
+                https://github.com/pymumu/luci-app-smartdns|https://github.com/pymumu/luci-app-smartdns.git|http://github.com/pymumu/luci-app-smartdns|http://github.com/pymumu/luci-app-smartdns.git|git@github.com:pymumu/luci-app-smartdns|git@github.com:pymumu/luci-app-smartdns.git|ssh://git@github.com/pymumu/luci-app-smartdns|ssh://git@github.com/pymumu/luci-app-smartdns.git) repo='luci_app_smartdns' ;;
+              esac
+            done
+            if [[ "$has_head" == true ]]; then source_name="$repo"; fi
+          fi
+          if [[ -n "$source_name" ]]; then
+            if output="$("$REAL_GIT" "$@")"; then
+              status=0
+            else
+              status=$?
+            fi
+            if (( status == 0 )); then
+              commit="$(printf '%s\n' "$output" | awk '$2 == "HEAD" { print $1; exit }')"
+              if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "::error::Could not capture a full commit SHA for $source_name from git ls-remote." >&2
+                exit 1
+              fi
+              printf '%s\t%s\n' "$source_name" "$commit" >> "$SOURCE_COMMIT_CAPTURE"
+            fi
+            printf '%s\n' "$output"
+            exit "$status"
+          fi
+          exec "$REAL_GIT" "$@"
+          GIT_WRAPPER
+          chmod +x "$CAPTURE_BIN/git"
+          export PATH="$CAPTURE_BIN:$PATH"
+
+          bash /home/ubuntu/scripts/07-build.sh
+          grep -qx 'CONFIG_TARGET_KERNEL_PARTSIZE=256' /home/ubuntu/lede/.config || {
+            echo '::error::Final .config does not contain the required 256 MB kernel partition.'
+            exit 1
+          }
+          grep -qx 'CONFIG_TARGET_ROOTFS_PARTSIZE=4096' /home/ubuntu/lede/.config || {
+            echo '::error::Final .config does not contain the required 4096 MB rootfs partition.'
+            exit 1
+          }
+          echo 'Verified fixed OTA partition layout: kernel=256 MB, rootfs=4096 MB.'
+          BUILD_SCRIPT
+          chmod +x "$RUNNER_TEMP/run-firmware-build.sh"
+
+          BUILD_LOG="$RUNNER_TEMP/lede-firmware-build.log"
+          setsid bash -o pipefail -c \
+            'timeout --signal=INT --kill-after=30s 300m "$1" 2>&1 | tee "$2"' \
+            _ "$RUNNER_TEMP/run-firmware-build.sh" "$BUILD_LOG" &
+          BUILD_PID=$!
+          BUILD_PGID="$(ps -o pgid= -p "$BUILD_PID" | tr -d ' ')"
+          [[ -n "$BUILD_PGID" ]] || { echo '::error::Cannot identify firmware process group.'; exit 1; }
+
+          (
+            while kill -0 "$BUILD_PID" 2>/dev/null; do
+              sleep 60
+              kill -0 "$BUILD_PID" 2>/dev/null || exit 0
+              AVAILABLE_KB="$(df -Pk / | awk 'NR == 2 {print $4}')"
+              AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
+              echo "Firmware disk watchdog: ${AVAILABLE_GB}GiB available."
+              if (( AVAILABLE_KB < 5 * 1024 * 1024 )); then
+                echo "::error::Firmware build stopped before disk exhaustion; only ${AVAILABLE_GB}GiB remains."
+                kill -TERM -- "-$BUILD_PGID" 2>/dev/null || true
+                sleep 20
+                kill -KILL -- "-$BUILD_PGID" 2>/dev/null || true
+                exit 0
+              fi
+            done
+          ) &
+          WATCHDOG_PID=$!
+
+          set +e
+          wait "$BUILD_PID"
+          BUILD_STATUS=$?
+          set -e
+          kill "$WATCHDOG_PID" 2>/dev/null || true
+          wait "$WATCHDOG_PID" 2>/dev/null || true
+          echo '========== Disk after firmware build =========='
+          df -hT /
+          exit "$BUILD_STATUS"
+
+      - name: Upload firmware build log on failure
+        if: always() && steps.firmware_build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: lede-firmware-build-log-${{ github.run_number }}
+          path: ${{ runner.temp }}/lede-firmware-build.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Validate and publish captured SmartDNS source revisions
+        id: plugin_source_revisions
+        if: success()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CAPTURE_FILE="$RUNNER_TEMP/plugin-source-commits.tsv"
+          [[ -s "$CAPTURE_FILE" ]] || {
+            echo '::error::No SmartDNS source commits were captured during the actual package build.'
+            exit 1
+          }
+          python3 - "$CAPTURE_FILE" "$GITHUB_OUTPUT" <<'PY'
+          import re
+          import sys
+          from collections import defaultdict
+          from pathlib import Path
+
+          capture_path, output_path = map(Path, sys.argv[1:])
+          revisions = defaultdict(set)
+          for raw in capture_path.read_text(encoding='utf-8').splitlines():
+              if not raw.strip():
+                  continue
+              fields = raw.split('\t')
+              if len(fields) != 2:
+                  raise SystemExit(f'Invalid captured source revision row: {raw!r}')
+              name, commit = fields
+              if not re.fullmatch(r'[0-9a-f]{40}', commit):
+                  raise SystemExit(f'Invalid full commit SHA for {name}: {commit!r}')
+              revisions[name].add(commit)
+
+          expected = {
+              'smartdns': 'smartdns_commit',
+              'smartdns_webui': 'smartdns_webui_commit',
+              'luci_app_smartdns': 'luci_app_smartdns_commit',
+          }
+          output = []
+          for source, output_name in expected.items():
+              commits = revisions.get(source, set())
+              if len(commits) != 1:
+                  raise SystemExit(
+                      f'Expected exactly one unique commit for {source}; captured {sorted(commits)!r}. '
+                      'Refusing to publish an ambiguous source revision.'
+                  )
+              commit = next(iter(commits))
+              output.append(f'{output_name}={commit}')
+              print(f'{source}: {commit}')
+
+          with output_path.open('a', encoding='utf-8') as stream:
+              stream.write('\n'.join(output) + '\n')
+          PY
+      - name: Select UEFI image and prepare release input
+        if: success()
+        shell: bash
+        env:
+          BUILD_VERSION: ${{ steps.build_version.outputs.version }}
+          BUILD_TAG: ${{ steps.build_version.outputs.tag }}
+          SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
+          LEDE_COMMIT: ${{ steps.lede_revision.outputs.commit }}
+          SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_commit }}
+          SMARTDNS_WEBUI_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_webui_commit }}
+          LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns_commit }}
+          OPENCLASH_COMMIT: ${{ steps.openclash_revision.outputs.commit }}
+          BUILD_TARGET: x86_64
+        run: |
+          set -Eeuo pipefail
+          TARGET_DIR=/home/ubuntu/lede/bin/targets/x86/64
+          RELEASE_INPUT="$GITHUB_WORKSPACE/release-input"
+          mkdir -p "$RELEASE_INPUT"
+          [[ -d "$TARGET_DIR" ]] || { echo "::error::Missing target directory: $TARGET_DIR"; exit 1; }
+
+          mapfile -t IMAGES < <(find "$TARGET_DIR" -maxdepth 1 -type f \
+            -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print | sort)
+          if (( ${#IMAGES[@]} != 1 )); then
+            echo "::error::Expected exactly one combined EFI image, found ${#IMAGES[@]}."
+            find "$TARGET_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n' | sort || true
+            exit 1
+          fi
+
+          cp -f "${IMAGES[0]}" "$RELEASE_INPUT/"
+          cp -f "$TARGET_DIR/version.buildinfo" "$RELEASE_INPUT/version.buildinfo"
+          python3 - "$RELEASE_INPUT/build-meta.json" "$BUILD_VERSION" "$BUILD_TAG" "$SOURCE_FINGERPRINT" "$LEDE_COMMIT" "$GITHUB_SHA" <<'PY'
+          import json, os, sys
+          output, version, tag, fingerprint, lede_commit, mylede_commit = sys.argv[1:]
+          sources = {
+              'smartdns': os.environ['SMARTDNS_COMMIT'],
+              'smartdns_webui': os.environ['SMARTDNS_WEBUI_COMMIT'],
+              'luci_app_smartdns': os.environ['LUCI_APP_SMARTDNS_COMMIT'],
+              'openclash': os.environ['OPENCLASH_COMMIT'],
+          }
+          for name, commit in sources.items():
+              if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
+                  raise SystemExit(f'Invalid full commit SHA for {name}: {commit!r}')
+          with open(output, 'w', encoding='utf-8') as f:
+              json.dump({
+                  'version': version,
+                  'tag': tag,
+                  'source_fingerprint': fingerprint,
+                  'lede_commit': lede_commit,
+                  'mylede_commit': mylede_commit,
+                  'sources': sources,
+                  'build_target': os.environ.get('BUILD_TARGET', 'x86_64'),
+                  # This workflow builds only the LEDE x86/64 target.
+                  # Keep release compatibility metadata explicit instead of
+                  # depending on optional fields in version.buildinfo.
+                  'compatibility': {
+                      'target': 'x86',
+                      'subtarget': '64',
+                      'arch': 'x86_64'
+                  }
+              }, f, ensure_ascii=False, indent=2)
+              f.write('\n')
+          PY
+
+          echo 'Release input files:'
+          find "$RELEASE_INPUT" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+
+      - name: Upload firmware for the separate release runner
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lede-release-input
+          path: release-input/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Prune stale LEDE download caches before saving the new snapshot
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_TOOLCHAIN_KEY: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-toolchain
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh cache list --repo "$GITHUB_REPOSITORY" --key "lede-dl-${RUNNER_OS}-" \
+            --limit 100 --json id,key,lastAccessedAt > "$RUNNER_TEMP/dl-caches.json"
+          python3 - "$RUNNER_TEMP/dl-caches.json" "$KEEP_TOOLCHAIN_KEY" <<'PY' > "$RUNNER_TEMP/delete-dl-cache-ids.txt"
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding='utf-8'))
+          keep = {sys.argv[2]}
+          old = sorted(data, key=lambda x: x.get('lastAccessedAt') or '', reverse=True)
+          if old:
+              keep.add(old[0].get('key'))
+          for item in data:
+              if item.get('key') not in keep:
+                  print(item['id'])
+          PY
+          while IFS= read -r cache_id; do
+            [[ -n "$cache_id" ]] || continue
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
+          done < "$RUNNER_TEMP/delete-dl-cache-ids.txt"
+
+      - name: Save updated LEDE download cache
+        if: success()
+        id: save_dl_cache
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: /home/ubuntu/dl
+          key: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-full
+
+      - name: Prune old LEDE download cache snapshots after successful save
+        if: success() && steps.save_dl_cache.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_KEY: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-full
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh cache list --repo "$GITHUB_REPOSITORY" --key "lede-dl-${RUNNER_OS}-" \
+            --limit 100 --json id,key > "$RUNNER_TEMP/dl-caches-after-save.json"
+          python3 - "$RUNNER_TEMP/dl-caches-after-save.json" "$KEEP_KEY" <<'PY' > "$RUNNER_TEMP/delete-dl-cache-ids-after-save.txt"
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding='utf-8'))
+          keep = sys.argv[2]
+          for item in data:
+              if item.get('key') != keep:
+                  print(item['id'])
+          PY
+          while IFS= read -r cache_id; do
+            [[ -n "$cache_id" ]] || continue
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
+          done < "$RUNNER_TEMP/delete-dl-cache-ids-after-save.txt"
+
+      - name: Prune obsolete toolchain cache keys
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIXKEY: ${{ steps.firmware_toolchain_key.outputs.mixkey }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CURRENT_KEY="${MIXKEY}-cache-openwrt-$(git -C /home/ubuntu/lede log --pretty=tformat:%h -n1 tools toolchain)"
+          gh cache list --repo "$GITHUB_REPOSITORY" --key 'ubuntu-24.04-' \
+            --limit 100 --json id,key > "$RUNNER_TEMP/toolchain-caches.json"
+          python3 - "$RUNNER_TEMP/toolchain-caches.json" "$CURRENT_KEY" <<'PY' > "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding='utf-8'))
+          keep = sys.argv[2]
+          for item in data:
+              if item.get('key') != keep:
+                  print(item['id'])
+          PY
+          while IFS= read -r cache_id; do
+            [[ -n "$cache_id" ]] || continue
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
+          done < "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
+
+  publish:
+    name: Runner 3 - Sign manifest and publish GitHub Release
+    needs: [source_check, firmware]
+    if: needs.source_check.outputs.skip_build != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout repository for retention defaults
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download firmware release input
+        uses: actions/download-artifact@v7
+        with:
+          name: lede-release-input
+          path: release-input
+
+      - name: Install minisign
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y minisign
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Generate release manifest and SHA256
+        id: release_meta
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - release-input/version.buildinfo release-input/build-meta.json release-input/manifest.json <<'PY'
+          import hashlib, json, re, sys
+          from pathlib import Path
+
+          info_path, meta_path, manifest_path = map(Path, sys.argv[1:])
+          meta = json.loads(meta_path.read_text(encoding='utf-8'))
+          info_values = {}
+          for line in info_path.read_text(errors='replace').splitlines():
+              match = re.match(r"^([A-Z0-9_]+)=(?:'([^']*)'|\"([^\"]*)\"|(.*))$", line.strip())
+              if match:
+                  info_values[match.group(1)] = next((v for v in match.groups()[1:] if v is not None), '')
+
+          # The build workflow is intentionally fixed to LEDE x86/64.
+          # Read compatibility from build-meta.json, which we generate ourselves,
+          # rather than relying on version.buildinfo to contain optional fields.
+          compatibility = meta.get('compatibility') or {}
+          target = compatibility.get('target', '')
+          subtarget = compatibility.get('subtarget', '')
+          arch = compatibility.get('arch', '')
+
+          expected = {'target': 'x86', 'subtarget': '64', 'arch': 'x86_64'}
+          actual = {'target': target, 'subtarget': subtarget, 'arch': arch}
+          if actual != expected:
+              raise SystemExit(
+                  'Invalid firmware compatibility metadata: '
+                  f'expected={expected!r}, actual={actual!r}'
+              )
+
+          # If version.buildinfo does contain compatibility fields, make sure
+          # they agree with the fixed target; missing fields are not fatal.
+          info_target = info_values.get('DISTRIB_TARGET', '').strip()
+          info_arch = info_values.get('DISTRIB_ARCH', '').strip()
+          if info_target and info_target != f'{target}/{subtarget}':
+              raise SystemExit(
+                  f'version.buildinfo target mismatch: {info_target!r} '
+                  f'!= {target}/{subtarget}'
+              )
+          if info_arch and info_arch != arch:
+              raise SystemExit(
+                  f'version.buildinfo arch mismatch: {info_arch!r} != {arch}'
+              )
+
+          images = list(Path('release-input').glob('openwrt-x86-64-generic-squashfs-combined-efi.img.gz'))
+          if len(images) != 1 or images[0].stat().st_size == 0:
+              raise SystemExit('Expected exactly one non-empty combined EFI image.')
+          if target != 'x86' or subtarget != '64' or arch != 'x86_64':
+              raise SystemExit('Firmware image and compatibility target do not match.')
+          image = images[0]
+          digest = hashlib.sha256()
+          with image.open('rb') as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                  digest.update(chunk)
+
+          manifest = {
+              'schema_version': 1,
+              'version': meta['version'],
+              'tag': meta['tag'],
+              'channel': 'stable',
+              'sources': {
+                  'coolsnowwolf/lede': {
+                      'ref': 'master',
+                      'commit': meta['lede_commit'],
+                      'short_commit': meta['lede_commit'][:7]
+                  },
+                  'pymumu/smartdns': {
+                      'ref': 'PKG_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'commit': meta['sources']['smartdns'],
+                      'short_commit': meta['sources']['smartdns'][:7]
+                  },
+                  'pymumu/smartdns-webui': {
+                      'ref': 'SMARTDNS_WEBUI_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'commit': meta['sources']['smartdns_webui'],
+                      'short_commit': meta['sources']['smartdns_webui'][:7]
+                  },
+                  'pymumu/luci-app-smartdns': {
+                      'ref': 'PKG_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'commit': meta['sources']['luci_app_smartdns'],
+                      'short_commit': meta['sources']['luci_app_smartdns'][:7]
+                  },
+                  'vernesong/OpenClash': {
+                      'ref': 'dev',
+                      'commit': meta['sources']['openclash'],
+                      'short_commit': meta['sources']['openclash'][:7]
+                  }
+              },
+              'compatibility': {
+                  'target': target,
+                  'subtarget': subtarget,
+                  'arch': arch,
+                  'device_policy': 'target',
+                  'devices': []
+              },
+              'image': {
+                  'asset': image.name,
+                  'sha256': digest.hexdigest(),
+                  'size': image.stat().st_size
+              }
+          }
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(manifest, ensure_ascii=False, indent=2))
+          print(f"version={meta['version']}")
+          print(f"tag={meta['tag']}")
+          PY
+          META="$(cat release-input/build-meta.json)"
+          VERSION="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' <<< "$META")"
+          TAG="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["tag"])' <<< "$META")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Sign release manifest with minisign
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "${MINISIGN_SECRET_KEY:-}" ]]; then
+            echo '::error::Repository secret MINISIGN_SECRET_KEY is not configured.'
+            exit 1
+          fi
+          KEY_FILE="$RUNNER_TEMP/minisign.key"
+          printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          minisign -S -W -s "$KEY_FILE" \
+            -m "$GITHUB_WORKSPACE/release-input/manifest.json" \
+            -x "$GITHUB_WORKSPACE/release-input/manifest.minisig" \
+            -t 'MyLEDE firmware release'
+          rm -f "$KEY_FILE"
+
+      - name: Publish firmware release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$(find release-input -maxdepth 1 -type f -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print -quit)"
+          [[ -n "$IMAGE" ]] || { echo '::error::Firmware image missing from release input.'; exit 1; }
+          META="$(cat release-input/build-meta.json)"
+          LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
+          SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
+          SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
+          LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
+          OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
+
+          cat > release-input/release-notes.md <<EOF
+          Automated MyLEDE x86-64 firmware build.
+
+          - Version: ${RELEASE_VERSION}
+          - Firmware: $(basename "$IMAGE")
+          - Manifest: manifest.json
+          - Signature: manifest.minisig
+
+          ### Source commits used for this build
+
+          - LEDE (master): [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash (dev): [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          EOF
+          gh release create "$RELEASE_TAG" \
+            "$IMAGE" \
+            release-input/manifest.json \
+            release-input/manifest.minisig \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "MyLEDE ${RELEASE_VERSION}" \
+            --notes-file release-input/release-notes.md \
+            --target "$GITHUB_SHA" \
+            --latest
+      - name: Prepare successful source fingerprint marker
+        env:
+          SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/lede-build-state"
+          printf '%s\n' "$SOURCE_FINGERPRINT" > "$RUNNER_TEMP/lede-build-state/successful-source-fingerprint.txt"
+
+      - name: Save successful source fingerprint
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/lede-build-state
+          key: lede-success-${{ needs.source_check.outputs.fingerprint }}-${{ github.sha }}
+
+      # 手动运行时，将本次输入保存为下一次手动/定时运行的默认值。
+      - name: Save retention defaults
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          NEW_KEEP_DAYS: ${{ inputs['保留天数'] }}
+          NEW_KEEP_COUNT: ${{ inputs['保留数量'] }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORKFLOW_FILE=".github/workflows/build.yml"
+
+          python3 - "$WORKFLOW_FILE" "$NEW_KEEP_DAYS" "$NEW_KEEP_COUNT" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          keep_days, keep_count = sys.argv[2], sys.argv[3]
+          content = path.read_text(encoding="utf-8")
+
+          if not re.fullmatch(r"[1-9][0-9]*", keep_days):
+              raise SystemExit("保留天数必须是大于零的整数。")
+          if not re.fullmatch(r"[1-9][0-9]*", keep_count):
+              raise SystemExit("保留数量必须是大于零的整数。")
+
+          for key, value in (("保留天数", keep_days), ("保留数量", keep_count)):
+              pattern = (
+                  r"(?m)^("
+                  + re.escape("      " + key + ":")
+                  + r"\n(?:[ \t]+[^\n]*\n)*?[ \t]+default:\s*)[0-9]+"
+              )
+              content, n = re.subn(pattern, lambda m: m.group(1) + value, content)
+              if n != 1:
+                  raise SystemExit(f"无法更新输入默认值：{key}")
+
+          for key, value in (
+              ("DEFAULT_KEEP_DAYS", keep_days),
+              ("DEFAULT_KEEP_COUNT", keep_count),
+          ):
+              pattern = r'(?m)^([ \t]*' + re.escape(key) + r':\s*)"[0-9]+"'
+              content, n = re.subn(pattern, lambda m: m.group(1) + '"' + value + '"', content)
+              if n != 1:
+                  raise SystemExit(f"无法更新定时任务默认值：{key}")
+
+          path.write_text(content, encoding="utf-8")
+          print(f"默认保留规则已更新：{keep_days} 天 / {keep_count} 条")
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$WORKFLOW_FILE"
+          if git diff --cached --quiet; then
+            echo "保留规则未变化，无须提交。"
+          else
+            git commit -m "维护：更新固件保留规则 [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo "新的保留规则默认值已保存。"
+          fi
+
+      - name: Delete old firmware releases and workflow runs
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_KEEP_DAYS: ${{ inputs['保留天数'] }}
+          INPUT_KEEP_COUNT: ${{ inputs['保留数量'] }}
+          DEFAULT_KEEP_DAYS: ${{ env.DEFAULT_KEEP_DAYS }}
+          DEFAULT_KEEP_COUNT: ${{ env.DEFAULT_KEEP_COUNT }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            KEEP_DAYS="${INPUT_KEEP_DAYS:-$DEFAULT_KEEP_DAYS}"
+            KEEP_COUNT="${INPUT_KEEP_COUNT:-$DEFAULT_KEEP_COUNT}"
+          else
+            KEEP_DAYS="$DEFAULT_KEEP_DAYS"
+            KEEP_COUNT="$DEFAULT_KEEP_COUNT"
+          fi
+
+          if ! [[ "$KEEP_DAYS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::保留天数必须是大于零的整数。"
+            exit 1
+          fi
+          if ! [[ "$KEEP_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::保留数量必须是大于零的整数。"
+            exit 1
+          fi
+
+          CUTOFF="$(date -u -d "$KEEP_DAYS days ago" +%s)"
+          echo "保留天数：$KEEP_DAYS 天"
+          echo "保留数量：$KEEP_COUNT 条"
+
+          # GitHub Releases：按发布时间从新到旧排序，同时应用天数和数量。
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 \
+            --json tagName,publishedAt,isPrerelease > "$RUNNER_TEMP/releases.json"
+
+          python3 - "$RUNNER_TEMP/releases.json" "$CUTOFF" "$KEEP_COUNT" <<'PY' > "$RUNNER_TEMP/old-release-tags.txt"
+          import datetime
+          import json
+          import sys
+
+          path, cutoff, keep_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+          with open(path, encoding="utf-8") as f:
+              releases = json.load(f)
+
+          stable = [
+              r for r in releases
+              if not r.get("isPrerelease") and r.get("tagName") != "toolchain-cache"
+          ]
+          stable.sort(key=lambda r: r.get("publishedAt") or "", reverse=True)
+
+          kept = 0
+          for item in stable:
+              tag = item.get("tagName")
+              published = item.get("publishedAt")
+              if not tag or not published:
+                  continue
+
+              # 至少保留最新的一个正式 Release；其余同时满足天数和数量才保留。
+              dt = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+              age_seconds = datetime.datetime.now(datetime.timezone.utc).timestamp() - dt.timestamp()
+              if kept == 0 or (dt.timestamp() >= cutoff and kept < keep_count):
+                  kept += 1
+              else:
+                  print(tag)
+          PY
+
+          RELEASE_DELETED=0
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            echo "删除旧 Release：$tag"
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+            RELEASE_DELETED=$((RELEASE_DELETED + 1))
+          done < "$RUNNER_TEMP/old-release-tags.txt"
+
+          # Actions 运行记录：保留当前运行，并对其他已完成运行应用天数和数量。
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --limit 1000 \
+            --json databaseId,createdAt,status > "$RUNNER_TEMP/workflow-runs.json"
+
+          python3 - "$RUNNER_TEMP/workflow-runs.json" "$CUTOFF" "$KEEP_COUNT" "$CURRENT_RUN_ID" <<'PY' > "$RUNNER_TEMP/old-run-ids.txt"
+          import datetime
+          import json
+          import sys
+
+          path, cutoff, keep_count, current_id = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+          with open(path, encoding="utf-8") as f:
+              runs = json.load(f)
+
+          completed = [r for r in runs if r.get("status") == "completed"]
+          completed.sort(key=lambda r: r.get("createdAt") or "", reverse=True)
+
+          kept = 0
+          for run in completed:
+              run_id = str(run.get("databaseId", ""))
+              if not run_id or run_id == current_id:
+                  continue
+              created = run.get("createdAt")
+              if not created:
+                  print(run_id)
+                  continue
+              dt = datetime.datetime.fromisoformat(created.replace("Z", "+00:00"))
+              age = dt.timestamp()
+              if age >= cutoff and kept < keep_count:
+                  kept += 1
+              else:
+                  print(run_id)
+          PY
+
+          RUN_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            echo "删除 Actions 运行记录：$run_id"
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY" || true
+            RUN_DELETED=$((RUN_DELETED + 1))
+          done < "$RUNNER_TEMP/old-run-ids.txt"
+
+          {
+            echo "## 历史清理结果"
+            echo ""
+            echo "- 保留天数：$KEEP_DAYS 天"
+            echo "- 保留数量：$KEEP_COUNT 条"
+            echo "- 删除 Release：$RELEASE_DELETED 个"
+            echo "- 删除 Actions 运行记录：$RUN_DELETED 条"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
