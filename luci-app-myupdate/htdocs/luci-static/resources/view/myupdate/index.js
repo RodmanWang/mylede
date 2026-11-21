@@ -6,7 +6,7 @@
 
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
-var callSave = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode', 'check_interval', 'minisign_public_key', 'allow_downgrade' ] });
+var callSave = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode', 'check_interval', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
@@ -14,6 +14,9 @@ var callUpgrade = rpc.declare({ object: 'myupdate', method: 'start_upgrade' });
 
 function field(id, value, type) {
 	return E('input', { id: id, 'class': 'cbi-input-text', type: type || 'text', value: value == null ? '' : value });
+}
+function textareaField(id, value) {
+	return E('textarea', { id: id, 'class': 'cbi-input-text', rows: 8 }, value == null ? '' : value);
 }
 function selectField(id, value, options) {
 	var node = E('select', { id: id, 'class': 'cbi-input-select' });
@@ -40,6 +43,7 @@ return view.extend({
 		var interval = field('myupdate-interval', cfg.check_interval || '21600', 'number');
 		var pubkey = field('myupdate-pubkey', cfg.minisign_public_key);
 		var downgrade = selectField('myupdate-downgrade', cfg.allow_downgrade || '0', [[ '0', '禁止' ], [ '1', '允许' ]]);
+		var keepPaths = textareaField('myupdate-keep-paths', cfg.custom_keep_paths || '');
 		var token = field('myupdate-token', '', 'password'); token.setAttribute('autocomplete', 'new-password');
 		token.setAttribute('placeholder', cfg.token_configured ? '已配置；输入新 Token 可替换' : '仅 Private 仓库需要');
 		var statusText = E('p', { id: 'myupdate-status' }); showStatus(statusText, status);
@@ -56,16 +60,19 @@ return view.extend({
 			row('仓库可见性', visibility), row('更新通道', channel), row('检查模式', mode), row('自动检查间隔（秒）', interval),
 			row('Minisign 公钥', pubkey, '必须填写与 GitHub Actions MINISIGN_SECRET_KEY 对应的公钥。'),
 			row('允许降级', downgrade) ]);
+		var keepPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', '自定义文件保留'),
+			E('p', '每行填写一个路由器上的绝对路径，可填写单个文件或目录。下一次 OTA 前，MyUpdate 会将这些路径加入 /etc/sysupgrade.conf，由 sysupgrade 自动备份并在刷入新固件后恢复。无需备份整个根目录。'),
+			row('保留路径（每行一条）', keepPaths, '例如 /etc/config/myservice、/root/scripts。不要填写 /、/proc、/sys、/dev、/tmp、/rom 或 /overlay。建议填写旧系统中实际存在的文件或目录。') ]);
 		var tokenPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', '访问令牌'),
 			E('p', '私有仓库使用 Fine-grained PAT，并授予目标仓库 Contents: Read-only。公开仓库不需要 Token。'), row('GitHub Token', token),
 			E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() { if (!token.value) return;
 				return callToken(token.value).then(function(r) { if (r && r.ok) { token.value = ''; ui.addNotification(null, E('p', 'Token 已保存')); }
 				else ui.addNotification(null, E('p', r.error || '保存 Token 失败'), 'error'); }); } }, '保存 Token') ]);
 		var save = E('button', { 'class': 'btn cbi-button cbi-button-save', click: function() {
-			return callSave(owner.value, repo.value, visibility.value, channel.value, mode.value, interval.value, pubkey.value, downgrade.value).then(function(r) {
+			return callSave(owner.value, repo.value, visibility.value, channel.value, mode.value, interval.value, pubkey.value, downgrade.value, keepPaths.value).then(function(r) {
 				if (r && r.ok) ui.addNotification(null, E('p', '配置已保存')); else ui.addNotification(null, E('p', r.error || '保存配置失败'), 'error');
 			}); } }, '保存设置');
 		poll.add(function() { return callStatus().then(function(s) { showStatus(statusText, s || {}); }); }, 3);
-		return E('div', { 'class': 'cbi-map' }, [ E('h2', '固件在线升级'), configPanel, tokenPanel, statusPanel, E('div', { 'class': 'cbi-page-actions' }, [ save ]) ]);
+		return E('div', { 'class': 'cbi-map' }, [ E('h2', '固件在线升级'), configPanel, keepPanel, tokenPanel, statusPanel, E('div', { 'class': 'cbi-page-actions' }, [ save ]) ]);
 	}
 });
