@@ -18,7 +18,7 @@
 
 `/home/ubuntu/files/etc/myupdate/build-version`
 
-文件内容必须与 Release `manifest.json` 的 `version` 字段完全相同，例如 `2026.11.123`。本仓库配套的 Actions 工作流应在编译前生成该文件，并在 Release manifest 中使用同一版本号。没有此标记时，插件会将当前版本视为未知，并允许显示更新，但无法准确判断是否已经是最新版本。
+文件内容必须与 Release `manifest.json` 的 `version` 字段完全相同，例如 `2026.11.22.123.1`。本仓库配套的 Actions 工作流会将日期、构建序号和重试序号写入该文件，并在 Release manifest 中使用同一版本号。没有此标记时，插件会将当前版本视为未知，并允许显示更新，但无法准确判断是否已经是最新版本。
 
 ## 安装与配置
 
@@ -40,8 +40,8 @@
 ```json
 {
   "schema_version": 1,
-  "version": "2026.11.123",
-  "tag": "v2026.11.123-r1",
+  "version": "2026.11.22.123.1",
+  "tag": "v2026.11.22.123.1",
   "channel": "stable",
   "compatibility": {
     "target": "x86",
