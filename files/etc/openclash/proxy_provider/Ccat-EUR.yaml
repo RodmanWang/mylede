@@ -1,0 +1,5 @@
+proxies:
+  - {name: 🇬🇧 Spark - UK, server: spark.route76.net, port: 5026, type: vmess, uuid: 8f538376-681c-4f7e-af94-6c682cb750c1, alterId: 4, cipher: auto, tls: true, skip-cert-verify: false, network: h2, h2-opts: {path: /cache, host: [spark.route76.net]}, udp: true}
+  - {name: 🇳🇱 Iris - NL, server: iris.route76.net, port: 5021, type: vmess, uuid: 8f538376-681c-4f7e-af94-6c682cb750c1, alterId: 4, cipher: auto, tls: true, skip-cert-verify: false, network: h2, h2-opts: {path: /cache, host: [iris.route76.net]}, udp: true}
+  - {name: Trident - SE, server: trident.route76.net, port: 5023, type: vmess, uuid: 8f538376-681c-4f7e-af94-6c682cb750c1, alterId: 4, cipher: auto, tls: true, skip-cert-verify: false, network: h2, h2-opts: {path: /cache, host: [trident.route76.net]}, udp: true}
+  - {name: Neptunus - CH, server: neptunus.route76.net, port: 5023, type: vmess, uuid: 8f538376-681c-4f7e-af94-6c682cb750c1, alterId: 4, cipher: auto, tls: true, skip-cert-verify: false, network: h2, h2-opts: {path: /cache, host: [neptunus.route76.net]}, udp: true}

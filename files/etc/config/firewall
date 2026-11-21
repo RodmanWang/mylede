@@ -1,0 +1,399 @@
+
+config defaults
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	option tcpcca 'bbr'
+	option flow_offloading '0'
+	option fullcone '2'
+	option fullcone6 '1'
+	option synflood_protect '1'
+
+config zone
+	option name 'lan'
+	list network 'lan'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'ACCEPT'
+
+config zone
+	option name 'wan'
+	list network 'wan'
+	list network 'wan6'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	option masq '1'
+	option mtu_fix '1'
+
+config forwarding
+	option src 'lan'
+	option dest 'wan'
+
+config rule
+	option name 'Allow-DHCP-Renew'
+	option src 'wan'
+	option proto 'udp'
+	option dest_port '68'
+	option target 'ACCEPT'
+	option family 'ipv4'
+
+config rule
+	option name 'Allow-Ping'
+	option src 'wan'
+	option proto 'icmp'
+	option icmp_type 'echo-request'
+	option family 'ipv4'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-IGMP'
+	option src 'wan'
+	option proto 'igmp'
+	option family 'ipv4'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-DHCPv6'
+	option src 'wan'
+	option proto 'udp'
+	option dest_port '546'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-MLD'
+	option src 'wan'
+	option proto 'icmp'
+	option src_ip 'fe80::/10'
+	list icmp_type '130/0'
+	list icmp_type '131/0'
+	list icmp_type '132/0'
+	list icmp_type '143/0'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-ICMPv6-Input'
+	option src 'wan'
+	option proto 'icmp'
+	list icmp_type 'echo-request'
+	list icmp_type 'echo-reply'
+	list icmp_type 'destination-unreachable'
+	list icmp_type 'packet-too-big'
+	list icmp_type 'time-exceeded'
+	list icmp_type 'bad-header'
+	list icmp_type 'unknown-header-type'
+	list icmp_type 'router-solicitation'
+	list icmp_type 'neighbour-solicitation'
+	list icmp_type 'router-advertisement'
+	list icmp_type 'neighbour-advertisement'
+	option limit '1000/sec'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-ICMPv6-Forward'
+	option src 'wan'
+	option dest '*'
+	option proto 'icmp'
+	list icmp_type 'echo-request'
+	list icmp_type 'echo-reply'
+	list icmp_type 'destination-unreachable'
+	list icmp_type 'packet-too-big'
+	list icmp_type 'time-exceeded'
+	list icmp_type 'bad-header'
+	list icmp_type 'unknown-header-type'
+	option limit '1000/sec'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-IPSec-ESP'
+	option src 'wan'
+	option dest 'lan'
+	option proto 'esp'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-ISAKMP'
+	option src 'wan'
+	option dest 'lan'
+	option dest_port '500'
+	option proto 'udp'
+	option target 'ACCEPT'
+
+config rule 'upnp_ssdp_notrack'
+	option name 'UPnP SSDP multicast discovery'
+	option src 'lan'
+	option family 'ipv4'
+	option proto 'udp'
+	option dest_ip '239.255.255.250'
+	option dest_port '1900'
+	option target 'NOTRACK'
+
+config rule 'wsd_ipv4_notrack'
+	option name 'WSD ipv4 multicast discovery'
+	option src 'lan'
+	option family 'ipv4'
+	option proto 'udp'
+	option dest_ip '239.255.255.250'
+	option dest_port '3702'
+	option target 'NOTRACK'
+
+config rule 'wsd_ipv6_notrack'
+	option name 'WSD ipv6 multicast discovery'
+	option src 'lan'
+	option family 'ipv6'
+	option proto 'udp'
+	option dest_ip 'ff02::c'
+	option dest_port '3702'
+	option target 'NOTRACK'
+
+config zone
+	option name 'modem'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	option masq '1'
+	list network 'modem'
+
+config forwarding
+	option src 'lan'
+	option dest 'modem'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '6690'
+	option dest_ip '192.168.23.7'
+	option dest_port '6690'
+	option name 'Synology-nasdriveSync'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '9004'
+	option dest_ip '192.168.23.7'
+	option dest_port '9004'
+	option name 'Synology-calendar'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '9005'
+	option dest_ip '192.168.23.7'
+	option dest_port '9005'
+	option name 'Synology-bitwarden'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '9006'
+	option dest_ip '192.168.23.7'
+	option dest_port '9006'
+	option name 'Synology-webdva'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-Photo'
+	option src_dport '9008'
+	option dest_port '10238'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '9009'
+	option dest_ip '192.168.23.7'
+	option dest_port '9009'
+	option name 'Synology-note'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '9011'
+	option dest_ip '192.168.23.7'
+	option dest_port '9011'
+	option name 'Synology-nasdrive'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_port '9033'
+	option dest_ip '192.168.23.7'
+	option src_dport '9033'
+	option name 'Synology-Contacts'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option src_dport '19023'
+	option dest_ip '192.168.23.7'
+	option dest_port '19023'
+	option name 'Synology-naschat'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option src_dport '21535'
+	option dest_port '21535'
+	option name 'Synology-Website'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-Mail'
+	option src_dport '21635'
+	option dest_port '21635'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-Surl'
+	option src_dport '23001'
+	option dest_port '23001'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-Emby'
+	option src_dport '27793'
+	option dest_port '27793'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-PDF'
+	option src_dport '29335'
+	option dest_port '29335'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	list proto 'tcp'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-ImgUp'
+	option src_dport '29357'
+	option dest_port '29357'
+
+config redirect
+	option target 'DNAT'
+	option src 'wan'
+	option dest 'lan'
+	option dest_ip '192.168.23.7'
+	option name 'Synology-Aria2'
+	option src_dport '32516'
+	option dest_port '32516'
+
+config rule
+	option src 'wan'
+	option name 'Allow-wgEnn'
+	list proto 'udp'
+	option dest_port '51350'
+	option target 'ACCEPT'
+
+config rule
+	option src 'wan'
+	option name 'Allow-wgGuest'
+	list proto 'udp'
+	option dest_port '51353'
+	option target 'ACCEPT'
+
+config rule
+	option src 'wgGuest'
+	option name 'Allow-wgGuest-DNS'
+	option dest_port '53'
+	option target 'ACCEPT'
+	list dest_ip '192.168.23.1'
+	list dest_ip 'fdbd:a555:5dd::1'
+	list src_ip '10.55.66.77/24'
+	list src_ip 'fdbd:a555:5dd:66::77/64'
+
+config zone
+	option name 'wgEnn'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'ACCEPT'
+	list network 'wgEnn'
+
+config forwarding
+	option src 'wgEnn'
+	option dest 'wan'
+
+config forwarding
+	option src 'wgEnn'
+	option dest 'lan'
+
+config zone
+	option name 'wgGuest'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	list network 'wgGuest'
+
+config forwarding
+	option src 'wgGuest'
+	option dest 'wan'
+
+config zone
+	option name 'wgDmit'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	list network 'wgDmit'
+
+config zone
+	option name 'wgBwg'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	list network 'wgBWG'
+
+config redirect 'ntp_redirect'
+	option name 'Redirect NTP requests'
+	option src 'lan'
+	option proto 'udp'
+	option src_dport '123'
+	option dest_port '123'
+	option target 'DNAT'
+
+config include 'openclash'
+	option type 'script'
+	option path '/var/etc/openclash.include'
+

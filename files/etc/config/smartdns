@@ -1,0 +1,256 @@
+
+config smartdns
+	option enabled '1'
+	option port '6053'
+	option auto_set_dnsmasq '1'
+	option ui '1'
+	option tcp_server '1'
+	option tls_server '0'
+	option doh_server '0'
+	option ipv6_server '1'
+	option bind_device '0'
+	option dualstack_ip_selection '1'
+	option serve_expired '1'
+	option cache_persist '1'
+	option resolve_local_hostnames '1'
+	option force_https_soa '1'
+	option rr_ttl_min '600'
+	option seconddns_port '5335'
+	option seconddns_tcp_server '1'
+	option log_output_mode 'file'
+	option server_name 'OpenWrt'
+	option ui_port '6080'
+	option ui_data_dir '/etc/smartdns/data'
+	option ui_log_max_age '30'
+	option prefetch_domain '1'
+	option cache_size '33333'
+	option seconddns_enabled '1'
+	option seconddns_server_flags '-group abroad'
+	option seconddns_no_speed_check '1'
+	option seconddns_no_dualstack_selection '1'
+	option seconddns_force_https_soa '1'
+	option speed_check_mode 'tcp-syn:443,tcp-syn:80,ping'
+	option response_mode 'first-ping'
+	option proxy_server 'socks5://wangwei:h**7%V5*dS4^@192.168.23.1:7893'
+	option old_port '6053'
+	option old_enabled '1'
+	option old_auto_set_dnsmasq '1'
+
+config server
+	option name 'Ali'
+	option enabled '1'
+	option type 'https'
+	option ip 'https://223.5.5.5/dns-query'
+	option server_group 'domestic'
+
+config server
+	option name 'Ali'
+	option server_group 'domestic'
+	option enabled '1'
+	option type 'https'
+	option ip 'https://2400:3200::1/dns-query'
+
+config server
+	option name 'Ali'
+	option server_group 'domestic'
+	option enabled '1'
+	option type 'https'
+	option ip 'https://669701-5clvf2wq6atyun9b.alidns.com/dns-query'
+
+config server
+	option name 'Ali'
+	option server_group 'domestic'
+	option enabled '1'
+	option type 'https'
+	option ip 'https://669701-ga876iqcrwtkofve.alidns.com/dns-query'
+
+config server
+	option name 'DNSPod'
+	option type 'tls'
+	option server_group 'domestic'
+	option enabled '1'
+	option ip 'tls://dot.pub'
+
+config server
+	option name 'DNSPod'
+	option type 'https'
+	option server_group 'domestic'
+	option ip 'https://doh.pub/dns-query'
+	option enabled '1'
+
+config server
+	option name 'DNSPod'
+	option type 'https'
+	option server_group 'domestic'
+	option ip 'https://120.53.53.53/dns-query'
+	option enabled '1'
+
+config server
+	option enabled '1'
+	option name 'NovaXNS'
+	option server_group 'domestic'
+	option type 'h3'
+	option ip 'https://hk.raito.xns.one/nBI5A-WiGkk/dns-query'
+	option addition_arg '-whitelist-ip'
+
+config server
+	option enabled '1'
+	option name 'NovaXNS'
+	option server_group 'domestic'
+	option ip 'https://hk1.pro.xns.one/nBI5A-WiGkk/dns-query'
+	option type 'h3'
+	option addition_arg '-whitelist-ip'
+
+config server
+	option enabled '1'
+	option name 'NovaXNS'
+	option type 'h3'
+	option server_group 'domestic'
+	option ip 'https://jp.pro.xns.one/nBI5A-WiGkk/dns-query'
+	option addition_arg '-whitelist-ip'
+
+config server
+	option enabled '1'
+	option name 'NovaXNS'
+	option server_group 'domestic'
+	option type 'h3'
+	option ip 'https://kr.pro.xns.one/nBI5A-WiGkk/dns-query'
+	option addition_arg '-whitelist-ip'
+
+config server
+	option enabled '1'
+	option name 'adguard-dns'
+	option type 'quic'
+	option server_group 'domestic'
+	option addition_arg '-whitelist-ip'
+	option ip 'quic://e13232fd.d.adguard-dns.com'
+
+config server
+	option enabled '1'
+	option name 'adguard-dns'
+	option ip 'quic://8be34997.d.adguard-dns.com'
+	option type 'quic'
+	option server_group 'domestic'
+	option addition_arg '-whitelist-ip'
+
+config server
+	option name 'Google'
+	option server_group 'abroad'
+	option ip 'https://dns.google/dns-query'
+	option type 'https'
+	option exclude_default_group '1'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option use_proxy '1'
+
+config server
+	option name 'Google'
+	option type 'tls'
+	option server_group 'abroad'
+	option ip 'tls://dns.google'
+	option exclude_default_group '1'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option use_proxy '1'
+
+config server
+	option name 'Cloudflare'
+	option server_group 'abroad'
+	option ip 'https://cloudflare-dns.com/dns-query'
+	option type 'https'
+	option exclude_default_group '1'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option use_proxy '1'
+
+config server
+	option name 'Cloudflare'
+	option type 'tls'
+	option server_group 'abroad'
+	option ip 'tls://1dot1dot1dot1.cloudflare-dns.com'
+	option exclude_default_group '1'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option use_proxy '1'
+
+config server
+	option name 'Cisco'
+	option type 'https'
+	option server_group 'abroad'
+	option ip 'https://doh.opendns.com/dns-query'
+	option exclude_default_group '1'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option use_proxy '1'
+
+config server
+	option name 'Quad9'
+	option type 'https'
+	option server_group 'abroad'
+	option ip 'https://dns10.quad9.net/dns-query'
+	option exclude_default_group '1'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option use_proxy '1'
+
+config server
+	option enabled '1'
+	option name 'DmitVPS-DNS'
+	option ip '10.77.77.1'
+	option type 'udp'
+	option server_group 'abroad'
+
+config server
+	option enabled '1'
+	option name 'BWGVPS-DNS'
+	option ip '10.88.88.1'
+	option type 'udp'
+	option server_group 'abroad'
+
+config client-rule
+	option enabled '0'
+	option dualstack_ip_selection '1'
+	option force_https_soa '1'
+
+config domain-rule
+
+config domain-rule-list
+	option enabled '1'
+	option name 'NoCache'
+	option domain_list_file '/etc/smartdns/domain-set/NoCache.conf'
+	option block_domain_type 'none'
+	option addition_flag '-no-cache -no-serve-expired'
+	option server_group 'domestic'
+
+config domain-rule-list
+	option enabled '1'
+	option name 'Synology'
+	option domain_list_file '/etc/smartdns/domain-set/Synology.conf'
+	option force_aaaa_soa '1'
+	option addition_flag '-a 192.168.23.7'
+	option block_domain_type 'none'
+	option speed_check_mode 'none'
+	option server_group 'domestic'
+
+config domain-rule-list
+	option enabled '1'
+	option name 'ChinaDomain'
+	option server_group 'domestic'
+	option domain_list_file '/etc/smartdns/domain-set/ChinaDomain.conf'
+	option block_domain_type 'none'
+	option addition_flag ' -response-mode fastest-ip'
+
+config ip-rule
+
+config ip-rule-list
+	option enabled '1'
+	option name 'BlacklistIP'
+	option ip_set_file '/etc/smartdns/ip-set/BlacklistIP.conf'
+	option blacklist_ip '1'
+
+config ip-rule-list
+	option enabled '1'
+	option name 'WhitelistIP'
+	option ip_set_file '/etc/smartdns/ip-set/WhitelistIP.conf'
+	option whitelist_ip '1'
+
