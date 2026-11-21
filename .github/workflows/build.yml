@@ -614,9 +614,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          # Use the actual build date in China Standard Time (UTC+8).
-          # Keep the workflow run number in the tag so multiple builds on the
-          # same day still get unique Git tags.
+          # Date + Actions run number + attempt form a numeric, comparable OTA version.
+          # The Release tag is exactly "v<version>" and is checked against the signed manifest.
           VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d').${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
           TAG="v${VERSION}"
           mkdir -p /home/ubuntu/files/etc/myupdate
