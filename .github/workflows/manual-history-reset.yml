@@ -50,6 +50,8 @@ jobs:
         shell: bash
         env:
           CONFIRMATION_TEXT: ${{ inputs.confirmation_text }}
+          ARCHIVE_CLOSED_PRS: ${{ inputs.archive_closed_prs }}
+          ARCHIVE_CONFIRMATION: ${{ inputs.archive_confirmation }}
         run: |
           set -euo pipefail
           if [[ "$CONFIRMATION_TEXT" != "DELETE ALL COMMITS" ]]; then
@@ -60,12 +62,12 @@ jobs:
             echo "::error::请从 main 分支手动运行此 workflow。"
             exit 1
           fi
-          if [[ "${{ inputs.archive_closed_prs }}" == "yes" ]]; then
-            if [[ "${{ inputs.confirm_reset }}" != "yes" ]]; then
+          if [[ "$ARCHIVE_CLOSED_PRS" == "yes" ]]; then
+            if [[ "$CONFIRMATION_TEXT" != "DELETE ALL COMMITS" ]]; then
               echo "::error::归档历史 PR 只能与已确认的 main 历史重置一起执行。"
               exit 1
             fi
-            if [[ "${{ inputs.archive_confirmation }}" != "ARCHIVE CLOSED PULL REQUESTS" ]]; then
+            if [[ "$ARCHIVE_CONFIRMATION" != "ARCHIVE CLOSED PULL REQUESTS" ]]; then
               echo "::error::PR 归档二次确认不匹配。必须准确输入 ARCHIVE CLOSED PULL REQUESTS。"
               exit 1
             fi
