@@ -98,7 +98,7 @@ if ! sysupgrade -T "$R/firmware.bin"; then
 	write_status error 'LEDE sysupgrade 镜像预检查失败，已取消刷写' true true true
 	exit 1
 fi
-if ! /usr/libexec/myupdate/prepare-sysupgrade-backup.sh; then
+if ! /bin/sh /usr/libexec/myupdate/prepare-sysupgrade-backup.sh; then
 	write_status error '自定义文件保留路径准备失败，已取消刷写' true true true
 	exit 1
 fi
