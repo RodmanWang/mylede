@@ -3,21 +3,6 @@ name: MyLEDE Configurable Staged Build and Release
 on:
   workflow_dispatch:
     inputs:
-      kernel_version:
-        description: 固件 Linux 内核版本（留空自动选择 LEDE x86 目录中最高可用版本；也可手动填写，例如 6.6 或 6.12）
-        type: string
-        required: false
-        default: ''
-      kernel_partsize:
-        description: 内核分区大小 MB（MyLEDE 固定编译为 256 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
-        type: string
-        required: false
-        default: '256'
-      rootfs_partsize:
-        description: 根文件系统分区大小 MB（MyLEDE 固定编译为 4096 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
-        type: string
-        required: false
-        default: '4096'
       change_lan_ip:
         description: 是否修改固件默认 LAN 管理地址
         type: boolean
@@ -91,16 +76,12 @@ jobs:
         id: detect
         env:
           BUILD_TARGET: x86_64
-          KERNEL_VERSION: ${{ inputs.kernel_version }}
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          # These UI inputs are informational only; the actual partition layout is fixed below.
           if [[ "$CHANGE_LAN_IP" == 'true' ]]; then
             python3 - "$LAN_IP" <<'PY'
           import ipaddress, sys
@@ -188,9 +169,6 @@ jobs:
             printf 'FEEDS_CONF_SHA256\t%s\n' "$FEEDS_SHA256"
             printf 'MYLEDE_COMMIT\t%s\n' "$GITHUB_SHA"
             printf 'BUILD_TARGET\t%s\n' "$BUILD_TARGET"
-            printf 'KERNEL_VERSION\t%s\n' "$KERNEL_VERSION"
-            printf 'KERNEL_PARTSIZE\t256\n'
-            printf 'ROOTFS_PARTSIZE\t4096\n'
             printf 'CHANGE_LAN_IP\t%s\n' "$CHANGE_LAN_IP"
             if [[ "$CHANGE_LAN_IP" == 'true' ]]; then printf 'LAN_IP\t%s\n' "$LAN_IP"; fi
             sort "$RUNNER_TEMP/source-revisions.tsv"
@@ -379,7 +357,6 @@ jobs:
       - name: Run preparation scripts 01 through 04 on a cold toolchain build
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         env:
-          KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
@@ -621,9 +598,8 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Embedded MyUpdate version: $VERSION ($TAG)"
 
-      - name: Run preparation scripts 01 through 04 and cleanup script 06
+      - name: Run preparation scripts 01 through 06 including OpenClash customization
         env:
-          KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
@@ -635,71 +611,12 @@ jobs:
             02-update-source.sh \
             03-update-feeds.sh \
             04-configure.sh \
+            05-openclash.sh \
             06-clean-build.sh; do
             echo "========== Running $script =========="
             bash "/home/ubuntu/scripts/$script"
             df -hT /
           done
-
-      - name: Read and display partition defaults from pinned LEDE source
-        id: partition_defaults
-        env:
-          KERNEL_PARTSIZE_INPUT: ${{ inputs.kernel_partsize }}
-          ROOTFS_PARTSIZE_INPUT: ${{ inputs.rootfs_partsize }}
-          LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          cd /home/ubuntu/lede
-
-          # Resolve Kconfig defaults from the exact pinned LEDE checkout used by this build.
-          # This intentionally mirrors the clean make defconfig performed by scripts/07-build.sh.
-          rm -rf tmp .config
-          make defconfig
-          [[ -s .config ]] || { echo '::error::make defconfig did not generate .config'; exit 1; }
-
-          python3 - .config "$KERNEL_PARTSIZE_INPUT" "$ROOTFS_PARTSIZE_INPUT" "$LEDE_COMMIT" <<'PY'
-          from pathlib import Path
-          import re, sys
-
-          config = Path(sys.argv[1]).read_text(encoding='utf-8')
-          kernel_input, rootfs_input, commit = (x.strip() for x in sys.argv[2:])
-          # Fixed MyLEDE layout; UI values never override these constants.
-          kernel_fixed = '256'
-          rootfs_fixed = '4096'
-
-          def read_value(symbol):
-              matches = re.findall(rf'^{re.escape(symbol)}=(\d+)$', config, re.M)
-              if len(matches) != 1:
-                  raise SystemExit(f'无法从本次 LEDE make defconfig 结果中唯一读取 {symbol}，停止以免显示错误默认值')
-              return matches[0]
-
-          kernel_default = read_value('CONFIG_TARGET_KERNEL_PARTSIZE')
-          rootfs_default = read_value('CONFIG_TARGET_ROOTFS_PARTSIZE')
-          kernel_effective = kernel_fixed
-          rootfs_effective = rootfs_fixed
-
-          output = Path(__import__('os').environ['GITHUB_OUTPUT'])
-          with output.open('a', encoding='utf-8') as f:
-              f.write(f'kernel_default={kernel_default}\n')
-              f.write(f'rootfs_default={rootfs_default}\n')
-              f.write(f'kernel_effective={kernel_effective}\n')
-              f.write(f'rootfs_effective={rootfs_effective}\n')
-
-          summary = Path(__import__('os').environ['GITHUB_STEP_SUMMARY'])
-          with summary.open('a', encoding='utf-8') as f:
-              f.write('## LEDE 分区大小（来自本次固定源码版本）\n\n')
-              f.write(f'- LEDE commit：`{commit}`\n\n')
-              f.write('| 项目 | 本次远程 LEDE 源码原始默认值 | Actions 输入框显示值 | MyLEDE 实际编译值 | 用途 |\\n')
-              f.write('|---|---:|---:|---:|---|\\n')
-              f.write(f'| 内核分区 | {kernel_default} MB | {kernel_input or "未填写"} | **固定 {kernel_effective} MB** | 存放启动内核及启动相关内容 |\\n')
-              f.write(f'| 根文件系统分区 | {rootfs_default} MB | {rootfs_input or "未填写"} | **固定 {rootfs_effective} MB** | 存放系统文件和安装的软件 |\\n\\n')
-              f.write('注意：Actions 输入框默认显示 256 / 4096，仅用于提示 MyLEDE 固定布局。即使手动改成其他数字，实际编译仍强制使用 256 MB / 4096 MB，不会跟随上游默认值变化。\\n')
-
-          print(f'LEDE commit: {commit}')
-          print(f'内核分区：源码默认 {kernel_default} MB；本次采用 {kernel_effective} MB')
-          print(f'根文件系统分区：源码默认 {rootfs_default} MB；本次采用 {rootfs_effective} MB')
-          PY
 
       - name: Calculate stable toolchain cache namespace
         id: firmware_toolchain_key
@@ -767,9 +684,6 @@ jobs:
 
       - name: Run tools/install and build script 07 with disk watchdog
         id: firmware_build
-        env:
-          KERNEL_PARTSIZE: '256'
-          ROOTFS_PARTSIZE: '4096'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -789,21 +703,10 @@ jobs:
           make defconfig
           # The cached host/toolchain tree may not contain every config-dependent host utility.
           make V=1 -j"$(nproc)" tools/install
-          # Keep the original script's semantics: it removes tmp/.config, runs defconfig, then builds.
+          # Kernel selection and partition defaults are managed by scripts/04-configure.sh.
+          # scripts/07-build.sh performs the final clean defconfig and firmware build.
           cd /home/ubuntu
-          # Never allow workflow inputs or upstream defaults to alter the OTA partition layout.
-          export KERNEL_PARTSIZE=256
-          export ROOTFS_PARTSIZE=4096
           bash /home/ubuntu/scripts/07-build.sh
-          grep -qx 'CONFIG_TARGET_KERNEL_PARTSIZE=256' /home/ubuntu/lede/.config || {
-            echo '::error::Final .config does not contain the required 256 MB kernel partition.'
-            exit 1
-          }
-          grep -qx 'CONFIG_TARGET_ROOTFS_PARTSIZE=4096' /home/ubuntu/lede/.config || {
-            echo '::error::Final .config does not contain the required 4096 MB rootfs partition.'
-            exit 1
-          }
-          echo 'Verified fixed OTA partition layout: kernel=256 MB, rootfs=4096 MB.'
           BUILD_SCRIPT
           chmod +x "$RUNNER_TEMP/run-firmware-build.sh"
 
