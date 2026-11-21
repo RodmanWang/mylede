@@ -91,7 +91,20 @@ if sh "$VERIFY" "$ROOT/manifest.json" "$ROOT/manifest.minisig" "v2026.11.22.123.
 fi
 
 cp "$ROOT/manifest.minisig" "$ROOT/tampered.minisig"
-printf 'tamper\n' >> "$ROOT/tampered.minisig"
+python3 - "$ROOT/tampered.minisig" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="ascii").splitlines()
+for index in range(1, len(lines)):
+    if lines[index] and not lines[index].startswith("trusted comment:"):
+        first = "A" if lines[index][0] != "A" else "B"
+        lines[index] = first + lines[index][1:]
+        break
+else:
+    raise SystemExit("signature payload line not found")
+path.write_text("\\n".join(lines) + "\\n", encoding="ascii")
+PY
 if sh "$VERIFY" "$ROOT/manifest.json" "$ROOT/tampered.minisig" "v2026.11.22.123.1" stable; then
   echo "Tampered Minisign signature was unexpectedly accepted." >&2
   exit 1
