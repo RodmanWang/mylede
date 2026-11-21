@@ -21,10 +21,19 @@ jobs:
       - name: Test version ordering and Tag contract
         run: python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
 
+      - name: Install Minisign for device verifier integration test
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y minisign
+
+      - name: Exercise signed OTA manifest verifier
+        run: bash tests/ota/test_verify_manifest.sh
+
       - name: Validate shell syntax
         shell: bash
         run: |
           set -Eeuo pipefail
+          bash -n tests/ota/test_verify_manifest.sh
           find luci-app-myupdate/root -type f -name '*.sh' -print0 | while IFS= read -r -d '' file; do
             sh -n "$file"
           done
