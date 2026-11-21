@@ -1240,17 +1240,17 @@ jobs:
                       'short_commit': meta['lede_commit'][:7]
                   },
                   'pymumu/smartdns': {
-                      'ref': 'PKG_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'ref': 'preflight source lock commit',
                       'commit': meta['sources']['smartdns'],
                       'short_commit': meta['sources']['smartdns'][:7]
                   },
                   'pymumu/smartdns-webui': {
-                      'ref': 'SMARTDNS_WEBUI_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'ref': 'preflight source lock commit',
                       'commit': meta['sources']['smartdns_webui'],
                       'short_commit': meta['sources']['smartdns_webui'][:7]
                   },
                   'pymumu/luci-app-smartdns': {
-                      'ref': 'PKG_SOURCE_VERSION (Makefile git ls-remote HEAD)',
+                      'ref': 'preflight source lock commit',
                       'commit': meta['sources']['luci_app_smartdns'],
                       'short_commit': meta['sources']['luci_app_smartdns'][:7]
                   },
