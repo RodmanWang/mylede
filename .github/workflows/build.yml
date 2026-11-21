@@ -707,6 +707,13 @@ jobs:
             exit 1
           fi
           OPENCLASH_COMMIT="$(git -C "$OPENCLASH_DIR" rev-parse HEAD)"
+          EXPECTED_OPENCLASH_COMMIT="$(awk -F '\t' '$1=="OpenClash" {print $4; exit}' /home/ubuntu/source-revisions.tsv)"
+          if [[ "$OPENCLASH_COMMIT" != "$EXPECTED_OPENCLASH_COMMIT" ]]; then
+            echo "::error::OpenClash checkout differs from the preflight-pinned SHA."
+            echo "::error::Expected: $EXPECTED_OPENCLASH_COMMIT"
+            echo "::error::Actual:   $OPENCLASH_COMMIT"
+            exit 1
+          fi
           if [[ ! "$OPENCLASH_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Cannot resolve the checked-out OpenClash commit."
             exit 1
@@ -835,21 +842,14 @@ jobs:
             if [[ "$has_head" == true ]]; then source_name="$repo"; fi
           fi
           if [[ -n "$source_name" ]]; then
-            if output="$("$REAL_GIT" "$@")"; then
-              status=0
-            else
-              status=$?
+            commit="$(awk -F '\t' -v name="$source_name" '$1 == name { print $4; exit }' "$MYLEDE_SOURCE_LOCK")"
+            if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::No valid preflight-pinned SHA found for $source_name." >&2
+              exit 1
             fi
-            if (( status == 0 )); then
-              commit="$(printf '%s\n' "$output" | awk '$2 == "HEAD" { print $1; exit }')"
-              if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-                echo "::error::Could not capture a full commit SHA for $source_name from git ls-remote." >&2
-                exit 1
-              fi
-              printf '%s\t%s\n' "$source_name" "$commit" >> "$SOURCE_COMMIT_CAPTURE"
-            fi
-            printf '%s\n' "$output"
-            exit "$status"
+            printf '%s\t%s\n' "$source_name" "$commit" >> "$SOURCE_COMMIT_CAPTURE"
+            printf '%s HEAD\n' "$commit"
+            exit 0
           fi
           exec "$REAL_GIT" "$@"
           GIT_WRAPPER
