@@ -1,138 +1,277 @@
+
 #!/usr/bin/env bash
 set -Eeuo pipefail
+
 trap 'status=$?; echo "错误：源码配置在第 ${LINENO} 行执行失败（退出码：${status}）。" >&2; exit "$status"' ERR
 
 TOPDIR="${TOPDIR:-/home/ubuntu/lede}"
-KERNEL_VERSION="${KERNEL_VERSION:-}"
 CHANGE_LAN_IP="${CHANGE_LAN_IP:-false}"
 LAN_IP="${LAN_IP:-192.168.1.1}"
-export TOPDIR KERNEL_VERSION CHANGE_LAN_IP LAN_IP
+export TOPDIR CHANGE_LAN_IP LAN_IP
 cd "$TOPDIR"
 
-echo "========== 4/6 应用保留的上游设置和 x86 软件包选择 =========="
+echo "========== 4/7 应用自定义源码配置 =========="
+echo "提示：配置脚本只修改预先指定的配置项；若目标结构不符合预期会报错停止。"
 
-python3 - <<'PYCODE'
+python3 - <<'PY'
 from pathlib import Path
-import ipaddress, os, re
+import re
+import os
+import ipaddress
 
 root = Path(os.environ.get("TOPDIR", "/home/ubuntu/lede"))
-kernel_version = os.environ.get("KERNEL_VERSION", "").strip()
 change_lan_ip = os.environ.get("CHANGE_LAN_IP", "false").lower() == "true"
 lan_ip = os.environ.get("LAN_IP", "192.168.1.1").strip()
 
-RFC1918 = tuple(ipaddress.ip_network(x) for x in (
-    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
-))
 if change_lan_ip:
     try:
-        parsed = ipaddress.IPv4Address(lan_ip)
+        parsed_ip = ipaddress.IPv4Address(lan_ip)
     except ipaddress.AddressValueError as exc:
         raise SystemExit(f"LAN 地址不是合法 IPv4 地址：{lan_ip}") from exc
-    if not any(parsed in network for network in RFC1918):
-        raise SystemExit(f"LAN 地址必须属于 RFC1918 私有地址范围：{lan_ip}")
-    if parsed.packed[-1] in (0, 255):
+    private_networks = tuple(ipaddress.ip_network(value) for value in (
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
+    ))
+    if not any(parsed_ip in network for network in private_networks):
+        raise SystemExit("LAN 地址必须属于 RFC1918 私有 IPv4 地址范围")
+    if parsed_ip.packed[-1] in (0, 255):
         raise SystemExit("LAN 地址不能使用 .0 或 .255 主机地址")
 
+# 暂存所有配置修改，全部检查通过后再统一写入，避免中途报错造成部分文件已修改。
 staged = {}
-def read(rel):
+
+def load(rel):
     path = root / rel
     if not path.is_file():
-        raise RuntimeError(f"找不到 LEDE 上游文件：{rel}")
-    data = path.read_bytes()
-    staged[path] = [data, data]
-    return path, data
+        raise RuntimeError(f"找不到文件：{path}")
 
-# 1. 保留 include/target.mk 中原有的路由器默认 LuCI 插件。
-path, original = read("include/target.mk")
+    if path not in staged:
+        data = path.read_bytes()
+        staged[path] = [data, data]
+
+    return path, staged[path][1]
+
+def save_if_changed(path, old, new):
+    if path not in staged:
+        staged[path] = [old, old]
+
+    if staged[path][1] != old:
+        raise RuntimeError(f"{path} 的暂存内容与待修改内容不一致，停止写入。")
+
+    staged[path][1] = new
+
+def commit_changes():
+    for path, (original, updated) in staged.items():
+        if updated != original:
+            path.write_bytes(updated)
+            print(f"已修改：{path}")
+        else:
+            print(f"无需修改：{path}")
+
+# --------------------------------------------------
+# 一、config/Config-images.in
+# --------------------------------------------------
+
+path, original = load("config/Config-images.in")
 lines = original.splitlines(keepends=True)
-starts = [i for i, line in enumerate(lines)
-          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*:?=", line)]
+
+def set_x86_default(lines, name, value):
+    pattern = re.compile(
+        rb"^[ \t]*config[ \t]+" + name.encode() + rb"[ \t]*(?:\r?\n)?$"
+    )
+    starts = [i for i, line in enumerate(lines) if pattern.match(line)]
+
+    if len(starts) != 1:
+        raise RuntimeError(
+            f"{name} 的 config 定义数量不是 1，停止修改。"
+        )
+
+    start = starts[0]
+    end = next(
+        (
+            i for i in range(start + 1, len(lines))
+            if re.match(rb"^[ \t]*(?:config|menuconfig)[ \t]+", lines[i])
+        ),
+        len(lines),
+    )
+
+    candidates = []
+    for i in range(start + 1, end):
+        active_line = lines[i].partition(b"#")[0]
+        if (
+            re.match(rb"^[ \t]*default[ \t]+", active_line)
+            and re.search(rb"\bTARGET_x86\b", active_line)
+        ):
+            candidates.append(i)
+
+    if len(candidates) != 1:
+        raise RuntimeError(
+            f"{name} 中明确包含 TARGET_x86 的 default 数量为 "
+            f"{len(candidates)}，停止修改以避免误改。"
+        )
+
+    i = candidates[0]
+    updated, count = re.subn(
+        rb"^([ \t]*default[ \t]+)[0-9]+",
+        lambda m: m.group(1) + str(value).encode(),
+        lines[i],
+        count=1,
+    )
+
+    if count != 1:
+        raise RuntimeError(f"无法安全修改 {name} 的默认值。")
+
+    lines[i] = updated
+
+set_x86_default(lines, "TARGET_KERNEL_PARTSIZE", 256)
+set_x86_default(lines, "TARGET_ROOTFS_PARTSIZE", 4096)
+
+save_if_changed(path, original, b"".join(lines))
+
+# --------------------------------------------------
+# 二、include/target.mk
+# --------------------------------------------------
+
+path, original = load("include/target.mk")
+lines = original.splitlines(keepends=True)
+
+starts = [
+    i for i, line in enumerate(lines)
+    if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*:?=", line)
+]
+
 if len(starts) != 1:
-    raise RuntimeError("include/target.mk 的 DEFAULT_PACKAGES.router 定义不唯一")
+    raise RuntimeError(
+        "DEFAULT_PACKAGES.router 定义数量不是 1，停止修改。"
+    )
+
 start = starts[0]
 end = start + 1
+
 while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
     end += 1
-keep = [b"luci-app-ddns", b"luci-app-upnp", b"luci-app-nlbwmon",
-        b"luci-theme-design", b"luci-app-turboacc"]
+
+allowed = {
+    b"luci-app-ddns",
+    b"luci-app-upnp",
+    b"luci-app-nlbwmon",
+    b"luci-theme-design",
+    b"luci-app-turboacc",
+}
+
 for i in range(start, end):
-    body, marker, comment = lines[i].partition(b"#")
-    tokens = list(re.finditer(rb"(?<![A-Za-z0-9_.+-])(?:luci-app-[A-Za-z0-9_.+-]+|coremark)(?![A-Za-z0-9_.+-])", body))
-    for match in reversed(tokens):
-        if match.group() in keep:
+    line = lines[i]
+    body, marker, comment = line.partition(b"#")
+
+    matches = list(
+        re.finditer(
+            rb"(?<!\S)(?:luci-app-[A-Za-z0-9_.+-]+|coremark)(?!\S)",
+            body
+        )
+    )
+
+    for match in reversed(matches):
+        token = match.group()
+
+        if token in allowed:
             continue
+
         a, b = match.span()
-        if b < len(body) and body[b:b+1] in (b" ", b"\t"):
+
+        if b < len(body) and body[b:b + 1] in (b" ", b"\t"):
             b += 1
-        elif a and body[a-1:a] in (b" ", b"\t"):
+        elif a > 0 and body[a - 1:a] in (b" ", b"\t"):
             a -= 1
+
         body = body[:a] + body[b:]
+
     lines[i] = body + marker + comment
-for i in range(end - 1, start, -1):
-    if re.fullmatch(rb"[ \t]*\\[ \t]*(?:\r?\n)?", lines[i]):
+
+for i in range(end - 1, start - 1, -1):
+    line = lines[i]
+    body = line.rstrip(b"\r\n")
+    if re.fullmatch(rb"[ \t]*\\[ \t]*", body):
         del lines[i]
         end -= 1
-section = b"\n".join(line.partition(b"#")[0] for line in lines[start:end])
-missing = [p for p in keep if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(p) + rb"(?![A-Za-z0-9_.+-])", section)]
+
+section = b"\n".join(
+    line.partition(b"#")[0] for line in lines[start:end]
+)
+
+missing = [
+    package for package in sorted(allowed)
+    if not re.search(
+        rb"(?<![A-Za-z0-9_.+-])" + re.escape(package) +
+        rb"(?![A-Za-z0-9_.+-])",
+        section,
+    )
+]
+
 if missing:
-    idx = end - 1
-    line = lines[idx]
-    ending = b"\r\n" if line.endswith(b"\r\n") else (b"\n" if line.endswith(b"\n") else b"")
-    body = line[:-len(ending)] if ending else line
-    body = body.rstrip()
-    if not ending:
-        ending = b"\n"
-    if not body:
-        if idx > start:
-            previous = lines[idx - 1]
-            previous_ending = b"\r\n" if previous.endswith(b"\r\n") else (b"\n" if previous.endswith(b"\n") else b"")
-            previous_body = previous[:-len(previous_ending)] if previous_ending else previous
-            if not previous_body.rstrip().endswith(b"\\"):
-                previous_body = previous_body.rstrip() + b" \\"
-            lines[idx - 1] = previous_body + (previous_ending or ending)
-        lines[idx] = b"\t" + b" ".join(missing) + ending
+    i = end - 1
+    line = lines[i]
+
+    if line.endswith(b"\r\n"):
+        ending, body = b"\r\n", line[:-2]
+    elif line.endswith(b"\n"):
+        ending, body = b"\n", line[:-1]
     else:
-        if not body.endswith(b"\\"):
-            body += b" \\"
-        lines[idx] = body + ending
-        lines.insert(end, b"\t" + b" ".join(missing) + ending)
-staged[path][1] = b"".join(lines)
+        ending, body = b"", line
 
-# 2. 保留 x86 Makefile 的内核版本选择逻辑；默认选当前源码最高可用版本。
-x86_dir = root / "target/linux/x86"
-if not (x86_dir / "Makefile").is_file():
-    raise RuntimeError("缺少 target/linux/x86/Makefile；当前工作流只接通 x86_64")
-versions = []
-for item in x86_dir.glob("config-*"):
-    match = re.fullmatch(r"config-(\d+(?:\.\d+)+)", item.name)
-    if match and item.is_file():
-        versions.append((tuple(int(x) for x in match.group(1).split(".")), match.group(1)))
-if not versions:
-    raise RuntimeError("target/linux/x86 下找不到 config-内核版本文件")
-selected = kernel_version or max(versions)[1]
-if not re.fullmatch(r"\d+(?:\.\d+)+", selected):
-    raise RuntimeError(f"内核版本格式错误：{selected}")
-if not (x86_dir / f"config-{selected}").is_file():
-    supported = ", ".join(v for _, v in sorted(versions))
-    raise RuntimeError(f"x86 不支持内核版本 {selected}；当前可选：{supported}")
-path, original = read("target/linux/x86/Makefile")
-lines = original.splitlines(keepends=True)
-for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
-    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*:?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
-    matches = [i for i, line in enumerate(lines) if pattern.match(line)]
-    if len(matches) != 1:
-        raise RuntimeError(f"{variable.decode()} 定义数量不是 1，拒绝修改")
-    i = matches[0]
-    match = pattern.match(lines[i])
-    lines[i] = match.group(1) + selected.encode() + match.group(2) + (match.group(3) or b"")
-staged[path][1] = b"".join(lines)
-print(f"x86 内核版本：{selected}（{'Actions 指定' if kernel_version else '源码最高可用版本'}）")
+    if body.rstrip().endswith(b"\\"):
+        pos = body.rfind(b"\\")
+        prefix, suffix = body[:pos], body[pos:]
 
-# 3. 只有显式开启时才修改基础系统实际使用的 config_generate。
+        if prefix and prefix[-1:] not in (b" ", b"\t"):
+            prefix += b" "
+
+        body = prefix + b" ".join(missing) + b" " + suffix
+    else:
+        if body and body[-1:] not in (b" ", b"\t"):
+            body += b" "
+
+        body += b" ".join(missing)
+
+    lines[i] = body + ending
+
+save_if_changed(path, original, b"".join(lines))
+
+# --------------------------------------------------
+# 三、默认系统描述
+# --------------------------------------------------
+
+path, original = load(
+    "package/lean/default-settings/files/zzz-default-settings"
+)
+
+new = original.replace(
+    b"DISTRIB_DESCRIPTION='LEDE '",
+    b"DISTRIB_DESCRIPTION='OpenWRT '",
+)
+
+new = new.replace(
+    b'OPENWRT_RELEASE="LEDE R@BUILD_DATE@"',
+    b'OPENWRT_RELEASE="OpenWRT R@BUILD_DATE@"',
+)
+
+if (
+    b"DISTRIB_DESCRIPTION='OpenWRT '" not in new
+    or b'OPENWRT_RELEASE="OpenWRT R@BUILD_DATE@"' not in new
+):
+    raise RuntimeError(
+        "系统描述配置无法确认已正确设置；停止操作，请检查文件内容。"
+    )
+
+save_if_changed(path, original, new)
+
+# --------------------------------------------------
+# 四、可选修改默认 LAN 管理地址
+# --------------------------------------------------
+
 if change_lan_ip:
     rel = "package/base-files/files/bin/config_generate"
-    path, original = read(rel)
+    path, original = load(rel)
     lines = original.splitlines(keepends=True)
+
     lan_pattern = re.compile(
         rb'^[ \t]*lan\) ipad=\$\{ipaddr:-"192\.168\.1\.1"\} ;;[ \t]*(?:\r?\n)?$'
     )
@@ -141,238 +280,323 @@ if change_lan_ip:
     )
     lan_hits = [i for i, line in enumerate(lines) if lan_pattern.match(line)]
     other_hits = [i for i, line in enumerate(lines) if other_pattern.match(line)]
+
     if len(lan_hits) != 1 or len(other_hits) != 1:
         raise RuntimeError(
-            f"{rel} 中预期的两条 LAN 地址模板匹配数量异常："
-            f"lan 模板 {len(lan_hits)} 处，其他接口模板 {len(other_hits)} 处；拒绝修改。"
+            f"{rel} 中 LAN 地址模板匹配数量异常："
+            f"lan 模板 {len(lan_hits)} 处，其他接口模板 {len(other_hits)} 处"
         )
-    a, b = lan_hits[0], other_hits[0]
-    if b <= a:
-        raise RuntimeError(f"{rel} 中两条 LAN 地址模板顺序异常，拒绝修改")
+
+    lan_index, other_index = lan_hits[0], other_hits[0]
+    if other_index <= lan_index:
+        raise RuntimeError(f"{rel} 中 LAN 地址模板顺序异常")
+
     prefix = ".".join(lan_ip.split(".")[:2])
-    nl1 = b"\r\n" if lines[a].endswith(b"\r\n") else b"\n"
-    nl2 = b"\r\n" if lines[b].endswith(b"\r\n") else b"\n"
-    indent1 = re.match(rb"^([ \t]*)", lines[a]).group(1)
-    indent2 = re.match(rb"^([ \t]*)", lines[b]).group(1)
-    lines[a] = indent1 + f'lan) ipad=${{ipaddr:-"{lan_ip}"}} ;;'.encode() + nl1
-    lines[b] = indent2 + f'*) ipad=${{ipaddr:-"{prefix}.$((addr_offset++)).1"}} ;;'.encode() + nl2
-    staged[path] = [original, b"".join(lines)]
-    print(f"LAN 地址已设置为 {lan_ip}；其他静态接口将使用 {prefix}.<offset>.1")
+    for index, value in ((lan_index, lan_ip), (other_index, prefix + ".$((addr_offset++)).1")):
+        ending = b"\r\n" if lines[index].endswith(b"\r\n") else b"\n"
+        indent = re.match(rb"^([ \t]*)", lines[index]).group(1)
+        if index == lan_index:
+            body = f'lan) ipad=${{ipaddr:-"{value}"}} ;;'.encode()
+        else:
+            body = f'*) ipad=${{ipaddr:-"{value}"}} ;;'.encode()
+        lines[index] = indent + body + ending
+
+    save_if_changed(path, original, b"".join(lines))
+    print(f"默认 LAN 地址已设置为 {lan_ip}")
 else:
-    print("LAN 地址保持 LEDE 上游默认 192.168.1.1")
+    print("LAN 地址保持 LEDE 上游默认值 192.168.1.1")
 
+# --------------------------------------------------
+# 五、target/linux/x86/Makefile
+# --------------------------------------------------
 
-# 4. x86 专用软件包统一写入 target/linux/x86/Makefile 的 DEFAULT_PACKAGES。
-packages = [
-    "luci-app-smartdns", "luci-app-myupdate", "luci-app-openclash",
-    "luci-proto-wireguard", "luci-app-uugamebooster", "ipv6helper",
-    "open-vm-tools", "ddns-scripts-cloudflare", "iptables-mod-conntrack-extra",
-    "iptables-mod-hashlimit", "iptables-mod-iprange", "iptables-mod-filter",
-    "iptables-mod-ipopt", "iptables-mod-nflog", "iptables-mod-nfqueue",
-    "iptables-mod-trace", "kmod-nft-queue", "kmod-nft-tproxy", "kmod-nft-fib",
-    "kmod-nft-socket", "kmod-nft-netdev", "kmod-nft-compat", "conntrack",
-    "tcpdump", "nmap", "ncat", "nping", "socat", "mtr-nojson", "iperf3",
-    "tc-full", "ss", "nstat"
+path, original = load("target/linux/x86/Makefile")
+lines = original.splitlines(keepends=True)
+
+required = [
+    b"luci-app-samba4",
+    b"luci-app-smartdns",
+    b"luci-app-myupdate",
+    b"luci-app-openclash",
+    b"luci-proto-wireguard",
+    b"luci-app-uugamebooster",
+    b"ipv6helper",
+    b"open-vm-tools",
+    b"ddns-scripts-cloudflare",
+    b"iptables-mod-conntrack-extra",
+    b"iptables-mod-hashlimit",
+    b"iptables-mod-iprange",
+    b"iptables-mod-filter",
+    b"iptables-mod-ipopt",
+    b"iptables-mod-nflog",
+    b"iptables-mod-nfqueue",
+    b"iptables-mod-trace",
+    b"kmod-nft-queue",
+    b"kmod-nft-tproxy",
+    b"kmod-nft-fib",
+    b"kmod-nft-socket",
+    b"kmod-nft-netdev",
+    b"kmod-nft-compat",
+    b"conntrack",
+    b"tcpdump",
+    b"nmap",
+    b"ncat",
+    b"nping",
+    b"socat",
+    b"mtr-nojson",
+    b"iperf3",
+    b"tc-full",
+    b"ss",
+    b"nstat",
 ]
 
-if len(packages) != len(set(packages)):
-    raise RuntimeError("x86 软件包列表存在重复项")
+def has_token(data, token):
+    return re.search(
+        rb"(?<![A-Za-z0-9_.+-])" + re.escape(token) +
+        rb"(?![A-Za-z0-9_.+-])",
+        data,
+    ) is not None
 
-makefile = x86_dir / "Makefile"
-if makefile not in staged:
-    raise RuntimeError("x86 Makefile 未进入待修改队列")
-
-make_lines = staged[makefile][1].splitlines(keepends=True)
-
-assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*\+=")
 starts = [
-    i for i, line in enumerate(make_lines)
-    if assignment.match(line)
+    i for i, line in enumerate(lines)
+    if re.match(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*\+=", line)
 ]
 
 if len(starts) != 1:
     raise RuntimeError(
-        f"target/linux/x86/Makefile 中 DEFAULT_PACKAGES += "
-        f"定义数量为 {len(starts)}，拒绝修改"
+        "target/linux/x86/Makefile 中 DEFAULT_PACKAGES += "
+        f"定义数量为 {len(starts)}，不是 1，停止修改。"
     )
 
 start = starts[0]
 end = start + 1
 
 while (
-    end < len(make_lines)
-    and make_lines[end - 1].rstrip(b"\r\n").rstrip().endswith(b"\\")
+    end < len(lines)
+    and lines[end - 1].rstrip(b"\r\n").endswith(b"\\")
 ):
     end += 1
 
-# 先统一修正整个 DEFAULT_PACKAGES 区块的续行格式。
-# 所有续行顶格，不允许行首 Tab 或多余空格。
-for i in range(start + 1, end):
-    line = make_lines[i]
+section = b"\n".join(
+    line.partition(b"#")[0] for line in lines[start:end]
+)
 
-    if line.endswith(b"\r\n"):
-        ending = b"\r\n"
-        body = line[:-2]
-    elif line.endswith(b"\n"):
-        ending = b"\n"
-        body = line[:-1]
-    else:
-        ending = b""
-        body = line
-
-    make_lines[i] = body.lstrip(b" \t") + ending
-
-# 提取当前 DEFAULT_PACKAGES 区块中的全部软件包。
-block_lines = make_lines[start:end]
-existing = set()
-
-for i, line in enumerate(block_lines):
-    body = line.partition(b"#")[0].strip()
-
-    if i == 0:
-        if b"+=" not in body:
-            raise RuntimeError("DEFAULT_PACKAGES += 格式异常")
-        body = body.split(b"+=", 1)[1].strip()
-
-    body = body.rstrip(b"\\").strip()
-
-    for token in re.findall(rb"[A-Za-z0-9_.+-]+", body):
-        existing.add(token)
-
-# 只追加尚未存在的软件包。
 missing = [
-    package for package in packages
-    if package.encode("ascii") not in existing
+    package for package in required
+    if not has_token(section, package)
 ]
 
-# 统计整个 DEFAULT_PACKAGES 区块的原始软件包行宽。
-# 第一行去掉 DEFAULT_PACKAGES += 前缀后再参与计算。
-valid_lines = []
-
-for i in range(start, end):
-    body = make_lines[i].partition(b"#")[0].strip()
-
-    if i == start:
-        if b"+=" not in body:
-            raise RuntimeError("DEFAULT_PACKAGES += 格式异常")
-        body = body.split(b"+=", 1)[1].strip()
-
-    body = body.rstrip(b"\\").rstrip()
-
-    if body:
-        valid_lines.append(len(body))
-
-max_width = max(valid_lines, default=120)
-
-print(f"x86 软件包原有最大行宽：{max_width} 字符")
-
-# 无论是否有缺失包，都保留格式修正结果。
-added_line_count = 0
-
 if missing:
-    last = make_lines[end - 1]
+    i = end - 1
+    line = lines[i]
 
-    if last.endswith(b"\r\n"):
-        ending = b"\r\n"
-        body = last[:-2]
-    elif last.endswith(b"\n"):
-        ending = b"\n"
-        body = last[:-1]
+    if line.endswith(b"\r\n"):
+        ending, body = b"\r\n", line[:-2]
+    elif line.endswith(b"\n"):
+        ending, body = b"\n", line[:-1]
     else:
-        ending = b"\n"
-        body = last
+        ending, body = b"", line
 
     body = body.rstrip()
 
-    if body.endswith(b"\\"):
-        body = body[:-1].rstrip()
+    if not body.endswith(b"\\"):
+        body += b" \\"
 
-    make_lines[end - 1] = body + b" \\" + ending
+    if not ending:
+        ending = b"\r\n" if b"\r\n" in original else b"\n"
 
-    # 新增包全部顶格，按照原有行宽排列。
-    new_lines = []
-    current = b""
+    lines[i] = body + ending
+
+    max_line_length = 170
+    additions = []
+    current_line = b""
 
     for package in missing:
-        token = package.encode("ascii")
-        candidate = token if not current else current + b" " + token
-
-        if current and len(candidate) > max_width:
-            new_lines.append(current + b" \\" + ending)
-            current = token
+        if not current_line:
+            current_line = package
+        elif len(current_line) + 1 + len(package) <= max_line_length:
+            current_line += b" " + package
         else:
-            current = candidate
+            additions.append(current_line + b" \\" + ending)
+            current_line = package
 
-    if current:
-        new_lines.append(current + ending)
+    if current_line:
+        additions.append(current_line + ending)
 
-    # 这里记录实际新增的 Makefile 行数，而不是软件包数量。
-    added_line_count = len(new_lines)
-
-    make_lines[end:end] = new_lines
+    lines[end:end] = additions
 
     print(
-        f"新增 x86 软件包：{len(missing)} 个，"
-        f"新增 Makefile 行数：{added_line_count} 行"
+        f"新增 {len(missing)} 个默认软件包，"
+        "按照原 Makefile 格式自动换行。"
     )
 else:
-    print("33 个指定软件包已经全部存在，不重复添加")
+    print("x86 默认软件包均已存在，无需添加。")
 
-# 正确计算最终 DEFAULT_PACKAGES 区块的结束位置。
-final_end = end + added_line_count
+save_if_changed(path, original, b"".join(lines))
 
-# 只检查 DEFAULT_PACKAGES 区块内的续行。
-for i in range(start + 1, final_end):
-    line = make_lines[i]
+# --------------------------------------------------
+# 六、关闭 Rclone / SSR-Plus 的二级功能默认启用项
+# --------------------------------------------------
 
-    if not line.strip() or line.lstrip().startswith(b"#"):
-        continue
+def disable_named_config_defaults(rel, names):
+    path, original = load(rel)
+    lines = original.splitlines(keepends=True)
 
-    if line.startswith((b" ", b"\t")):
+    starts = [
+        i for i, line in enumerate(lines)
+        if re.match(rb"^[ \t]*(?:config|menuconfig)[ \t]+", line)
+    ]
+
+    if not starts:
         raise RuntimeError(
-            f"x86 Makefile 第 {i + 1} 行仍存在行首空格或 Tab"
+            f"{rel} 中找不到 config/menuconfig 配置段，停止修改。"
         )
 
-# 检查指定软件包是否全部存在。
-final_block = b"".join(make_lines[start:final_end])
+    boundaries = starts + [len(lines)]
+    section_map = {name: [] for name in names}
+    changed = 0
 
-final_tokens = set(
-    re.findall(rb"[A-Za-z0-9_.+-]+", final_block)
-)
+    for pos, section_start in enumerate(starts):
+        section_end = boundaries[pos + 1]
+        config_header = lines[section_start].lower()
 
-not_found = [
-    package for package in packages
-    if package.encode("ascii") not in final_tokens
-]
+        for name in names:
+            if name.lower() in config_header:
+                section_map[name].append((section_start, section_end))
 
-if not_found:
-    raise RuntimeError(
-        "以下软件包写入后仍未找到：" + ", ".join(not_found)
+    for name, matches in section_map.items():
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"{rel} 中 {name.decode()} 对应的配置段数量为 "
+                f"{len(matches)}，不是 1，停止修改。"
+            )
+
+    for matches in section_map.values():
+        section_start, section_end = matches[0]
+
+        for i in range(section_start, section_end):
+            updated, count = re.subn(
+                rb"^([ \t]*default[ \t]+)y(?=([ \t]|$))",
+                rb"\1n",
+                lines[i],
+                count=1,
+                flags=re.IGNORECASE,
+            )
+
+            if count:
+                lines[i] = updated
+                changed += count
+
+    if changed == 0:
+        print(f"提示：{rel} 指定子功能没有 default y，无需修改。")
+
+    save_if_changed(path, original, b"".join(lines))
+
+    print(
+        f"{rel}：已将 {changed} 个指定子功能的 default y 改为 default n。"
     )
 
-staged[makefile][1] = b"".join(make_lines)
+disable_named_config_defaults(
+    "feeds/luci/applications/luci-app-rclone/Makefile",
+    [b"rclone-webui", b"rclone-ng"],
+)
 
-print("x86 Makefile 软件包检查通过：")
-print(f"  指定软件包总数：{len(packages)}")
-print(f"  本次新增数量：{len(missing)}")
-print(f"  实际新增行数：{added_line_count}")
-print("  续行格式：全部顶格")
-print("  重复追加：已避免")
+def disable_ssr_x86_64_defaults(rel):
+    path, original = load(rel)
+    lines = original.splitlines(keepends=True)
 
+    changed = 0
 
-print("x86 Makefile 软件包检查通过：")
-print(f"  指定软件包总数：{len(packages)}")
-print(f"  本次新增数量：{len(missing)}")
-print("  续行格式：全部顶格")
-print("  重复追加：已避免")
+    for i, line in enumerate(lines):
+        active_line = line.partition(b"#")[0]
 
-# 5. 所有上游源码修改均在检查完成后统一写入。
-for path, (old, new) in staged.items():
-    if old != new:
-        path.write_bytes(new)
-        print(f"已修改：{path.relative_to(root)}")
+        if (
+            re.match(rb"^[ \t]*default[ \t]+y\b", active_line, re.IGNORECASE)
+            and re.search(
+                rb"(?<![A-Za-z0-9_])x86_64(?![A-Za-z0-9_])",
+                active_line,
+                re.IGNORECASE
+            )
+        ):
+            lines[i], count = re.subn(
+                rb"^(\s*default\s+)y\b",
+                rb"\1n",
+                line,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+            changed += count
+
+    if changed == 0:
+        print(f"提示：{rel} 未发现包含 x86_64 的 default y 配置项。")
     else:
-        print(f"无需修改：{path.relative_to(root)}")
-PYCODE
+        print(f"{rel}：已将 {changed} 个 x86_64 条件默认启用项改为 default n。")
 
-echo "========== 4/6 配置完成 =========="
+    save_if_changed(path, original, b"".join(lines))
+
+disable_ssr_x86_64_defaults(
+    "feeds/helloworld/luci-app-ssr-plus/Makefile"
+)
+
+# --------------------------------------------------
+# 七、自动同步 x86 最高可用内核版本
+# --------------------------------------------------
+
+x86_dir = root / "target/linux/x86"
+versions = []
+
+for item in x86_dir.iterdir():
+    match = re.fullmatch(r"config-(\d+(?:\.\d+)+)", item.name)
+
+    if match and item.is_file():
+        version = match.group(1)
+        versions.append(
+            (tuple(int(part) for part in version.split(".")), version)
+        )
+
+if not versions:
+    raise RuntimeError("找不到 target/linux/x86/config-版本文件。")
+
+max_version = max(versions)[1]
+print(f"x86 最高内核配置版本：{max_version}")
+
+path, original = load("target/linux/x86/Makefile")
+lines = original.splitlines(keepends=True)
+
+for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
+    pattern = re.compile(
+        rb"^([ \t]*" + variable + rb"[ \t]*:?=[ \t]*)"
+        rb"([0-9]+(?:\.[0-9]+)+)"
+        rb"([ \t]*(?:\#.*)?)"
+        rb"(\r?\n)?$"
+    )
+
+    matches = [
+        i for i, line in enumerate(lines)
+        if pattern.match(line)
+    ]
+
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"{variable.decode()} 的有效定义数量不是 1，"
+            "停止修改，不擅自添加或重排变量。"
+        )
+
+    i = matches[0]
+    match = pattern.match(lines[i])
+
+    lines[i] = (
+        match.group(1)
+        + max_version.encode()
+        + match.group(3)
+        + (match.group(4) or b"")
+    )
+
+save_if_changed(path, original, b"".join(lines))
+
+# 所有目标文件均检查通过后，统一写入实际文件。
+commit_changes()
+print("自定义配置检查完成。")
+PY
+
+echo "========== 4/7 源码配置完成 =========="
