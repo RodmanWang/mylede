@@ -1,2 +1,0 @@
-proxies:
-  - {name: 3457.24GB @11-21 18:00, server: altroute.link, port: 443, type: vmess, uuid: 8f538376-681c-4f7e-af94-6c682cb750c1, alterId: 4, cipher: auto, tls: true, skip-cert-verify: false, network: ws, ws-opts: {path: /photo, headers: {Host: altroute.link}}, udp: true}

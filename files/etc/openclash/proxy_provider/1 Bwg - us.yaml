@@ -1,2 +1,0 @@
-proxies:
-  - {name: 🇺🇸 Wago-US🫰45.68⌛️3·25, server: bwgl4470zjq2660fa16xezt45r5680i3o53l6kf.goota.top, port: 443, client-fingerprint: chrome, type: vless, uuid: 1e3ce95e-d709-4953-997b-9506ebb552d3, tls: true, tfo: false, xudp: true, servername: bwgl4470zjq2660fa16xezt45r5680i3o53l6kf.goota.top, skip-cert-verify: false, network: ws, ws-opts: {path: /news, headers: {Host: bwgl4470zjq2660fa16xezt45r5680i3o53l6kf.goota.top}}, udp: true}

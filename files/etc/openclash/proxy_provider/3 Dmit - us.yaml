@@ -1,2 +1,0 @@
-proxies:
-  - {name: 🇺🇸 Dmit-US🫰49⌛️10·9, server: dmitxiogkydg00fgyniqj6atx73qyafzrwe8ca3.goota.top, port: 443, client-fingerprint: chrome, type: vless, uuid: e9b07fd5-fe13-411a-8add-8689cabb08c3, tls: true, tfo: false, xudp: true, servername: dmitxiogkydg00fgyniqj6atx73qyafzrwe8ca3.goota.top, skip-cert-verify: false, network: ws, ws-opts: {path: /news, headers: {Host: dmitxiogkydg00fgyniqj6atx73qyafzrwe8ca3.goota.top}}, udp: true}

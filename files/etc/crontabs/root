@@ -1,2 +1,0 @@
-15 0 10 * * service uhttpd restart
-55 4 * * * /bin/sh /etc/smartdns/update-list.sh

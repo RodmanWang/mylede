@@ -1,2 +1,0 @@
-proxies:
-  - {name: 🇺🇸 Kadath - US, server: kadath.route76.net, port: 5025, type: vmess, uuid: 8f538376-681c-4f7e-af94-6c682cb750c1, alterId: 4, cipher: auto, tls: true, skip-cert-verify: false, network: h2, h2-opts: {path: /cache, host: [kadath.route76.net]}, udp: true}
