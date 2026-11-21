@@ -32,6 +32,7 @@ config smartdns
 	option speed_check_mode 'tcp-syn:443,tcp-syn:80,ping'
 	option response_mode 'first-ping'
 	option proxy_server 'socks5://wangwei:h**7%V5*dS4^@192.168.23.1:7893'
+	option server_flags '-group domestic'
 	option old_port '6053'
 	option old_enabled '1'
 	option old_auto_set_dnsmasq '1'
@@ -89,8 +90,8 @@ config server
 	option enabled '1'
 	option name 'NovaXNS'
 	option server_group 'domestic'
-	option type 'h3'
-	option ip 'https://hk.raito.xns.one/nBI5A-WiGkk/dns-query'
+	option type 'https'
+	option ip 'https://hk.pro.xns.one/nBI5A-WiGkk/dns-query'
 	option addition_arg '-whitelist-ip'
 
 config server
@@ -121,7 +122,7 @@ config server
 	option enabled '1'
 	option name 'adguard-dns'
 	option type 'quic'
-	option server_group 'domestic'
+	option server_group 'abroad'
 	option addition_arg '-whitelist-ip'
 	option ip 'quic://e13232fd.d.adguard-dns.com'
 
@@ -130,8 +131,46 @@ config server
 	option name 'adguard-dns'
 	option ip 'quic://8be34997.d.adguard-dns.com'
 	option type 'quic'
-	option server_group 'domestic'
+	option server_group 'abroad'
 	option addition_arg '-whitelist-ip'
+
+config server
+	option name 'IIJ DNS'
+	option type 'https'
+	option server_group 'abroad'
+	option ip 'https://public.dns.iij.jp/dns-query'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option exclude_default_group '1'
+	option use_proxy '1'
+
+config server
+	option name 'TW Quad 101'
+	option server_group 'abroad'
+	option enabled '1'
+	option ip 'https://dns.twnic.tw/dns-query'
+	option type 'https'
+	option addition_arg '-blacklist-ip'
+	option exclude_default_group '1'
+	option use_proxy '1'
+
+config server
+	option name 'NovaXNS CloudNexus'
+	option type 'https'
+	option server_group 'abroad'
+	option ip 'https://n.xns.one/nBI5A-WiGkk/dns-query'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option exclude_default_group '1'
+
+config server
+	option name 'NovaXNS vxCDN'
+	option type 'https'
+	option server_group 'abroad'
+	option ip 'https://v.xns.one/nBI5A-WiGkk/dns-query'
+	option enabled '1'
+	option addition_arg '-blacklist-ip'
+	option exclude_default_group '1'
 
 config server
 	option name 'Google'
@@ -196,14 +235,14 @@ config server
 config server
 	option enabled '1'
 	option name 'DmitVPS-DNS'
-	option ip '10.77.77.1'
+	option ip '192.168.200.1'
 	option type 'udp'
 	option server_group 'abroad'
 
 config server
 	option enabled '1'
 	option name 'BWGVPS-DNS'
-	option ip '10.88.88.1'
+	option ip '192.168.201.1'
 	option type 'udp'
 	option server_group 'abroad'
 
