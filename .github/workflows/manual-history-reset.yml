@@ -15,9 +15,22 @@ on:
         description: '只有选择 yes 时，才输入：DELETE ALL COMMITS'
         required: false
         type: string
+      archive_closed_prs:
+        description: "是否同时归档所有已关闭/已合并的历史 PR（普通访客将看到 404）？"
+        required: true
+        type: choice
+        options:
+          - "no"
+          - "yes"
+        default: "no"
+      archive_confirmation:
+        description: '只有选择 yes 时，才输入：ARCHIVE CLOSED PULL REQUESTS'
+        required: false
+        type: string
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: manual-history-reset-main
@@ -37,6 +50,8 @@ jobs:
         shell: bash
         env:
           CONFIRMATION_TEXT: ${{ inputs.confirmation_text }}
+          ARCHIVE_CLOSED_PRS: ${{ inputs.archive_closed_prs }}
+          ARCHIVE_CONFIRMATION: ${{ inputs.archive_confirmation }}
         run: |
           set -euo pipefail
           if [[ "$CONFIRMATION_TEXT" != "DELETE ALL COMMITS" ]]; then
@@ -47,6 +62,79 @@ jobs:
             echo "::error::请从 main 分支手动运行此 workflow。"
             exit 1
           fi
+          if [[ "$ARCHIVE_CLOSED_PRS" == "yes" && "$ARCHIVE_CONFIRMATION" != "ARCHIVE CLOSED PULL REQUESTS" ]]; then
+            echo "::error::PR 归档二次确认不匹配。必须准确输入 ARCHIVE CLOSED PULL REQUESTS。"
+            exit 1
+          fi
+
+      - name: Archive closed historical pull requests
+        if: ${{ inputs.confirm_reset == 'yes' && inputs.archive_closed_prs == 'yes' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Refuse to archive anything if main has moved since this run was dispatched.
+          current_main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "$current_main_sha" != "$EXPECTED_MAIN_SHA" ]]; then
+            echo "::error::main 分支在启动后已发生变化。为避免归档错误的 PR，已中止。"
+            exit 1
+          fi
+
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          query='query($owner: String!, $name: String!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequests(first: 100, after: $cursor, states: [CLOSED]) { nodes { id number title isArchived } pageInfo { hasNextPage endCursor } } } }'
+          mutation='mutation($pullRequestId: ID!) { archivePullRequest(input: {pullRequestId: $pullRequestId}) { pullRequest { number state isArchived } } }'
+          cursor=""
+          candidates="$RUNNER_TEMP/closed-prs-to-archive.jsonl"
+          : > "$candidates"
+
+          # Collect every closed PR first; open PRs are deliberately excluded.
+          while true; do
+            args=(-f "query=$query" -f "owner=$owner" -f "name=$repo")
+            if [[ -n "$cursor" ]]; then args+=(-f "cursor=$cursor"); fi
+            page="$(gh api graphql "${args[@]}")"
+            jq -c '.data.repository.pullRequests.nodes[] | select(.isArchived == false)' <<< "$page" >> "$candidates"
+            has_next="$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' <<< "$page")"
+            cursor="$(jq -r '.data.repository.pullRequests.pageInfo.endCursor // empty' <<< "$page")"
+            [[ "$has_next" == "true" ]] || break
+            [[ -n "$cursor" ]] || { echo "::error::GraphQL 分页游标缺失。"; exit 1; }
+          done
+
+          count="$(wc -l < "$candidates" | tr -d ' ')"
+          echo "发现 $count 个尚未归档的已关闭/已合并 PR；Open PR 不会被处理。"
+          {
+            echo "## PR 归档清单"
+            echo ""
+            if [[ "$count" == "0" ]]; then
+              echo "没有需要归档的历史 PR。"
+            else
+              while IFS= read -r pr; do
+                number="$(jq -r '.number' <<< "$pr")"
+                title="$(jq -r '.title' <<< "$pr")"
+                echo "- #$number — $title"
+              done < "$candidates"
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          while IFS= read -r pr; do
+            [[ -n "$pr" ]] || continue
+            pr_id="$(jq -r '.id' <<< "$pr")"
+            number="$(jq -r '.number' <<< "$pr")"
+            title="$(jq -r '.title' <<< "$pr")"
+            result="$(gh api graphql -f query="$mutation" -f pullRequestId="$pr_id")"
+            archived="$(jq -r '.data.archivePullRequest.pullRequest.isArchived // false' <<< "$result")"
+            if [[ "$archived" != "true" ]]; then
+              echo "::error::PR #$number 归档后验证失败：$title"
+              exit 1
+            fi
+            echo "已归档 PR #$number：$title"
+          done < "$candidates"
+
+          echo "已完成历史 PR 归档；这些 PR 对无仓库访问权限的访客将返回 404。"
 
       - name: Checkout the exact dispatched main revision
         if: ${{ inputs.confirm_reset == 'yes' }}
