@@ -1,5 +1,0 @@
-#!/bin/sh
-
-chmod 0755 /etc/smartdns/update-list.sh
-
-exit 0
