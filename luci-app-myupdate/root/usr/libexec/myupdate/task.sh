@@ -75,13 +75,13 @@ if [ "$ACTION" = check ]; then
 fi
 [ "$UPDATE" = true ] || { write_status current '当前已经是最新版本，不需要重复刷写' false false false; exit 1; }
 if [ "$ACTION" = download ]; then
-	write_status downloading "正在下载 $ASSET" true false true
+	write_status downloading "正在下载 $ASSET" true false false
 	# Avoid filling tmpfs; sysupgrade needs working space while validating and flashing.
 	FREE_KB="$(df -Pk /tmp | awk 'NR==2 {print $4}')"
 	NEED_KB=$(( (SIZE + 1023) / 1024 + 32768 ))
-	[ "$FREE_KB" -ge "$NEED_KB" ] || { write_status error ' /tmp 可用空间不足，无法安全下载和升级' true false true; exit 1; }
-	/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$ASSET_ID" "$R/firmware.bin" || { write_status error '固件下载失败' true false true; exit 1; }
-	/usr/libexec/myupdate/verify-image.sh "$R/firmware.bin" "$HASH" "$SIZE" >/dev/null || { rm -f "$R/firmware.bin"; write_status error '固件大小或 SHA256 校验失败' true false true; exit 1; }
+	[ "$FREE_KB" -ge "$NEED_KB" ] || { write_status error ' /tmp 可用空间不足，无法安全下载和升级' true false false; exit 1; }
+	/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$ASSET_ID" "$R/firmware.bin" || { write_status error '固件下载失败' true false false; exit 1; }
+	/usr/libexec/myupdate/verify-image.sh "$R/firmware.bin" "$HASH" "$SIZE" >/dev/null || { rm -f "$R/firmware.bin"; write_status error '固件大小或 SHA256 校验失败' true false false; exit 1; }
 	printf '%s\n' "$ASSET" > "$R/image-name"; printf '%s\n' "$VERSION" > "$R/image-version"
 	chmod 600 "$R/image-name" "$R/image-version"
 fi
