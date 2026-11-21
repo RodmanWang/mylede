@@ -98,6 +98,10 @@ if ! sysupgrade -T "$R/firmware.bin"; then
 	write_status error 'LEDE sysupgrade 镜像预检查失败，已取消刷写' true true true
 	exit 1
 fi
-write_status upgrading '预检查通过，正在执行保留系统配置的升级；设备将自动重启' true true true
+if ! /usr/libexec/myupdate/prepare-sysupgrade-backup.sh; then
+	write_status error '自定义文件保留路径准备失败，已取消刷写' true true true
+	exit 1
+fi
+write_status upgrading '预检查通过，正在执行保留系统配置及自定义文件的升级；设备将自动重启' true true true
 sync
 exec sysupgrade -v "$R/firmware.bin"
