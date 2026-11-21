@@ -103,7 +103,7 @@ for index in range(1, len(lines)):
         break
 else:
     raise SystemExit("signature payload line not found")
-path.write_text("\\n".join(lines) + "\\n", encoding="ascii")
+path.write_text("\n".join(lines) + "\n", encoding="ascii")
 PY
 if sh "$VERIFY" "$ROOT/manifest.json" "$ROOT/tampered.minisig" "v2026.11.22.123.1" stable; then
   echo "Tampered Minisign signature was unexpectedly accepted." >&2
