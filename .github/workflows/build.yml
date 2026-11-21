@@ -1424,7 +1424,7 @@ jobs:
 
           stable = [
               r for r in releases
-              if not r.get("isPrerelease") and r.get("tagName") not in {"toolchain-cache", "untagged-732bf63da12821a81ede"}
+              if not r.get("isPrerelease") and r.get("tagName") != "toolchain-cache"
           ]
           stable.sort(key=lambda r: r.get("publishedAt") or "", reverse=True)
 
