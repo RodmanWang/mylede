@@ -13,7 +13,7 @@ PKG_NAME:=luci-app-smartdns
 PKG_VERSION:=$(shell TZ=Asia/Shanghai date +%y.%m.%d)
 
 # 获取 pymumu/luci-app-smartdns master 最新 Commit
-PKG_SOURCE_VERSION:=$(shell if [ -n "$(MYLEDE_SOURCE_LOCK)" ] && [ -s "$(MYLEDE_SOURCE_LOCK)" ]; then awk -F '\\t' '$1=="luci-app-smartdns" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)"; else git ls-remote https://github.com/pymumu/luci-app-smartdns.git HEAD | awk '{print $1}'; fi)
+PKG_SOURCE_VERSION:=$(shell if [ -n "$(MYLEDE_SOURCE_LOCK)" ] && [ -s "$(MYLEDE_SOURCE_LOCK)" ]; then awk -F '\t' '$1=="luci-app-smartdns" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)"; else git ls-remote https://github.com/pymumu/luci-app-smartdns.git HEAD | awk '{print $1}'; fi)
 
 # Commit 前 7 位
 PKG_SOURCE_VERSION_SHORT:=$(shell \
