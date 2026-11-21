@@ -38,6 +38,16 @@ on:
         type: boolean
         required: false
         default: false
+      保留天数:
+        description: "保留天数（同时应用于 GitHub Release 和 Actions 运行记录）"
+        required: true
+        default: 7
+        type: number
+      保留数量:
+        description: "保留数量（同时应用于 GitHub Release 和 Actions 运行记录）"
+        required: true
+        default: 30
+        type: number
   schedule:
     # Daily at 03:00 China Standard Time (19:00 UTC on the previous day).
     - cron: '0 19 * * *'
@@ -45,6 +55,11 @@ on:
 permissions:
   contents: read
   actions: write
+
+# 定时任务使用的默认保留规则；手动运行后会同步更新这里和输入框默认值。
+env:
+  DEFAULT_KEEP_DAYS: "7"
+  DEFAULT_KEEP_COUNT: "30"
 
 concurrency:
   group: mylede-x86_64-staged-build
@@ -60,6 +75,10 @@ jobs:
       actions: read
     outputs:
       lede_commit: ${{ steps.detect.outputs.lede_commit }}
+      smartdns_commit: ${{ steps.detect.outputs.smartdns_commit }}
+      smartdns_webui_commit: ${{ steps.detect.outputs.smartdns_webui_commit }}
+      luci_app_smartdns_commit: ${{ steps.detect.outputs.luci_app_smartdns_commit }}
+      openclash_commit: ${{ steps.detect.outputs.openclash_commit }}
       fingerprint: ${{ steps.detect.outputs.fingerprint }}
       skip_build: ${{ steps.decision.outputs.skip_build }}
     steps:
@@ -181,6 +200,35 @@ jobs:
           echo "Pinned LEDE: $LEDE_COMMIT"
           echo "Source fingerprint: $FINGERPRINT"
           echo "lede_commit=$LEDE_COMMIT" >> "$GITHUB_OUTPUT"
+
+          # Record the exact upstream revisions resolved during this run's preflight.
+          get_revision() {
+            local wanted_url="$1"
+            awk -F '\t' -v url="$wanted_url" '$2 == url {print $4; exit}' \
+              "$RUNNER_TEMP/source-revisions.tsv"
+          }
+          SMARTDNS_COMMIT="$(get_revision 'https://github.com/pymumu/smartdns.git')"
+          SMARTDNS_WEBUI_COMMIT="$(get_revision 'https://github.com/pymumu/smartdns-webui.git')"
+          LUCI_APP_SMARTDNS_COMMIT="$(get_revision 'https://github.com/pymumu/luci-app-smartdns.git')"
+          OPENCLASH_COMMIT="$(get_revision 'https://github.com/vernesong/OpenClash.git')"
+
+          for entry in \
+            "smartdns:$SMARTDNS_COMMIT" \
+            "smartdns-webui:$SMARTDNS_WEBUI_COMMIT" \
+            "luci-app-smartdns:$LUCI_APP_SMARTDNS_COMMIT" \
+            "OpenClash:$OPENCLASH_COMMIT"; do
+            name="${entry%%:*}"
+            sha="${entry#*:}"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Cannot resolve a full 40-character commit for $name."
+              exit 1
+            fi
+          done
+
+          echo "smartdns_commit=$SMARTDNS_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "smartdns_webui_commit=$SMARTDNS_WEBUI_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "luci_app_smartdns_commit=$LUCI_APP_SMARTDNS_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "openclash_commit=$OPENCLASH_COMMIT" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
       - name: Prepare successful-build cache directory
@@ -561,8 +609,11 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          VERSION="$(date -u +%Y).$(date -u +%m).${GITHUB_RUN_NUMBER}"
-          TAG="v${VERSION}-r${GITHUB_RUN_ATTEMPT}"
+          # Use the actual build date in China Standard Time (UTC+8).
+          # Keep the workflow run number in the tag so multiple builds on the
+          # same day still get unique Git tags.
+          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d')"
+          TAG="v${VERSION}-run${GITHUB_RUN_NUMBER}-r${GITHUB_RUN_ATTEMPT}"
           mkdir -p /home/ubuntu/files/etc/myupdate
           printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
           chmod 0644 /home/ubuntu/files/etc/myupdate/build-version
@@ -809,6 +860,10 @@ jobs:
           BUILD_TAG: ${{ steps.build_version.outputs.tag }}
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+          SMARTDNS_COMMIT: ${{ needs.source_check.outputs.smartdns_commit }}
+          SMARTDNS_WEBUI_COMMIT: ${{ needs.source_check.outputs.smartdns_webui_commit }}
+          LUCI_APP_SMARTDNS_COMMIT: ${{ needs.source_check.outputs.luci_app_smartdns_commit }}
+          OPENCLASH_COMMIT: ${{ needs.source_check.outputs.openclash_commit }}
           BUILD_TARGET: x86_64
         run: |
           set -Eeuo pipefail
@@ -830,6 +885,15 @@ jobs:
           python3 - "$RELEASE_INPUT/build-meta.json" "$BUILD_VERSION" "$BUILD_TAG" "$SOURCE_FINGERPRINT" "$LEDE_COMMIT" "$GITHUB_SHA" <<'PY'
           import json, os, sys
           output, version, tag, fingerprint, lede_commit, mylede_commit = sys.argv[1:]
+          sources = {
+              'smartdns': os.environ['SMARTDNS_COMMIT'],
+              'smartdns_webui': os.environ['SMARTDNS_WEBUI_COMMIT'],
+              'luci_app_smartdns': os.environ['LUCI_APP_SMARTDNS_COMMIT'],
+              'openclash': os.environ['OPENCLASH_COMMIT'],
+          }
+          for name, commit in sources.items():
+              if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
+                  raise SystemExit(f'Invalid full commit SHA for {name}: {commit!r}')
           with open(output, 'w', encoding='utf-8') as f:
               json.dump({
                   'version': version,
@@ -837,6 +901,7 @@ jobs:
                   'source_fingerprint': fingerprint,
                   'lede_commit': lede_commit,
                   'mylede_commit': mylede_commit,
+                  'sources': sources,
                   'build_target': os.environ.get('BUILD_TARGET', 'x86_64'),
                   # This workflow builds only the LEDE x86/64 target.
                   # Keep release compatibility metadata explicit instead of
@@ -958,6 +1023,13 @@ jobs:
       contents: write
       actions: write
     steps:
+      - name: Checkout repository for retention defaults
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
       - name: Download firmware release input
         uses: actions/download-artifact@v7
         with:
@@ -1036,6 +1108,33 @@ jobs:
               'version': meta['version'],
               'tag': meta['tag'],
               'channel': 'stable',
+              'sources': {
+                  'coolsnowwolf/lede': {
+                      'ref': 'master',
+                      'commit': meta['lede_commit'],
+                      'short_commit': meta['lede_commit'][:7]
+                  },
+                  'pymumu/smartdns': {
+                      'ref': 'HEAD',
+                      'commit': meta['sources']['smartdns'],
+                      'short_commit': meta['sources']['smartdns'][:7]
+                  },
+                  'pymumu/smartdns-webui': {
+                      'ref': 'HEAD',
+                      'commit': meta['sources']['smartdns_webui'],
+                      'short_commit': meta['sources']['smartdns_webui'][:7]
+                  },
+                  'pymumu/luci-app-smartdns': {
+                      'ref': 'HEAD',
+                      'commit': meta['sources']['luci_app_smartdns'],
+                      'short_commit': meta['sources']['luci_app_smartdns'][:7]
+                  },
+                  'vernesong/OpenClash': {
+                      'ref': 'dev',
+                      'commit': meta['sources']['openclash'],
+                      'short_commit': meta['sources']['openclash'][:7]
+                  }
+              },
               'compatibility': {
                   'target': target,
                   'subtarget': subtarget,
@@ -1089,6 +1188,13 @@ jobs:
           set -Eeuo pipefail
           IMAGE="$(find release-input -maxdepth 1 -type f -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print -quit)"
           [[ -n "$IMAGE" ]] || { echo '::error::Firmware image missing from release input.'; exit 1; }
+          META="$(cat release-input/build-meta.json)"
+          LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
+          SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
+          SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
+          LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
+          OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
+
           cat > release-input/release-notes.md <<EOF
           Automated MyLEDE x86-64 firmware build.
 
@@ -1096,6 +1202,14 @@ jobs:
           - Firmware: $(basename "$IMAGE")
           - Manifest: manifest.json
           - Signature: manifest.minisig
+
+          ### Source commits used for this build
+
+          - LEDE (master): [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash (dev): [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
           EOF
           gh release create "$RELEASE_TAG" \
             "$IMAGE" \
@@ -1123,52 +1237,190 @@ jobs:
           path: ${{ runner.temp }}/lede-build-state
           key: lede-success-${{ needs.source_check.outputs.fingerprint }}-${{ github.sha }}
 
+      # 手动运行时，将本次输入保存为下一次手动/定时运行的默认值。
+      - name: Save retention defaults
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          NEW_KEEP_DAYS: ${{ inputs['保留天数'] }}
+          NEW_KEEP_COUNT: ${{ inputs['保留数量'] }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORKFLOW_FILE=".github/workflows/build.yml"
+
+          python3 - "$WORKFLOW_FILE" "$NEW_KEEP_DAYS" "$NEW_KEEP_COUNT" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          keep_days, keep_count = sys.argv[2], sys.argv[3]
+          content = path.read_text(encoding="utf-8")
+
+          if not re.fullmatch(r"[1-9][0-9]*", keep_days):
+              raise SystemExit("保留天数必须是大于零的整数。")
+          if not re.fullmatch(r"[1-9][0-9]*", keep_count):
+              raise SystemExit("保留数量必须是大于零的整数。")
+
+          for key, value in (("保留天数", keep_days), ("保留数量", keep_count)):
+              pattern = (
+                  r"(?m)^("
+                  + re.escape("      " + key + ":")
+                  + r"\n(?:[ \t]+[^\n]*\n)*?[ \t]+default:\s*)[0-9]+"
+              )
+              content, n = re.subn(pattern, lambda m: m.group(1) + value, content)
+              if n != 1:
+                  raise SystemExit(f"无法更新输入默认值：{key}")
+
+          for key, value in (
+              ("DEFAULT_KEEP_DAYS", keep_days),
+              ("DEFAULT_KEEP_COUNT", keep_count),
+          ):
+              pattern = r'(?m)^([ \t]*' + re.escape(key) + r':\s*)"[0-9]+"'
+              content, n = re.subn(pattern, lambda m: m.group(1) + '"' + value + '"', content)
+              if n != 1:
+                  raise SystemExit(f"无法更新定时任务默认值：{key}")
+
+          path.write_text(content, encoding="utf-8")
+          print(f"默认保留规则已更新：{keep_days} 天 / {keep_count} 条")
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$WORKFLOW_FILE"
+          if git diff --cached --quiet; then
+            echo "保留规则未变化，无须提交。"
+          else
+            git commit -m "维护：更新固件保留规则 [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo "新的保留规则默认值已保存。"
+          fi
+
       - name: Delete old firmware releases and workflow runs
         if: always()
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_KEEP_DAYS: ${{ inputs['保留天数'] }}
+          INPUT_KEEP_COUNT: ${{ inputs['保留数量'] }}
+          DEFAULT_KEEP_DAYS: ${{ env.DEFAULT_KEEP_DAYS }}
+          DEFAULT_KEEP_COUNT: ${{ env.DEFAULT_KEEP_COUNT }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
           set -Eeuo pipefail
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            KEEP_DAYS="${INPUT_KEEP_DAYS:-$DEFAULT_KEEP_DAYS}"
+            KEEP_COUNT="${INPUT_KEEP_COUNT:-$DEFAULT_KEEP_COUNT}"
+          else
+            KEEP_DAYS="$DEFAULT_KEEP_DAYS"
+            KEEP_COUNT="$DEFAULT_KEEP_COUNT"
+          fi
+
+          if ! [[ "$KEEP_DAYS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::保留天数必须是大于零的整数。"
+            exit 1
+          fi
+          if ! [[ "$KEEP_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::保留数量必须是大于零的整数。"
+            exit 1
+          fi
+
+          CUTOFF="$(date -u -d "$KEEP_DAYS days ago" +%s)"
+          echo "保留天数：$KEEP_DAYS 天"
+          echo "保留数量：$KEEP_COUNT 条"
+
+          # GitHub Releases：按发布时间从新到旧排序，同时应用天数和数量。
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 \
             --json tagName,publishedAt,isPrerelease > "$RUNNER_TEMP/releases.json"
-          python3 - "$RUNNER_TEMP/releases.json" <<'PY' > "$RUNNER_TEMP/old-release-tags.txt"
-          import datetime, json, sys
-          now = datetime.datetime.now(datetime.timezone.utc)
-          releases = json.load(open(sys.argv[1], encoding='utf-8'))
-          stable = [r for r in releases if not r.get('isPrerelease') and r.get('tagName') != 'toolchain-cache']
-          stable.sort(key=lambda r: r.get('publishedAt') or '', reverse=True)
-          keep = stable[0]['tagName'] if stable else None
+
+          python3 - "$RUNNER_TEMP/releases.json" "$CUTOFF" "$KEEP_COUNT" <<'PY' > "$RUNNER_TEMP/old-release-tags.txt"
+          import datetime
+          import json
+          import sys
+
+          path, cutoff, keep_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+          with open(path, encoding="utf-8") as f:
+              releases = json.load(f)
+
+          stable = [
+              r for r in releases
+              if not r.get("isPrerelease") and r.get("tagName") != "toolchain-cache"
+          ]
+          stable.sort(key=lambda r: r.get("publishedAt") or "", reverse=True)
+
+          kept = 0
           for item in stable:
-              tag = item.get('tagName')
-              published = item.get('publishedAt')
-              if not tag or tag == keep or not published:
+              tag = item.get("tagName")
+              published = item.get("publishedAt")
+              if not tag or not published:
                   continue
-              dt = datetime.datetime.fromisoformat(published.replace('Z', '+00:00'))
-              if now - dt > datetime.timedelta(days=7):
+
+              # 至少保留最新的一个正式 Release；其余同时满足天数和数量才保留。
+              dt = datetime.datetime.fromisoformat(published.replace("Z", "+00:00"))
+              age_seconds = datetime.datetime.now(datetime.timezone.utc).timestamp() - dt.timestamp()
+              if kept == 0 or (dt.timestamp() >= cutoff and kept < keep_count):
+                  kept += 1
+              else:
                   print(tag)
           PY
+
+          RELEASE_DELETED=0
           while IFS= read -r tag; do
             [[ -n "$tag" ]] || continue
+            echo "删除旧 Release：$tag"
             gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+            RELEASE_DELETED=$((RELEASE_DELETED + 1))
           done < "$RUNNER_TEMP/old-release-tags.txt"
 
-          gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --limit 100 \
-            --json databaseId,createdAt > "$RUNNER_TEMP/workflow-runs.json"
-          python3 - "$RUNNER_TEMP/workflow-runs.json" <<'PY' > "$RUNNER_TEMP/old-run-ids.txt"
-          import datetime, json, sys
-          now = datetime.datetime.now(datetime.timezone.utc)
-          runs = json.load(open(sys.argv[1], encoding='utf-8'))
-          for run in runs:
-              created = run.get('createdAt')
-              if not created:
+          # Actions 运行记录：保留当前运行，并对其他已完成运行应用天数和数量。
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --limit 1000 \
+            --json databaseId,createdAt,status > "$RUNNER_TEMP/workflow-runs.json"
+
+          python3 - "$RUNNER_TEMP/workflow-runs.json" "$CUTOFF" "$KEEP_COUNT" "$CURRENT_RUN_ID" <<'PY' > "$RUNNER_TEMP/old-run-ids.txt"
+          import datetime
+          import json
+          import sys
+
+          path, cutoff, keep_count, current_id = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+          with open(path, encoding="utf-8") as f:
+              runs = json.load(f)
+
+          completed = [r for r in runs if r.get("status") == "completed"]
+          completed.sort(key=lambda r: r.get("createdAt") or "", reverse=True)
+
+          kept = 0
+          for run in completed:
+              run_id = str(run.get("databaseId", ""))
+              if not run_id or run_id == current_id:
                   continue
-              dt = datetime.datetime.fromisoformat(created.replace('Z', '+00:00'))
-              if now - dt > datetime.timedelta(days=7):
-                  print(run['databaseId'])
+              created = run.get("createdAt")
+              if not created:
+                  print(run_id)
+                  continue
+              dt = datetime.datetime.fromisoformat(created.replace("Z", "+00:00"))
+              age = dt.timestamp()
+              if age >= cutoff and kept < keep_count:
+                  kept += 1
+              else:
+                  print(run_id)
           PY
+
+          RUN_DELETED=0
           while IFS= read -r run_id; do
             [[ -n "$run_id" ]] || continue
+            echo "删除 Actions 运行记录：$run_id"
             gh run delete "$run_id" --repo "$GITHUB_REPOSITORY" || true
+            RUN_DELETED=$((RUN_DELETED + 1))
           done < "$RUNNER_TEMP/old-run-ids.txt"
+
+          {
+            echo "## 历史清理结果"
+            echo ""
+            echo "- 保留天数：$KEEP_DAYS 天"
+            echo "- 保留数量：$KEEP_COUNT 条"
+            echo "- 删除 Release：$RELEASE_DELETED 个"
+            echo "- 删除 Actions 运行记录：$RUN_DELETED 条"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
