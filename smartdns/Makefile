@@ -11,7 +11,7 @@ export TZ:=Asia/Shanghai
 PKG_NAME:=smartdns
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/pymumu/smartdns.git
-PKG_SOURCE_VERSION:=$(shell if [ -n "$(MYLEDE_SOURCE_LOCK)" ] && [ -s "$(MYLEDE_SOURCE_LOCK)" ]; then awk -F '\\t' '$1=="smartdns" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)"; else git ls-remote https://github.com/pymumu/smartdns.git HEAD | awk '{print $1}'; fi)
+PKG_SOURCE_VERSION:=$(shell if [ -n "$(MYLEDE_SOURCE_LOCK)" ] && [ -s "$(MYLEDE_SOURCE_LOCK)" ]; then awk -F '\t' '$1=="smartdns" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)"; else git ls-remote https://github.com/pymumu/smartdns.git HEAD | awk '{print $1}'; fi)
 PKG_VERSION:=$(shell TZ=Asia/Shanghai date +%y.%m.%d)-$(shell echo $(PKG_SOURCE_VERSION) | cut -c1-8)
 PKG_RELEASE:=3
 PKG_MIRROR_HASH:=skip
@@ -19,7 +19,7 @@ PKG_MIRROR_HASH:=skip
 SMARTDNS_WEBUI_VERSION:=$(shell TZ=Asia/Shanghai date +%y.%m.%d)
 SMARTDNS_WEBUI_SOURCE_PROTO:=git
 SMARTDNS_WEBUI_SOURCE_URL:=https://github.com/pymumu/smartdns-webui.git
-SMARTDNS_WEBUI_SOURCE_VERSION:=$(shell if [ -n "$(MYLEDE_SOURCE_LOCK)" ] && [ -s "$(MYLEDE_SOURCE_LOCK)" ]; then awk -F '\\t' '$1=="smartdns-webui" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)"; else git ls-remote https://github.com/pymumu/smartdns-webui.git HEAD | awk '{print $1}'; fi)
+SMARTDNS_WEBUI_SOURCE_VERSION:=$(shell if [ -n "$(MYLEDE_SOURCE_LOCK)" ] && [ -s "$(MYLEDE_SOURCE_LOCK)" ]; then awk -F '\t' '$1=="smartdns-webui" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)"; else git ls-remote https://github.com/pymumu/smartdns-webui.git HEAD | awk '{print $1}'; fi)
 SMARTDNS_WEBUI_FILE:=smartdns-webui-$(SMARTDNS_WEBUI_VERSION)-$(shell echo $(SMARTDNS_WEBUI_SOURCE_VERSION) | cut -c1-8).tar.gz
 
 PKG_MAINTAINER:=Nick Peng <pymumu@gmail.com>
