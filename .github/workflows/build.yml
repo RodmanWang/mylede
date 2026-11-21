@@ -199,6 +199,14 @@ jobs:
 
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
+      - name: Upload immutable source revision lock
+        uses: actions/upload-artifact@v7
+        with:
+          name: mylede-source-revisions
+          path: ${{ runner.temp }}/source-revisions.tsv
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Prepare successful-build cache directory
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/lede-build-state"
@@ -271,6 +279,17 @@ jobs:
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
+
+      - name: Download and install immutable source revision lock
+        uses: actions/download-artifact@v7
+        with:
+          name: mylede-source-revisions
+          path: ${{ runner.temp }}/source-lock
+      - name: Install source revision lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
 
       - name: Calculate stable toolchain cache namespace
         id: toolchain_key
@@ -560,6 +579,17 @@ jobs:
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
+
+      - name: Download and install immutable source revision lock
+        uses: actions/download-artifact@v7
+        with:
+          name: mylede-source-revisions
+          path: ${{ runner.temp }}/source-lock
+      - name: Install source revision lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
 
       - name: Restore LEDE download cache from toolchain stage
         id: firmware_dl_cache
