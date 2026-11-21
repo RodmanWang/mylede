@@ -4,7 +4,7 @@ import re
 import unittest
 
 
-VERSION_RE = re.compile(r"^\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d+\\.\\d+$")
+VERSION_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}\.\d+\.\d+$")
 
 
 def parse_version(value: str) -> tuple[int, ...]:
