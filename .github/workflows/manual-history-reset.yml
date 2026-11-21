@@ -1,0 +1,91 @@
+name: Manual Git History Reset
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_reset:
+        description: "是否将 main 分支历史重置为仅保留当前文件快照？"
+        required: true
+        type: choice
+        options:
+          - "no"
+          - "yes"
+        default: "no"
+      confirmation_text:
+        description: '只有选择 yes 时，才输入：DELETE ALL COMMITS'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manual-history-reset-main
+  cancel-in-progress: false
+
+jobs:
+  reset-main-history:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain that no changes will be made
+        if: ${{ inputs.confirm_reset != 'yes' }}
+        run: |
+          echo "已选择 no。本次运行不会修改任何分支或提交历史。"
+
+      - name: Validate destructive confirmation
+        if: ${{ inputs.confirm_reset == 'yes' }}
+        shell: bash
+        env:
+          CONFIRMATION_TEXT: ${{ inputs.confirmation_text }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRMATION_TEXT" != "DELETE ALL COMMITS" ]]; then
+            echo "::error::二次确认不匹配。必须准确输入 DELETE ALL COMMITS。"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::请从 main 分支手动运行此 workflow。"
+            exit 1
+          fi
+
+      - name: Checkout the exact dispatched main revision
+        if: ${{ inputs.confirm_reset == 'yes' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Replace main history with one new root commit
+        if: ${{ inputs.confirm_reset == 'yes' }}
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [[ -z "$current_main_sha" || "$current_main_sha" != "$EXPECTED_MAIN_SHA" ]]; then
+            echo "::error::main 分支在启动后已发生变化。为避免覆盖新提交，已中止；请重新检查后再运行。"
+            exit 1
+          fi
+
+          orphan_branch="history-reset-${GITHUB_RUN_ID}"
+          git checkout --orphan "$orphan_branch"
+          git add --all
+
+          if git diff --cached --quiet; then
+            echo "::error::当前工作树没有可提交的文件，已中止。"
+            exit 1
+          fi
+
+          git commit -m "Reset main history to current repository snapshot"
+
+          # Force-with-lease ensures main is still exactly the revision reviewed above.
+          git push --force-with-lease="refs/heads/main:$EXPECTED_MAIN_SHA" origin "HEAD:refs/heads/main"
+
+          echo "main 分支现已替换为一个新的根提交。"
+          echo "::notice::此操作只重写 main；其他分支、标签、PR 引用、fork、缓存及 GitHub 保留的数据不会因此自动清除。"
