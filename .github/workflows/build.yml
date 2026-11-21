@@ -832,6 +832,19 @@ jobs:
           export REAL_GIT SOURCE_COMMIT_CAPTURE
           mkdir -p "$CAPTURE_BIN"
           : > "$SOURCE_COMMIT_CAPTURE"
+          for locked_name in smartdns smartdns-webui luci-app-smartdns; do
+            locked_commit="$(awk -F '\t' -v name="$locked_name" '$1 == name { print $4; exit }' "$MYLEDE_SOURCE_LOCK")"
+            [[ "$locked_commit" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::Missing or invalid pinned SHA for $locked_name."
+              exit 1
+            }
+            case "$locked_name" in
+              smartdns) capture_name=smartdns ;;
+              smartdns-webui) capture_name=smartdns_webui ;;
+              luci-app-smartdns) capture_name=luci_app_smartdns ;;
+            esac
+            printf '%s\t%s\n' "$capture_name" "$locked_commit" >> "$SOURCE_COMMIT_CAPTURE"
+          done
           cat > "$CAPTURE_BIN/git" <<'GIT_WRAPPER'
           #!/usr/bin/env bash
           set -u
