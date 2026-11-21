@@ -27,7 +27,7 @@ printf '%s\n' "$KEEP_PATHS" | while IFS= read -r path; do
 			echo "Refusing unsafe custom sysupgrade path: $path" >&2
 			exit 1
 			;;
-		*'/../'*|*/..|*'/./'*|*/.|*'//' *|*[!A-Za-z0-9_./@+-]*)
+		*'/../'*|*/..|*'/./'*|*/.|*//*|*[!A-Za-z0-9_./@+-]*)
 			echo "Invalid custom sysupgrade path: $path" >&2
 			exit 1
 			;;
