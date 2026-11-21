@@ -83,6 +83,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Run OTA version contract tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
+          sh -n luci-app-myupdate/root/usr/libexec/myupdate/task.sh
+          sh -n luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh
+
       - name: Detect LEDE, feeds and custom package revisions
         id: detect
         env:
@@ -1289,6 +1297,17 @@ jobs:
             -x "$GITHUB_WORKSPACE/release-input/manifest.minisig" \
             -t 'MyLEDE firmware release'
           rm -f "$KEY_FILE"
+
+      - name: Validate signed OTA release payload
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$(find release-input -maxdepth 1 -type f -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print -quit)"
+          [[ -n "$IMAGE" ]] || { echo '::error::OTA test image missing.'; exit 1; }
+          python3 tests/ota/validate_release.py release-input/manifest.json "$IMAGE"
+          minisign -Vm release-input/manifest.json -x release-input/manifest.minisig -P "$MINISIGN_PUBLIC_KEY" -q
+        env:
+          MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
 
       - name: Publish firmware release
         env:
