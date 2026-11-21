@@ -390,6 +390,8 @@ jobs:
       - name: Build tools and toolchain only when both caches miss
         id: toolchain_build
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
+        env:
+          MYLEDE_SOURCE_LOCK: /home/ubuntu/source-revisions.tsv
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -814,6 +816,7 @@ jobs:
           #!/usr/bin/env bash
           set -Eeuo pipefail
           cd /home/ubuntu/lede
+          export MYLEDE_SOURCE_LOCK=/home/ubuntu/source-revisions.tsv
           make defconfig
           # The cached host/toolchain tree may not contain every config-dependent host utility.
           make V=1 -j"$(nproc)" tools/install
@@ -822,7 +825,6 @@ jobs:
           # Never allow workflow inputs or upstream defaults to alter the OTA partition layout.
           export KERNEL_PARTSIZE=256
           export ROOTFS_PARTSIZE=4096
-          export MYLEDE_SOURCE_LOCK=/home/ubuntu/source-revisions.tsv
 
           # Capture the exact commit SHAs returned to the unchanged package Makefiles.
           REAL_GIT="$(command -v git)"
