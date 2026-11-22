@@ -127,43 +127,34 @@ jobs:
             echo '- 保留 toolchain-cache、预发布 Releases、当前清理运行及未完成的 Actions runs。'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  reset-main-history:
+  archive-closed-prs:
+    name: Archive closed historical pull requests
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == 'yes' }}
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      # archivePullRequest requires the token owner to have at least Triage access.
+      # Configure PERSON_TOKEN as a repository Actions secret (fine-grained PAT).
+      GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
+      EXPECTED_MAIN_SHA: ${{ github.sha }}
     steps:
-      - name: Explain that no changes will be made
-        if: ${{ inputs.confirm_reset != 'yes' }}
-        run: |
-          echo "已选择 no。本次运行不会修改任何分支或提交历史。"
-
-      - name: Validate destructive confirmation
-        if: ${{ inputs.confirm_reset == 'yes' }}
+      - name: Validate archive confirmation
         shell: bash
         env:
-          CONFIRMATION_TEXT: ${{ inputs.confirmation_text }}
-          ARCHIVE_CLOSED_PRS: ${{ inputs.archive_closed_prs }}
           ARCHIVE_CONFIRMATION: ${{ inputs.archive_confirmation }}
         run: |
           set -euo pipefail
-          if [[ "$CONFIRMATION_TEXT" != "DELETE ALL BRANCH COMMITS" ]]; then
-            echo "::error::二次确认不匹配。必须准确输入 DELETE ALL BRANCH COMMITS。"
+          if [[ "$ARCHIVE_CONFIRMATION" != "ARCHIVE CLOSED PULL REQUESTS" ]]; then
+            echo "::error::PR 归档二次确认不匹配。必须准确输入 ARCHIVE CLOSED PULL REQUESTS。"
             exit 1
           fi
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::请从 main 分支手动运行此 workflow；定时触发不会执行分支历史重置。"
-            exit 1
-          fi
-          if [[ "$ARCHIVE_CLOSED_PRS" == "yes" && "$ARCHIVE_CONFIRMATION" != "ARCHIVE CLOSED PULL REQUESTS" ]]; then
-            echo "::error::PR 归档二次确认不匹配。必须准确输入 ARCHIVE CLOSED PULL REQUESTS。"
+            echo "::error::请从 main 分支手动运行此 workflow；定时触发不会执行 PR 归档。"
             exit 1
           fi
 
       - name: Archive closed historical pull requests
-        if: ${{ inputs.confirm_reset == 'yes' && inputs.archive_closed_prs == 'yes' }}
-        env:
-          # archivePullRequest requires the token owner to have at least Triage access.
-          # Configure PR_ARCHIVE_TOKEN as a repository Actions secret (fine-grained PAT).
-          GH_TOKEN: ${{ secrets.PR_ARCHIVE_TOKEN }}
-          EXPECTED_MAIN_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -229,6 +220,30 @@ jobs:
           done < "$candidates"
 
           echo "已完成历史 PR 归档；这些 PR 对无仓库访问权限的访客将返回 404。"
+
+  reset-main-history:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain that no changes will be made
+        if: ${{ inputs.confirm_reset != 'yes' }}
+        run: |
+          echo "已选择 no。本次运行不会修改任何分支或提交历史。"
+
+      - name: Validate destructive confirmation
+        if: ${{ inputs.confirm_reset == 'yes' }}
+        shell: bash
+        env:
+          CONFIRMATION_TEXT: ${{ inputs.confirmation_text }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRMATION_TEXT" != "DELETE ALL BRANCH COMMITS" ]]; then
+            echo "::error::二次确认不匹配。必须准确输入 DELETE ALL BRANCH COMMITS。"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::请从 main 分支手动运行此 workflow；定时触发不会执行分支历史重置。"
+            exit 1
+          fi
 
       - name: Checkout the exact dispatched main revision
         if: ${{ inputs.confirm_reset == 'yes' }}
