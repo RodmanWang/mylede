@@ -835,24 +835,35 @@ jobs:
           # 06-clean-build.sh removes old SmartDNS archives before this build.
           # The resulting archive names contain the source commit prefix selected
           # by each unchanged package Makefile.
+          # Match the complete package filename, not a shared prefix:
+          # "smartdns-" also prefixes "smartdns-webui-".
+          # Archives can contain 8+ commit characters; publish the first 7.
           archive_patterns = {
-              "smartdns": ("smartdns-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
-              "smartdns_webui": ("smartdns-webui-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
-              "luci_app_smartdns": ("luci-app-smartdns-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
+              "smartdns": re.compile(r"^smartdns-[^-]+-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$"),
+              "smartdns_webui": re.compile(r"^smartdns-webui-[^-]+-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$"),
+              "luci_app_smartdns": re.compile(r"^luci-app-smartdns-[^-]+-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$"),
           }
 
           outputs = {}
-          for name, (prefix, suffix_pattern) in archive_patterns.items():
+          for name, filename_pattern in archive_patterns.items():
               matches = []
               for path in dl.iterdir():
-                  if not path.is_file() or not path.name.startswith(prefix):
+                  if not path.is_file():
                       continue
-                  match = suffix_pattern.search(path.name)
+                  match = filename_pattern.fullmatch(path.name)
                   if match:
                       matches.append((path, match.group(1)[:7]))
               if len(matches) != 1:
-                  candidates = [p.name for p in dl.iterdir() if p.is_file() and p.name.startswith(prefix)]
-                  raise SystemExit(
+                  package_prefix = {
+                      "smartdns": "smartdns-",
+                      "smartdns_webui": "smartdns-webui-",
+                      "luci_app_smartdns": "luci-app-smartdns-",
+                  }[name]
+                  candidates = [
+                      p.name for p in dl.iterdir()
+                      if p.is_file() and p.name.startswith(package_prefix)
+                  ]
+              raise SystemExit(
                       f"expected exactly one current {name} source archive, found {len(matches)}; "
                       f"matching files={candidates!r}"
                   )
