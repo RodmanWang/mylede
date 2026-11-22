@@ -163,7 +163,6 @@ jobs:
           owner="${GITHUB_REPOSITORY%%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
           query='query($owner: String!, $name: String!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequests(first: 100, after: $cursor, states: [CLOSED]) { nodes { id number title timelineItems(itemTypes: [ARCHIVED_EVENT], first: 1) { nodes { __typename } } } pageInfo { hasNextPage endCursor } } } }'
-          verify_query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { timelineItems(itemTypes: [ARCHIVED_EVENT], first: 1) { nodes { __typename } } } } }'
           mutation='mutation($pullRequestId: ID!) { archivePullRequest(input: {pullRequestId: $pullRequestId}) { pullRequest { number } } }'
           cursor=""
           candidates="$RUNNER_TEMP/closed-prs-to-archive.jsonl"
@@ -198,20 +197,51 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
+          failures="$RUNNER_TEMP/pr-archive-failures.txt"
+          : > "$failures"
+          succeeded=0
+          failed=0
+
           while IFS= read -r pr; do
             [[ -n "$pr" ]] || continue
             pr_id="$(jq -r '.id' <<< "$pr")"
             number="$(jq -r '.number' <<< "$pr")"
             title="$(jq -r '.title' <<< "$pr")"
-            gh api graphql -f query="$mutation" -f pullRequestId="$pr_id" >/dev/null
-            verification="$(gh api graphql -f query="$verify_query" -f owner="$owner" -f name="$repo" -F number="$number")"
-            archived="$(jq -r '(.data.repository.pullRequest.timelineItems.nodes | length) > 0' <<< "$verification")"
-            if [[ "$archived" != "true" ]]; then
-              echo "::error::PR #$number 归档后验证失败：$title"
-              exit 1
+
+            # The archive mutation's returned PullRequest is the authoritative
+            # acknowledgement. Do not infer success from an ARCHIVED_EVENT
+            # timeline read, which can lag or be unavailable after archiving.
+            if mutation_result="$(gh api graphql -f query="$mutation" -f pullRequestId="$pr_id")"; then
+              returned_number="$(jq -r '.data.archivePullRequest.pullRequest.number // empty' <<< "$mutation_result")"
+              if [[ "$returned_number" == "$number" ]]; then
+                echo "已归档 PR #$number：$title"
+                succeeded=$((succeeded + 1))
+              else
+                echo "::error::PR #$number 的归档 mutation 未返回预期 PR 编号：$title"
+                printf 'PR #%s — %s（mutation 返回异常）\n' "$number" "$title" >> "$failures"
+                failed=$((failed + 1))
+              fi
+            else
+              echo "::error::PR #$number 归档请求失败：$title"
+              printf 'PR #%s — %s（归档请求失败）\n' "$number" "$title" >> "$failures"
+              failed=$((failed + 1))
             fi
-            echo "已归档 PR #$number：$title"
           done < "$candidates"
+
+          {
+            echo "## PR 归档执行结果"
+            echo "- 成功：$succeeded"
+            echo "- 失败：$failed"
+            if [[ "$failed" -gt 0 ]]; then
+              echo ""
+              cat "$failures"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::error::$failed 个 PR 的归档 mutation 实际失败；其他 PR 已继续处理，请查看上方清单。"
+            exit 1
+          fi
 
           echo "已完成历史 PR 归档；这些 PR 对无仓库访问权限的访客将返回 404。"
 
