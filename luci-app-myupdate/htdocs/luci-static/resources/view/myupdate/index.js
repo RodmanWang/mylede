@@ -59,7 +59,7 @@ return view.extend({
 		]);
 		var configPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', 'GitHub Release 设置'), row('仓库所有者', owner), row('仓库名称', repo),
 			row('仓库可见性', visibility), row('更新通道', channel), row('检查模式', mode), row('检查间隔（秒）', interval, '用于定时提示模式；自动升级模式按下方每天设定的时间执行。'),
-			row('每天自动升级时间（路由器本地时间）', autoTime, '仅在选择自动升级模式时生效。默认凌晨 04:00；每天最多自动执行一次。')
+			row('每天自动升级时间（路由器本地时间）', autoTime, '仅在选择自动升级模式时生效。默认凌晨 04:00；每天最多自动执行一次。'),
 			row('Minisign 公钥', pubkey, '必须填写与 GitHub Actions MINISIGN_SECRET_KEY 对应的公钥。'),
 			row('允许降级', downgrade) ]);
 		var keepPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', '自定义文件保留'),
