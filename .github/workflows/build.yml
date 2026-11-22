@@ -938,8 +938,8 @@ jobs:
               'openclash': os.environ['OPENCLASH_COMMIT'],
           }
           for name, commit in sources.items():
-              if len(commit) != 7 or any(c not in '0123456789abcdef' for c in commit):
-                  raise SystemExit(f'Invalid seven-character source SHA for {name}: {commit!r}')
+              if not (7 <= len(commit) <= 40) or any(c not in '0123456789abcdefABCDEF' for c in commit):
+                  raise SystemExit(f'Invalid source commit SHA for {name}: {commit!r}')
           with open(output, 'w', encoding='utf-8') as f:
               json.dump({
                   'version': version,
