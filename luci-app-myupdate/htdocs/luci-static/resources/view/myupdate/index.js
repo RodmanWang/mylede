@@ -174,9 +174,9 @@ return view.extend({
 			var paths = Array.isArray(values) ? values : keepPathValues;
 			for (var i = 0; i < paths.length; i++) {
 				var path = String(paths[i] || '').trim();
-				if (!/^\\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\\/)\\.\\.?($|\\/)/.test(path))
+				if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path))
 					return _('路径格式无效：请填写以 / 开头的文件或目录绝对路径。');
-				if (/^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path))
+				if (/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path))
 					return _('不能保留 /proc、/sys、/dev、/tmp、/rom 或 /overlay 下的路径。');
 			}
 			return true;
@@ -185,7 +185,7 @@ return view.extend({
 		keepPaths.renderWidget = function(section_id) {
 			var input = E('textarea', {
 				'class': 'myupdate-path-batch-input',
-				'placeholder': _('例如：\\n/.uuplugin_uuid\\n/etc/config/network\\n/etc/ssl/nas_ssl'),
+				'placeholder': _('例如：\n/.uuplugin_uuid\n/etc/config/network\n/etc/ssl/nas_ssl'),
 				'rows': '4'
 			});
 			var chips = E('div', { 'class': 'myupdate-path-chips' });
@@ -213,11 +213,11 @@ return view.extend({
 				});
 			}
 			function addPaths(raw) {
-				var items = String(raw || '').split(/[\\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
+				var items = String(raw || '').split(/[\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
 				var added = 0, invalid = [];
 				items.forEach(function(path) {
-					if (!/^\\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\\/)\\.\\.?($|\\/)/.test(path) ||
-					    /^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path)) {
+					if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path) ||
+					    /^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path)) {
 						invalid.push(path);
 						return;
 					}
@@ -231,7 +231,7 @@ return view.extend({
 			var addButton = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add',
 				click: function() { addPaths(input.value); } }, _('添加'));
 			rootSelect.addEventListener('change', function(ev) {
-				if (ev.target.value) { input.value = (input.value ? input.value.replace(/\\s+$/, '') + '\\n' : '') + ev.target.value; ev.target.value = ''; }
+				if (ev.target.value) { input.value = (input.value ? input.value.replace(/\s+$/, '') + '\n' : '') + ev.target.value; ev.target.value = ''; }
 			});
 			input.addEventListener('keydown', function(ev) {
 				if ((ev.ctrlKey || ev.metaKey) && ev.key == 'Enter') { ev.preventDefault(); addPaths(input.value); }
