@@ -29,8 +29,8 @@ make "$PACKAGE_PATH/clean" V=s
 make "$PACKAGE_PATH/compile" V=s -j1
 
 mapfile -t packages < <(
-    find "$TOPDIR/bin/packages" -type f \\
-        \\( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' \\) \\
+    find "$TOPDIR/bin/packages" -type f \
+        \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' \) \
         -print | sort
 )
 
