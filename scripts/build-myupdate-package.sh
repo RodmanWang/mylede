@@ -28,6 +28,13 @@ if [[ ! -f "$TOPDIR/.config" ]]; then
     make defconfig V=s
 fi
 
+# A package-only build still needs the host tools and target toolchain.
+# Build these prerequisites explicitly; this does not build the firmware image.
+# Without toolchain/install, package/libs/toolchain may try to package libc
+# before the musl loader has been installed into staging_dir.
+make tools/install V=s -j2
+make toolchain/install V=s -j2
+
 # Buildroot exposes a direct per-package target. Do not call scripts/config:
 # in some LEDE revisions scripts/config is a directory, not an executable.
 # The explicit package target builds this package without selecting it for
