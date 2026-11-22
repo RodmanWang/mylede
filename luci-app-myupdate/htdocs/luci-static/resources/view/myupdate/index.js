@@ -6,7 +6,7 @@
 
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
-var callSave = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode', 'check_interval', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ] });
+var callSave = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode', 'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
@@ -39,8 +39,9 @@ return view.extend({
 		var owner = field('myupdate-owner', cfg.repo_owner), repo = field('myupdate-repo', cfg.repo_name);
 		var visibility = selectField('myupdate-visibility', cfg.repo_visibility || 'public', [[ 'public', 'Public（公开）' ], [ 'private', 'Private（私有）' ]]);
 		var channel = selectField('myupdate-channel', 'stable', [[ 'stable', 'Stable（正式版）' ]]);
-		var mode = selectField('myupdate-mode', cfg.upgrade_mode || 'manual', [[ 'manual', '手动检查' ], [ 'notify', '定时检查，有更新时显示状态' ], [ 'auto', '定时检查（不会自动刷写）' ]]);
+		var mode = selectField('myupdate-mode', cfg.upgrade_mode || 'manual', [[ 'manual', '手动检查' ], [ 'notify', '定时检查，有更新时显示状态' ], [ 'auto', '每天定时检查并自动下载、验证和升级' ]]);
 		var interval = field('myupdate-interval', cfg.check_interval || '21600', 'number');
+		var autoTime = field('myupdate-auto-time', cfg.auto_upgrade_time || '04:00', 'time');
 		var pubkey = field('myupdate-pubkey', cfg.minisign_public_key);
 		var downgrade = selectField('myupdate-downgrade', cfg.allow_downgrade || '0', [[ '0', '禁止' ], [ '1', '允许' ]]);
 		var keepPaths = textareaField('myupdate-keep-paths', cfg.custom_keep_paths || '');
@@ -48,7 +49,7 @@ return view.extend({
 		token.setAttribute('placeholder', cfg.token_configured ? '已配置；输入新 Token 可替换' : '仅 Private 仓库需要');
 		var statusText = E('p', { id: 'myupdate-status' }); showStatus(statusText, status);
 		var statusPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', '升级状态'), statusText,
-			E('p', '升级使用 LEDE sysupgrade 默认配置备份与恢复机制。只接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'),
+			E('p', '自动升级会在设定时间检查更新；如发现新版本，将自动下载并验证签名、兼容性和 SHA256，通过 sysupgrade -T 后执行 sysupgrade -v 并重启。升级使用 LEDE 默认配置备份与恢复机制。只接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'),
 			E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() { return callCheck().then(function(r) { if (!r || !r.ok) ui.addNotification(null, E('p', '检查任务启动失败'), 'error'); }); } }, '检查更新'), ' ',
 			E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() { return callDownload().then(function(r) { if (!r || !r.ok) ui.addNotification(null, E('p', '下载任务启动失败'), 'error'); }); } }, '下载并验证'), ' ',
 			E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
@@ -57,7 +58,8 @@ return view.extend({
 			} }, '执行升级')
 		]);
 		var configPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', 'GitHub Release 设置'), row('仓库所有者', owner), row('仓库名称', repo),
-			row('仓库可见性', visibility), row('更新通道', channel), row('检查模式', mode), row('自动检查间隔（秒）', interval),
+			row('仓库可见性', visibility), row('更新通道', channel), row('检查模式', mode), row('检查间隔（秒）', interval, '用于定时提示模式；自动升级模式按下方每天设定的时间执行。'),
+			row('每天自动升级时间（路由器本地时间）', autoTime, '仅在选择自动升级模式时生效。默认凌晨 04:00；每天最多自动执行一次。')
 			row('Minisign 公钥', pubkey, '必须填写与 GitHub Actions MINISIGN_SECRET_KEY 对应的公钥。'),
 			row('允许降级', downgrade) ]);
 		var keepPanel = E('div', { 'class': 'cbi-section' }, [ E('h3', '自定义文件保留'),
@@ -69,7 +71,7 @@ return view.extend({
 				return callToken(token.value).then(function(r) { if (r && r.ok) { token.value = ''; ui.addNotification(null, E('p', 'Token 已保存')); }
 				else ui.addNotification(null, E('p', r.error || '保存 Token 失败'), 'error'); }); } }, '保存 Token') ]);
 		var save = E('button', { 'class': 'btn cbi-button cbi-button-save', click: function() {
-			return callSave(owner.value, repo.value, visibility.value, channel.value, mode.value, interval.value, pubkey.value, downgrade.value, keepPaths.value).then(function(r) {
+			return callSave(owner.value, repo.value, visibility.value, channel.value, mode.value, interval.value, autoTime.value, pubkey.value, downgrade.value, keepPaths.value).then(function(r) {
 				if (r && r.ok) ui.addNotification(null, E('p', '配置已保存')); else ui.addNotification(null, E('p', r.error || '保存配置失败'), 'error');
 			}); } }, '保存设置');
 		poll.add(function() { return callStatus().then(function(s) { showStatus(statusText, s || {}); }); }, 3);
