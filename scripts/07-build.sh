@@ -19,7 +19,7 @@ cd "$TOPDIR"
 echo "========== 清理临时配置并重新生成 x86_64 编译配置 =========="
 
 # bd.sh 已经按顺序执行完 feeds 和源码配置；这里仅负责正式固件构建前
-# 清理旧临时配置、生成 .config、固定分区大小并启动完整编译。
+# 清理旧临时配置、生成 .config、应用 Actions 输入的分区大小并启动完整编译。
 rm -rf -- "$TOPDIR/tmp"
 rm -f -- "$TOPDIR/.config"
 
@@ -29,7 +29,7 @@ make defconfig
     exit 1
 }
 
-# 固定分区大小。软件包选择已经由 04-configure.sh 写入
+# 按 Actions 输入设置实际分区大小。软件包选择已经由 04-configure.sh 写入
 # target/linux/x86/Makefile 的 DEFAULT_PACKAGES，不在这里重复管理。
 python3 - "$TOPDIR/.config" "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE" <<'PY'
 from pathlib import Path
