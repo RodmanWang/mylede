@@ -836,9 +836,9 @@ jobs:
           # The resulting archive names contain the source commit prefix selected
           # by each unchanged package Makefile.
           archive_patterns = {
-              "smartdns": ("smartdns-", re.compile(r"-([0-9a-f]{7,40})\\.tar\\.(?:gz|xz|bz2)$")),
-              "smartdns_webui": ("smartdns-webui-", re.compile(r"-([0-9a-f]{7,40})\\.tar\\.(?:gz|xz|bz2)$")),
-              "luci_app_smartdns": ("luci-app-smartdns-", re.compile(r"-([0-9a-f]{7,40})\\.tar\\.(?:gz|xz|bz2)$")),
+              "smartdns": ("smartdns-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
+              "smartdns_webui": ("smartdns-webui-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
+              "luci_app_smartdns": ("luci-app-smartdns-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
           }
 
           outputs = {}
