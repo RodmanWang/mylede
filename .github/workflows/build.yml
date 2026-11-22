@@ -612,9 +612,10 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          # Date + Actions run number + attempt form a numeric, comparable OTA version.
+          # Timestamp to the second: unique for multiple builds in one day and numerically sortable.
+          # Six dot-separated numeric components preserve OTA's numeric component comparison.
           # The Release tag is exactly "v<version>" and is checked against the signed manifest.
-          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d').${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d.%H.%M.%S')"
           TAG="v${VERSION}"
           mkdir -p /home/ubuntu/files/etc/myupdate
           printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
