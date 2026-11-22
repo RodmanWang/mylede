@@ -10,11 +10,11 @@ PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=MyUpdate
 
 # rpcd-mod-ucode rejects scripts that are writable by other users.
-# Enforce safe permissions after live installation, then reload rpcd so the
+# Enforce safe permissions after live installation, then restart rpcd so the
 # newly installed ubus object is registered immediately.
 define Package/luci-app-myupdate/postinst
 #!/bin/sh
-[ -n "${IPKG_INSTROOT}" ] && exit 0
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
 
 chmod 0644 /usr/share/rpcd/ucode/myupdate.uc || exit 1
 if [ -x /etc/init.d/rpcd ]; then
