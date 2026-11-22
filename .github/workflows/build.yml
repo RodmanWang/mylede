@@ -9,12 +9,12 @@ on:
         required: false
         default: ''
       kernel_partsize:
-        description: 内核分区大小 MB（MyLEDE 固定编译为 256 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
+        description: 内核分区大小（MB），将写入固件实际分区配置
         type: string
         required: false
         default: '256'
       rootfs_partsize:
-        description: 根文件系统分区大小 MB（MyLEDE 固定编译为 4096 MB；上游 LEDE 原始默认值运行后显示；手动修改此输入不改变实际分区大小）
+        description: 根文件系统分区大小（MB），将写入固件实际分区配置
         type: string
         required: false
         default: '4096'
@@ -96,15 +96,21 @@ jobs:
         env:
           BUILD_TARGET: x86_64
           KERNEL_VERSION: ${{ inputs.kernel_version }}
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          # These UI inputs are informational only; the actual partition layout is fixed below.
+          python3 - "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE" <<'PY'
+          import re, sys
+          for name, value in zip(("KERNEL_PARTSIZE", "ROOTFS_PARTSIZE"), sys.argv[1:]):
+              if not re.fullmatch(r"[1-9][0-9]*", value):
+                  raise SystemExit(f"{name} 必须是大于 0 的整数 MB，当前值：{value!r}")
+          PY
+
           if [[ "$CHANGE_LAN_IP" == 'true' ]]; then
             python3 - "$LAN_IP" <<'PY'
           import ipaddress, sys
@@ -189,8 +195,8 @@ jobs:
             printf 'MYLEDE_COMMIT\t%s\n' "$GITHUB_SHA"
             printf 'BUILD_TARGET\t%s\n' "$BUILD_TARGET"
             printf 'KERNEL_VERSION\t%s\n' "$KERNEL_VERSION"
-            printf 'KERNEL_PARTSIZE\t256\n'
-            printf 'ROOTFS_PARTSIZE\t4096\n'
+            printf 'KERNEL_PARTSIZE\t%s\n' "$KERNEL_PARTSIZE"
+            printf 'ROOTFS_PARTSIZE\t%s\n' "$ROOTFS_PARTSIZE"
             printf 'CHANGE_LAN_IP\t%s\n' "$CHANGE_LAN_IP"
             if [[ "$CHANGE_LAN_IP" == 'true' ]]; then printf 'LAN_IP\t%s\n' "$LAN_IP"; fi
             sort "$RUNNER_TEMP/source-revisions.tsv"
@@ -646,6 +652,9 @@ jobs:
           done
 
       - name: Read and display partition defaults from pinned LEDE source
+        env:
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -653,17 +662,15 @@ jobs:
           [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::Pinned LEDE Makefile is missing: $LEDE_DIR"; exit 1; }
           cd "$LEDE_DIR"
           echo '========== Pinned LEDE source partition defaults =========='
-          # Ask the pinned LEDE build system to resolve its own defaults.
-          # This is diagnostic only: the actual MyLEDE build remains fixed at 256/4096 MB.
+          # Ask the pinned LEDE build system to resolve its own defaults for comparison.
           if ! make -s printvars VARS='KERNEL_PARTSIZE ROOTFS_PARTSIZE' 2>&1; then
             echo '::warning::LEDE printvars could not resolve partition defaults; showing source definitions instead.'
             grep -RInE '(^|[[:space:]])(KERNEL_PARTSIZE|ROOTFS_PARTSIZE)[[:space:]]*[:?+]?=' \
               target/linux/x86 include/target.mk target/Makefile 2>/dev/null | head -80 || true
           fi
-          echo '========== Fixed MyLEDE partition layout =========='
-          echo 'Kernel partition: 256 MB'
-          echo 'Root filesystem partition: 4096 MB'
-          echo 'Note: this step only displays upstream defaults; it does not write to GITHUB_STEP_SUMMARY or change the build configuration.'
+          echo '========== Requested MyLEDE partition layout =========='
+          echo "Kernel partition: ${KERNEL_PARTSIZE} MB"
+          echo "Root filesystem partition: ${ROOTFS_PARTSIZE} MB"
 
       - name: Calculate stable toolchain cache namespace
         id: firmware_toolchain_key
@@ -732,8 +739,8 @@ jobs:
       - name: Run tools/install and build script 07 with disk watchdog
         id: firmware_build
         env:
-          KERNEL_PARTSIZE: '256'
-          ROOTFS_PARTSIZE: '4096'
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -755,20 +762,16 @@ jobs:
           make V=1 -j"$(nproc)" tools/install
           # Keep the original script's semantics: it removes tmp/.config, runs defconfig, then builds.
           cd /home/ubuntu
-          # Never allow workflow inputs or upstream defaults to alter the OTA partition layout.
-          export KERNEL_PARTSIZE=256
-          export ROOTFS_PARTSIZE=4096
-
           bash /home/ubuntu/scripts/07-build.sh
-          grep -qx 'CONFIG_TARGET_KERNEL_PARTSIZE=256' /home/ubuntu/lede/.config || {
-            echo '::error::Final .config does not contain the required 256 MB kernel partition.'
+          grep -Fxq "CONFIG_TARGET_KERNEL_PARTSIZE=${KERNEL_PARTSIZE}" /home/ubuntu/lede/.config || {
+            echo "::error::Final .config does not contain the requested ${KERNEL_PARTSIZE} MB kernel partition."
             exit 1
           }
-          grep -qx 'CONFIG_TARGET_ROOTFS_PARTSIZE=4096' /home/ubuntu/lede/.config || {
-            echo '::error::Final .config does not contain the required 4096 MB rootfs partition.'
+          grep -Fxq "CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_PARTSIZE}" /home/ubuntu/lede/.config || {
+            echo "::error::Final .config does not contain the requested ${ROOTFS_PARTSIZE} MB rootfs partition."
             exit 1
           }
-          echo 'Verified fixed OTA partition layout: kernel=256 MB, rootfs=4096 MB.'
+          echo "Verified requested partition layout: kernel=${KERNEL_PARTSIZE} MB, rootfs=${ROOTFS_PARTSIZE} MB."
           BUILD_SCRIPT
           chmod +x "$RUNNER_TEMP/run-firmware-build.sh"
 
