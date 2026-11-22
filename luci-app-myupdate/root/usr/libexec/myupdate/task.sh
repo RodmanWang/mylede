@@ -21,10 +21,30 @@ write_status() {
 		"$(date -Iseconds 2>/dev/null || date)" > "$TMP"
 	chmod 600 "$TMP"; mv "$TMP" "$STATUS"
 }
-OWNER="$(CFG repo_owner '')"; REPO="$(CFG repo_name '')"; VIS="$(CFG repo_visibility public)"; CHANNEL="$(CFG release_channel stable)"
+VIS="$(CFG repo_visibility public)"; CHANNEL=stable
+REPO_URL="$(CFG repo_url '')"
+if [ -n "$REPO_URL" ]; then
+	case "$REPO_URL" in
+		https://github.com/*) REPO_PATH="${REPO_URL#https://github.com/}";;
+		*) write_status error 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' false false false; exit 1;;
+	esac
+	REPO_PATH="${REPO_PATH%/}"
+	REPO_PATH="${REPO_PATH%.git}"
+	case "$REPO_PATH" in
+		*/*) OWNER="${REPO_PATH%%/*}"; REPO="${REPO_PATH#*/}";;
+		*) write_status error 'GitHub 仓库地址必须包含所有者和仓库名' false false false; exit 1;;
+	esac
+	case "$REPO" in ''|*/*) write_status error 'GitHub 仓库地址路径无效' false false false; exit 1;; esac
+	case "$OWNER" in ''|*[!A-Za-z0-9_.-]*) write_status error 'GitHub 仓库所有者格式无效' false false false; exit 1;; esac
+	case "$REPO" in *[!A-Za-z0-9_.-]*) write_status error 'GitHub 仓库名称格式无效' false false false; exit 1;; esac
+else
+	# Backward compatibility with configurations created by older MyUpdate versions.
+	OWNER="$(CFG repo_owner '')"
+	REPO="$(CFG repo_name '')"
+fi
 CURRENT_VERSION="$(cat /etc/myupdate/build-version 2>/dev/null || true)"
 [ -n "$CURRENT_VERSION" ] || CURRENT_VERSION="${DISTRIB_RELEASE:-unknown}"
-[ -n "$OWNER" ] && [ -n "$REPO" ] || { write_status error '请先填写 GitHub 仓库所有者和仓库名' false false false; exit 1; }
+[ -n "$OWNER" ] && [ -n "$REPO" ] || { write_status error '请先填写有效的 GitHub 仓库完整地址' false false false; exit 1; }
 write_status running '正在查询 GitHub Release' false false false
 /usr/libexec/myupdate/github-api.sh "$OWNER" "$REPO" "$VIS" "$CHANNEL" || { write_status error '查询 GitHub Release 失败' false false false; exit 1; }
 REL="$R/release.json"
