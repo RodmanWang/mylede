@@ -16,6 +16,7 @@ define Package/luci-app-myupdate/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 
+chmod 0755 /etc/init.d/myupdate || exit 1
 chmod 0644 /usr/share/rpcd/ucode/myupdate.uc || exit 1
 chmod 0600 /etc/config/myupdate || exit 1
 chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
