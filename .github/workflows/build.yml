@@ -612,11 +612,11 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          # Timestamp to the second: unique for multiple builds in one day and numerically sortable.
-          # Six dot-separated numeric components preserve OTA's numeric component comparison.
-          # The Release tag is exactly "v<version>" and is checked against the signed manifest.
-          VERSION="$(TZ=Asia/Shanghai date +'%Y.%m.%d.%H.%M.%S')"
-          TAG="v${VERSION}"
+          # Compact local timestamp to the second; keep seconds to distinguish same-minute builds.
+          # OTA compares this all-numeric version as a single numeric component.
+          # Release tags use the readable "mylede-v<timestamp>" form.
+          VERSION="$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')"
+          TAG="mylede-v${VERSION}"
           mkdir -p /home/ubuntu/files/etc/myupdate
           printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
           chmod 0644 /home/ubuntu/files/etc/myupdate/build-version
