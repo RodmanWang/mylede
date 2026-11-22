@@ -96,7 +96,7 @@ function start_task(action) {
 
 	try {
 		let command = TASK + ' ' + action + ' >/dev/null 2>&1 &';
-		let p = fs.popen([ '/bin/sh', '-c', command ], 'r');
+		let p = fs.popen(command, 'r');
 
 		if (p == null)
 			return { ok: false, error: '无法创建任务进程：' + (fs.error() || '未知进程错误') };
