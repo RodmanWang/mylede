@@ -2,13 +2,53 @@
 set -eu
 umask 077
 
-LAST_RUN=/etc/myupdate/last-auto-upgrade-date
-R=/tmp/myupdate
-mkdir -p "$R" /etc/myupdate
-chmod 700 "$R" /etc/myupdate
+R="${MYUPDATE_RUNTIME_DIR:-/tmp/myupdate}"
+CONFIG_DIR="${MYUPDATE_CONFIG_DIR:-/etc/myupdate}"
+LAST_RUN="${MYUPDATE_LAST_RUN_FILE:-$CONFIG_DIR/last-auto-upgrade-date}"
+TASK_SCRIPT="${MYUPDATE_TASK_SCRIPT:-/usr/libexec/myupdate/task.sh}"
+mkdir -p "$R" "$CONFIG_DIR"
+chmod 700 "$R" "$CONFIG_DIR"
+
+process_manual_request() {
+	REQUEST_DIR="$R/request"
+	[ -d "$REQUEST_DIR" ] || return 0
+	# Never consume a request while another task owns the execution lock.
+	[ ! -d "$R/task.lock" ] || return 0
+	[ -f "$REQUEST_DIR/action" ] || {
+		rm -rf "$REQUEST_DIR"
+		logger -t myupdate "丢弃不完整的任务请求"
+		return 0
+	}
+
+	REQUEST_ACTION="$(cat "$REQUEST_DIR/action" 2>/dev/null || true)"
+	case "$REQUEST_ACTION" in
+		check|download|upgrade) ;;
+		*)
+			rm -rf "$REQUEST_DIR"
+			logger -t myupdate "丢弃无效的任务请求"
+			return 0
+			;;
+	esac
+
+	# The request directory is atomically published by rpcd, so it is safe to
+	# remove it before running the task. task.sh creates its own execution lock.
+	rm -rf "$REQUEST_DIR"
+	logger -t myupdate "开始执行 LuCI 请求的任务：$REQUEST_ACTION"
+	"$TASK_SCRIPT" "$REQUEST_ACTION" || logger -t myupdate "LuCI 请求的任务执行失败：$REQUEST_ACTION"
+}
+
+wait_interval() {
+	WAIT_SECONDS="$1"
+	ELAPSED=0
+	while [ "$ELAPSED" -lt "$WAIT_SECONDS" ]; do
+		sleep 1
+		ELAPSED=$((ELAPSED + 1))
+		process_manual_request
+	done
+}
 
 run_notify_check() {
-	/usr/libexec/myupdate/task.sh check >/dev/null 2>&1 || logger -t myupdate "定时更新检查失败"
+	"$TASK_SCRIPT" check >/dev/null 2>&1 || logger -t myupdate "定时更新检查失败"
 }
 
 run_auto_upgrade() {
@@ -30,7 +70,7 @@ run_auto_upgrade() {
 	mv "$LAST_RUN.tmp" "$LAST_RUN"
 
 	logger -t myupdate "开始每日自动升级流程（计划时间 $AUTO_TIME）"
-	if ! /usr/libexec/myupdate/task.sh check; then
+	if ! "$TASK_SCRIPT" check; then
 		logger -t myupdate "自动升级：更新检查失败，今日不再重试"
 		return 0
 	fi
@@ -41,12 +81,12 @@ run_auto_upgrade() {
 		return 0
 	}
 
-	if ! /usr/libexec/myupdate/task.sh download; then
+	if ! "$TASK_SCRIPT" download; then
 		logger -t myupdate "自动升级：下载或固件验证失败，已取消刷写"
 		return 0
 	fi
 
-	if ! /usr/libexec/myupdate/task.sh upgrade; then
+	if ! "$TASK_SCRIPT" upgrade; then
 		logger -t myupdate "自动升级：sysupgrade 预检查或刷写启动失败"
 		return 0
 	fi
@@ -54,23 +94,23 @@ run_auto_upgrade() {
 }
 
 while :; do
+	process_manual_request
 	MODE="$(uci -q get myupdate.main.upgrade_mode || echo manual)"
-	INTERVAL="$(uci -q get myupdate.main.check_interval || echo 21600)"
-	case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=21600;; esac
-	[ "$INTERVAL" -ge 900 ] 2>/dev/null && [ "$INTERVAL" -le 604800 ] 2>/dev/null || INTERVAL=21600
+	INTERVAL="$(uci -q get myupdate.main.check_interval || echo 86400)"
+	case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=86400;; esac
+	[ "$INTERVAL" -ge 900 ] 2>/dev/null && [ "$INTERVAL" -le 604800 ] 2>/dev/null || INTERVAL=86400
 
 	case "$MODE" in
 		notify)
 			run_notify_check
-			ELAPSED=0
-			while [ "$ELAPSED" -lt "$INTERVAL" ]; do sleep 30; ELAPSED=$((ELAPSED + 30)); done
+			wait_interval "$INTERVAL"
 			;;
 		auto)
 			run_auto_upgrade
-			sleep 30
+			wait_interval 1
 			;;
 		*)
-			sleep 30
+			wait_interval 1
 			;;
 	esac
 done
