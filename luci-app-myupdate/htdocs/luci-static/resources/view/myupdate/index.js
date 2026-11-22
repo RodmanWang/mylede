@@ -152,7 +152,9 @@ return view.extend({
 					return;
 				}
 				widget.setValue(candidates[0]);
-				widget.node.firstElementChild.dispatchEvent(new Event('change', { bubbles: true }));
+				var inputNode = widget.node || widget;
+				if (inputNode && inputNode.dispatchEvent)
+					inputNode.dispatchEvent(new Event('change', { bubbles: true }));
 				ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
 			}
 		}, _('识别并转换'));
