@@ -20,7 +20,13 @@ class CustomKeepPathsContractTests(unittest.TestCase):
     def test_luci_uses_dynamic_list_control(self):
         source = VIEW.read_text(encoding="utf-8")
         self.assertIn("s.option(form.DynamicList, 'custom_keep_paths'", source)
-        self.assertIn("return cfg.custom_keep_paths || [];", source)
+        self.assertIn("keepPaths.formvalue = function() { return keepPathValues.slice(); };", source)
+        self.assertIn("keepPaths.renderWidget = function(section_id)", source)
+        self.assertIn("split(/[\\\\n,，]+/)", source)
+        self.assertIn("value: '/'", source)
+        self.assertIn("value: '/etc'", source)
+        self.assertIn("value: '/root'", source)
+        self.assertIn("keepPathValues.splice(index, 1)", source)
 
     def test_sysupgrade_backup_reader_handles_space_separated_uci_lists(self):
         source = BACKUP.read_text(encoding="utf-8")
