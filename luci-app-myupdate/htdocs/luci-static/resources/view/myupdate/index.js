@@ -217,7 +217,7 @@ return view.extend({
 				.myupdate-status-caption{font-size:.9em;color:var(--gray-color-medium,#777)}
 				.myupdate-status-message{padding:12px 14px;border-radius:6px;background:#f1f5f9;color:#334155;font-weight:600;line-height:1.65}
 				.myupdate-status-message.state-checked,.myupdate-status-message.state-downloaded,.myupdate-status-message.state-current{background:#ecfdf3;color:#166534;border-left:4px solid #16a34a}
-				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
+				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running,.myupdate-status-message.state-verifying{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
 				.myupdate-status-message.state-error{background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626}
 				.myupdate-status-message.state-upgrading{background:#fff7ed;color:#c2410c;border-left:4px solid #f97316}
 				.myupdate-status-note{margin:12px 0;color:var(--gray-color-medium,#666);font-size:.92em;line-height:1.7}
