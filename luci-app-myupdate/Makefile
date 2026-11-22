@@ -31,6 +31,12 @@ chmod 0600 /etc/config/myupdate || exit 1
 if [ -x /etc/init.d/rpcd ]; then
 	/etc/init.d/rpcd restart
 fi
+
+# MyUpdate's resident scheduler also consumes queued LuCI task requests.
+if [ -x /etc/init.d/myupdate ]; then
+	/etc/init.d/myupdate enable || exit 1
+	/etc/init.d/myupdate restart || exit 1
+fi
 exit 0
 endef
 

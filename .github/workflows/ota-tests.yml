@@ -29,6 +29,12 @@ jobs:
       - name: Exercise signed OTA manifest verifier
         run: bash tests/ota/test_verify_manifest.sh
 
+      - name: Test MyUpdate scheduler task queue
+        run: sh tests/ota/test_scheduler_queue.sh
+
+      - name: Validate LuCI JavaScript syntax
+        run: node --check luci-app-myupdate/htdocs/luci-static/resources/view/myupdate/index.js
+
       - name: Validate shell syntax
         shell: bash
         run: |

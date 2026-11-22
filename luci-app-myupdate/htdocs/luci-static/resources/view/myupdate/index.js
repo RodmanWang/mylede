@@ -22,6 +22,8 @@ function reportTaskStart(promise, fallback) {
 	return promise.then(function(result) {
 		if (!result || !result.ok)
 			ui.addNotification(null, E('p', result && result.error ? result.error : fallback), 'error');
+		else if (result.queued)
+			ui.addNotification(null, E('p', result.message || _('任务请求已排队，后台服务将在数秒内执行。')), 'info');
 	}).catch(function(error) {
 		var message = error && error.message ? error.message : String(error || fallback);
 		ui.addNotification(null, E('p', message), 'error');
@@ -46,7 +48,7 @@ return view.extend({
 			return cfg.repo_url || '';
 		};
 		repo.validate = function(section_id, value) {
-			if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?(?:\.git)?$/.test(value || ''))
+			if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(value || ''))
 				return _('请输入有效的 GitHub 仓库地址，例如 https://github.com/OWNER/REPO');
 			return true;
 		};
@@ -116,13 +118,13 @@ return view.extend({
 		convertKey.inputtitle = _('识别并转换');
 		convertKey.inputstyle = 'apply';
 		convertKey.onclick = function(ev, section_id) {
-			var input = document.getElementById(pubkey.cbid(section_id));
-			if (!input) {
+			var widget = pubkey.getUIElement(section_id);
+			if (!widget) {
 				ui.addNotification(null, E('p', _('找不到公钥输入框，请刷新页面后重试。')), 'error');
 				return;
 			}
 
-			var raw = input.value.trim();
+			var raw = (widget.getValue() || '').trim();
 			var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
 			var candidates = lines.filter(function(line) { return /^RW/.test(line); });
 
@@ -136,9 +138,8 @@ return view.extend({
 				return;
 			}
 
-			input.value = candidates[0];
-			input.dispatchEvent(new Event('input', { bubbles: true }));
-			input.dispatchEvent(new Event('change', { bubbles: true }));
+			widget.setValue(candidates[0]);
+			widget.node.firstElementChild.dispatchEvent(new Event('change', { bubbles: true }));
 			ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
 		};
 

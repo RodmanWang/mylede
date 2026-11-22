@@ -6,7 +6,9 @@ import * as uci from 'uci';
 const CONFIG = 'myupdate';
 const TOKEN = '/etc/myupdate/token';
 const STATUS = '/tmp/myupdate/status.json';
-const TASK = '/usr/libexec/myupdate/task.sh';
+const RUNTIME = '/tmp/myupdate';
+const REQUEST = RUNTIME + '/request';
+const LOCK = RUNTIME + '/task.lock';
 
 function cursor() { return uci.cursor(); }
 function read_status() {
@@ -49,7 +51,7 @@ function valid_keep_paths(value) {
 	return true;
 }
 function save_config(args) {
-	let allowed = { repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
+	let allowed = { repo_url: 200, repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
 		upgrade_mode: 10, check_interval: 6, auto_upgrade_time: 5, minisign_public_key: 256, allow_downgrade: 1 };
 	let c = cursor();
 	for (let key, max in allowed) {
@@ -58,6 +60,9 @@ function save_config(args) {
 		if (!valid_string(value, max)) return { ok: false, error: '配置字段格式错误：' + key };
 		c.set(CONFIG, 'main', key, value);
 	}
+	if ('repo_url' in args && args.repo_url != '' &&
+	    !match(args.repo_url, /^https:\/\/github[.]com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+([.]git)?\/?$/))
+		return { ok: false, error: 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' };
 	if ('custom_keep_paths' in args) {
 		if (!valid_keep_paths(args.custom_keep_paths))
 			return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
@@ -90,31 +95,58 @@ function set_token(args) {
 	fs.chmod(TOKEN, 0o600);
 	return { ok: true };
 }
+function cleanup_task_request(temp_dir, action_file) {
+	if (action_file != null) fs.unlink(action_file);
+	if (temp_dir != null) fs.rmdir(temp_dir);
+}
 function start_task(action) {
 	if (![ 'check', 'download', 'upgrade' ].includes(action))
 		return { ok: false, error: '操作无效' };
 
+	let temp_dir = null, action_file = null, error = null;
+
 	try {
-		let command = TASK + ' ' + action + ' >/dev/null 2>&1 &';
-		let p = fs.popen(command, 'r');
+		if (fs.access(RUNTIME) !== true &&
+		    fs.mkdir(RUNTIME, 0o700) !== true &&
+		    fs.access(RUNTIME) !== true)
+			return { ok: false, error: '无法创建 MyUpdate 运行目录：' + (fs.error() || '未知文件系统错误') };
 
-		if (p == null)
-			return { ok: false, error: '无法创建任务进程：' + (fs.error() || '未知进程错误') };
+		if (fs.access(LOCK) === true)
+			return { ok: false, error: '已有 MyUpdate 任务正在执行，请等待任务完成' };
 
-		let rc = p.close();
-		if (rc == null)
-			return { ok: false, error: '无法确认任务启动状态：' + (fs.error() || '进程句柄关闭失败') };
+		if (fs.access(REQUEST) === true)
+			return { ok: false, error: '已有任务正在排队，请稍后查看升级状态' };
 
-		return { ok: true };
+		// Publish a complete request by atomically renaming a private temporary
+		// directory. The rpcd handler never forks or waits for a child process.
+		temp_dir = fs.mkdtemp(RUNTIME + '/request.XXXXXX');
+		if (temp_dir == null)
+			return { ok: false, error: '无法创建任务请求：' + (fs.error() || '未知文件系统错误') };
+
+		action_file = temp_dir + '/action';
+		if (fs.writefile(action_file, action + '\n') == null)
+			error = '无法写入任务请求：' + (fs.error() || '未知文件系统错误');
+		else if (fs.chmod(action_file, 0o600) !== true)
+			error = '无法设置任务请求权限：' + (fs.error() || '未知文件系统错误');
+		else if (fs.rename(temp_dir, REQUEST) !== true)
+			error = '任务队列已被占用或无法发布请求：' + (fs.error() || '未知文件系统错误');
+		else {
+			temp_dir = null;
+			action_file = null;
+			return { ok: true, queued: true, message: '任务请求已排队，后台服务将在数秒内执行' };
+		}
 	}
 	catch (e) {
-		return { ok: false, error: '启动任务时发生 Ucode 异常：' + e };
+		error = '提交任务请求时发生 Ucode 异常：' + e;
 	}
+
+	cleanup_task_request(temp_dir, action_file);
+	return { ok: false, error: error || '提交任务请求失败' };
 }
 return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
-	save_config: { args: { repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
+	save_config: { args: { repo_url: 'String', repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
 		upgrade_mode: 'String', check_interval: 'String', auto_upgrade_time: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
 		custom_keep_paths: 'String' },
 		call: function(request) { return save_config(request.args); } },
