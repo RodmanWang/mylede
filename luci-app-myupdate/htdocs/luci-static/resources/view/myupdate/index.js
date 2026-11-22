@@ -141,7 +141,7 @@ return view.extend({
 					return;
 				}
 				var raw = (widget.getValue() || '').trim();
-				var lines = raw.split(/\\r?\\n/).map(function(line) { return line.trim(); }).filter(Boolean);
+				var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
 				var candidates = lines.filter(function(line) { return /^RW/.test(line); });
 				if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
 					ui.addNotification(null, E('p', _('当前公钥已经是正确的 Base64 格式，无需转换。')), 'info');
