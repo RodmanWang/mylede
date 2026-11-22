@@ -41,7 +41,7 @@ jobs:
           set -Eeuo pipefail
           git clone --depth 1 https://github.com/coolsnowwolf/lede.git lede
 
-      - name: Prepare feeds and local MyUpdate package
+      - name: Prepare feeds and local packages
         shell: bash
         working-directory: lede
         run: |
@@ -50,7 +50,9 @@ jobs:
           ./scripts/feeds install -a
           mkdir -p package/lean
           ln -s "$GITHUB_WORKSPACE/mylede/luci-app-myupdate" package/lean/luci-app-myupdate
+          ln -s "$GITHUB_WORKSPACE/mylede/minisign" package/lean/minisign
           test -f package/lean/luci-app-myupdate/Makefile
+          test -f package/lean/minisign/Makefile
           test -f feeds/luci/luci.mk
 
       - name: Compile MyUpdate package
