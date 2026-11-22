@@ -1,3 +1,6 @@
+# Copyright (c) 2018-2025 Nick Peng (pymumu@gmail.com)
+# This is free software, licensed under the GNU General Public License v3.
+
 include $(TOPDIR)/rules.mk
 
 # Use Asia/Shanghai timezone
