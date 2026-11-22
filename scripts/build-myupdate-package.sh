@@ -81,13 +81,24 @@ make "$MINISIGN_PATH/compile" V=s -j1
 make "$PACKAGE_PATH/clean" V=s
 make "$PACKAGE_PATH/compile" V=s -j1
 
-mapfile -t packages < <(
-    find "$TOPDIR/bin/packages" -type f \
-        \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' -o -name 'minisign_*.ipk' \) \
-        -print | sort
+# Export the complete runtime dependency set alongside the three MyUpdate
+# packages. Users can then install the local IPKs without relying on a matching
+# package feed being configured on the target router.
+required_package_patterns=(
+    'luci-app-myupdate_*.ipk'
+    'luci-i18n-myupdate-zh-cn_*.ipk'
+    'minisign_*.ipk'
+    'libsodium_*.ipk'
+    'coreutils_*.ipk'
+    'coreutils-sha256sum_*.ipk'
 )
 
-(("${#packages[@]}" > 0)) || fail "编译命令已结束，但 bin/packages 中没有找到 MyUpdate IPK。请检查上方编译日志。"
+packages=()
+for pattern in "${required_package_patterns[@]}"; do
+    mapfile -t matches < <(find "$TOPDIR/bin/packages" -type f -name "$pattern" -print | sort)
+    (("${#matches[@]}" > 0)) || fail "缺少运行依赖包：$pattern；请检查 feeds 和编译日志。"
+    packages+=("${matches[@]}")
+done
 
 mkdir -p "$OUTPUT_DIR"
 for package in "${packages[@]}"; do
