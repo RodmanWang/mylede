@@ -23,8 +23,20 @@ function read_status() {
 function get_config() {
 	let c = cursor(), out = {};
 	for (let key in [ 'repo_url', 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
-		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ])
+		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
+
+	// Return UCI lists as an array for LuCI DynamicList. Convert the legacy
+	// newline-delimited scalar to the same shape so existing settings migrate
+	// naturally when the user next saves the form.
+	let keep_paths = c.get(CONFIG, 'main', 'custom_keep_paths');
+	out.custom_keep_paths = [];
+	if (type(keep_paths) == 'array')
+		out.custom_keep_paths = keep_paths;
+	else if (type(keep_paths) == 'string')
+		for (let path in split(keep_paths, '\n'))
+			if (path != '') out.custom_keep_paths[length(out.custom_keep_paths)] = path;
+
 	if (!out.repo_url && out.repo_owner && out.repo_name)
 		out.repo_url = 'https://github.com/' + out.repo_owner + '/' + out.repo_name;
 	out.token_configured = !!trim(fs.readfile(TOKEN) || '');
@@ -33,22 +45,23 @@ function get_config() {
 function valid_string(v, max) {
 	return type(v) == 'string' && length(v) <= max && index(v, '\n') < 0 && index(v, '\r') < 0;
 }
-function valid_keep_paths(value) {
+function parse_keep_paths(value) {
 	if (type(value) != 'string' || length(value) > 8192 || index(value, '\r') >= 0)
-		return false;
-	let seen = {};
+		return null;
+	let paths = [], seen = {};
 	for (let path in split(value, '\n')) {
 		if (path == '') continue;
 		if (!match(path, /^\/[A-Za-z0-9._/@+-]+$/) || path == '/' ||
 		    match(path, /(^|\/)\.\.?($|\/)/))
-			return false;
+			return null;
 		for (let prefix in [ '/proc', '/sys', '/dev', '/tmp', '/rom', '/overlay' ])
 			if (path == prefix || substr(path, 0, length(prefix) + 1) == prefix + '/')
-				return false;
-		if (seen[path]) return false;
+				return null;
+		if (seen[path]) return null;
 		seen[path] = true;
+		paths[length(paths)] = path;
 	}
-	return true;
+	return paths;
 }
 function save_config(args) {
 	let allowed = { repo_url: 200, repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
@@ -64,9 +77,12 @@ function save_config(args) {
 	    !match(args.repo_url, /^https:\/\/github[.]com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+([.]git)?\/?$/))
 		return { ok: false, error: 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' };
 	if ('custom_keep_paths' in args) {
-		if (!valid_keep_paths(args.custom_keep_paths))
+		let paths = parse_keep_paths(args.custom_keep_paths);
+		if (paths == null)
 			return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
-		c.set(CONFIG, 'main', 'custom_keep_paths', args.custom_keep_paths);
+		// An array value is serialized by UCI as repeated `list` entries.
+		// An empty string removes the option when the user clears the field.
+		c.set(CONFIG, 'main', 'custom_keep_paths', length(paths) ? paths : '');
 	}
 	let visibility = args.repo_visibility ?? c.get(CONFIG, 'main', 'repo_visibility');
 	let channel = args.release_channel ?? c.get(CONFIG, 'main', 'release_channel');

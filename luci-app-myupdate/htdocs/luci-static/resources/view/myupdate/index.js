@@ -148,9 +148,13 @@ return view.extend({
 		downgrade.value('1', _('允许'));
 		downgrade.default = '0';
 
-		var keepPaths = s.option(form.TextValue, 'custom_keep_paths', _('自定义文件保留路径'));
-		keepPaths.rows = 8;
-		keepPaths.description = _('每行填写一个路由器上的绝对路径。不要填写 /、/proc、/sys、/dev、/tmp、/rom 或 /overlay。');
+		var keepPaths = s.option(form.DynamicList, 'custom_keep_paths', _('自定义文件保留路径'));
+		keepPaths.optional = true;
+		keepPaths.rmempty = true;
+		keepPaths.cfgvalue = function() {
+			return cfg.custom_keep_paths || [];
+		};
+		keepPaths.description = _('每项填写一个路由器上的绝对路径；点击“添加”增加路径。保存后会以 UCI list 格式逐项保存。不要填写 /、/proc、/sys、/dev、/tmp、/rom 或 /overlay。');
 
 		var statusText = E('p', { id: 'myupdate-status' });
 		showStatus(statusText, status);

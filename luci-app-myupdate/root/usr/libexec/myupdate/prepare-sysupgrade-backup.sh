@@ -19,8 +19,10 @@ printf '\n%s\n' "$BEGIN" >> "$TMP"
 if [ -f /etc/myupdate/last-auto-upgrade-date ]; then
 	printf '%s\n' /etc/myupdate/last-auto-upgrade-date >> "$TMP"
 fi
+# `uci get` joins UCI list values with spaces. Spaces are forbidden by the
+# path validator, so split both that representation and legacy newline text.
 KEEP_PATHS="$(uci -q get myupdate.main.custom_keep_paths 2>/dev/null || true)"
-printf '%s\n' "$KEEP_PATHS" | while IFS= read -r path; do
+printf '%s\n' "$KEEP_PATHS" | tr ' ' '\n' | while IFS= read -r path; do
 	[ -n "$path" ] || continue
 	case "$path" in
 		/*) ;;
