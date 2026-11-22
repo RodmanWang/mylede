@@ -14,6 +14,33 @@
 - 定时提示模式：按检查间隔自动检查更新，不自动下载或刷写。
 - 自动升级模式：按路由器本地时间每天执行一次；发现新版本后自动检查、下载、验签、校验 SHA256、执行 `sysupgrade -T`，通过后执行 `sysupgrade -v` 并重启。默认计划时间为凌晨 04:00。
 
+## 独立编译 IPK（用于单独安装测试）
+
+本插件位于仓库的 `luci-app-myupdate/`，构建脚本会将它软链接到 LEDE 的 `package/lean/luci-app-myupdate`。由于它不在 LuCI feed 的 `applications/` 目录下，Makefile 必须从 `$(TOPDIR)/feeds/luci/luci.mk` 加载 LuCI 打包规则。
+
+在已经完成 feeds 初始化、并具备 LEDE 编译工具链的构建机上执行：
+
+```bash
+cd /home/ubuntu
+bash scripts/01-check-env.sh
+TOPDIR=/home/ubuntu/lede bash scripts/build-myupdate-package.sh
+```
+
+编译脚本会单独构建 `luci-app-myupdate`，不编译固件镜像；生成的主插件 IPK 和简体中文语言包（如果构建系统生成）会复制到：
+
+```
+/home/ubuntu/lede/myupdate-ipk/
+```
+
+将 IPK 复制到路由器后安装。推荐先把文件传到 `/tmp`，再执行：
+
+```sh
+opkg install /tmp/luci-app-myupdate_*.ipk
+opkg install /tmp/luci-i18n-myupdate-zh-cn_*.ipk
+```
+
+如果设备使用 APK 包管理器而不是 opkg，应使用设备对应的 APK 安装命令。插件依赖（例如 `rpcd-mod-ucode`、`curl`、`minisign`）也必须先满足。安装后刷新 LuCI 页面，检查「系统 → 固件在线升级」菜单。
+
 ## 必需的构建版本标记
 
 编译工作流必须在执行 `bd.sh` 之前写入：
@@ -24,7 +51,7 @@
 
 ## 安装与配置
 
-1. 将本目录放入 LEDE 的 LuCI 应用包目录，并选择 `luci-app-myupdate` 编译。
+1. 将本目录放入 LEDE 的本地软件包目录，并选择 `luci-app-myupdate` 编译。
 2. 在 LuCI「系统 → 固件在线升级」填写 GitHub 仓库所有者、仓库名和 Minisign 公钥。
 3. 公开仓库无需 Token；私有仓库需要只读 Fine-grained PAT。
 4. 默认使用手动模式。若要启用无人值守升级，在「检查模式」选择「每天定时检查并自动下载、验证和升级」，设置每天的升级时间（路由器本地时间，默认 04:00），然后保存设置。
@@ -50,7 +77,7 @@
 /usr/share/my-custom-data
 ```
 
-保存后，MyUpdate 会在执行 OTA 前将这些路径写入 `/etc/sysupgrade.conf` 的独立管理区块。随后仍由 OpenWrt/LEDE 的 `sysupgrade` 生成配置备份，并在新固件刷写后按官方备份恢复流程还原；不备份整个根目录。配置保留路径本身保存在 `/etc/config/myupdate`，后续升级继续生效。
+保存后，MyUpdate 会在执行 OTA 前将这些路径写入 `/etc/sysupgrade.conf` 的独立管理区块。随后仍由 OpenWrt/LEDE 的 `sysupgrade` 生成配置备份，并在新固件刷写后按官方备份恢复流程还原；不备份整个根目录。配置保留路径本身保存在 `/etc/config/myupdate`，使配置持续生效。
 
 注意事项：
 

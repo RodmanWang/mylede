@@ -9,6 +9,8 @@ LUCI_LANG.zh_Hans:=简体中文
 PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=MyUpdate
 
-include ../../luci.mk
+# This package is kept under package/lean rather than feeds/luci/applications.
+# Use TOPDIR so the include resolves correctly from the local package directory.
+include $(TOPDIR)/feeds/luci/luci.mk
 
 # call BuildPackage - OpenWrt buildroot signature
