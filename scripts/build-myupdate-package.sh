@@ -20,6 +20,14 @@ echo "========== 单独编译 luci-app-myupdate =========="
 echo "源码：$TOPDIR/$PACKAGE_PATH"
 echo "输出：$OUTPUT_DIR"
 
+# A fresh LEDE checkout has no .config. Package targets depend on .config,
+# and without it make may fall back to the interactive menuconfig target.
+# Generate the default configuration non-interactively before package targets.
+if [[ ! -f "$TOPDIR/.config" ]]; then
+    echo "未找到 .config，先生成默认配置（非交互模式）..."
+    make defconfig V=s
+fi
+
 # Buildroot exposes a direct per-package target. Do not call scripts/config:
 # in some LEDE revisions scripts/config is a directory, not an executable.
 # The explicit package target builds this package without selecting it for
