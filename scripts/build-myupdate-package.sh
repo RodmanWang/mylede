@@ -4,6 +4,7 @@ set -Eeuo pipefail
 TOPDIR="${TOPDIR:-/home/ubuntu/lede}"
 PACKAGE_PATH="package/lean/luci-app-myupdate"
 OUTPUT_DIR="${OUTPUT_DIR:-$TOPDIR/myupdate-ipk}"
+PACKAGE_CONFIG="CONFIG_PACKAGE_luci-app-myupdate"
 
 fail() {
     echo "错误：$*" >&2
@@ -20,25 +21,29 @@ echo "========== 单独编译 luci-app-myupdate =========="
 echo "源码：$TOPDIR/$PACKAGE_PATH"
 echo "输出：$OUTPUT_DIR"
 
-# A fresh LEDE checkout has no .config. Package targets depend on .config,
-# and without it make may fall back to the interactive menuconfig target.
-# Generate the default configuration non-interactively before package targets.
+# A fresh LEDE checkout has no .config. Generate it non-interactively.
 if [[ ! -f "$TOPDIR/.config" ]]; then
     echo "未找到 .config，先生成默认配置（非交互模式）..."
     make defconfig V=s
 fi
 
+# A direct package target can silently do nothing when the package is not
+# selected in .config. Select it as a module, preserving all other settings.
+sed -i \
+    -e "/^\${PACKAGE_CONFIG}=/d" \
+    -e "/^# \${PACKAGE_CONFIG} is not set$/d" \
+    .config
+printf '%s=m\n' "$PACKAGE_CONFIG" >> .config
+make defconfig V=s
+
+grep -qx "${PACKAGE_CONFIG}=m" .config || fail "无法在 .config 中启用 luci-app-myupdate；请检查 feeds 和包定义。"
+echo "已确认配置：$(grep -x "${PACKAGE_CONFIG}=m" .config)"
+
 # A package-only build still needs the host tools and target toolchain.
-# Build these prerequisites explicitly; this does not build the firmware image.
-# Without toolchain/install, package/libs/toolchain may try to package libc
-# before the musl loader has been installed into staging_dir.
+# This does not build the complete firmware image.
 make tools/install V=s -j2
 make toolchain/install V=s -j2
 
-# Buildroot exposes a direct per-package target. Do not call scripts/config:
-# in some LEDE revisions scripts/config is a directory, not an executable.
-# The explicit package target builds this package without selecting it for
-# inclusion in a complete firmware image.
 make "$PACKAGE_PATH/clean" V=s
 make "$PACKAGE_PATH/compile" V=s -j1
 
