@@ -863,7 +863,7 @@ jobs:
                       p.name for p in dl.iterdir()
                       if p.is_file() and p.name.startswith(package_prefix)
                   ]
-              raise SystemExit(
+                  raise SystemExit(
                       f"expected exactly one current {name} source archive, found {len(matches)}; "
                       f"matching files={candidates!r}"
                   )
