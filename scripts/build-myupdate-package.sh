@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 TOPDIR="${TOPDIR:-/home/ubuntu/lede}"
 PACKAGE_PATH="package/lean/luci-app-myupdate"
+MINISIGN_PATH="package/lean/minisign"
+MINISIGN_SRC="${MINISIGN_SRC:-$REPO_ROOT/minisign}"
 OUTPUT_DIR="${OUTPUT_DIR:-$TOPDIR/myupdate-ipk}"
 PACKAGE_CONFIG="CONFIG_PACKAGE_luci-app-myupdate"
 
@@ -13,43 +17,57 @@ fail() {
 
 [[ -f "$TOPDIR/Makefile" ]] || fail "LEDE 源码目录不存在：$TOPDIR"
 [[ -f "$TOPDIR/feeds/luci/luci.mk" ]] || fail "找不到 feeds/luci/luci.mk；请先执行 feeds update/install。"
-[[ -f "$TOPDIR/$PACKAGE_PATH/Makefile" ]] || fail "找不到 $PACKAGE_PATH/Makefile；请先运行仓库的 scripts/01-check-env.sh 建立插件软链接。"
+[[ -f "$TOPDIR/$PACKAGE_PATH/Makefile" ]] || fail "找不到 $PACKAGE_PATH/Makefile；请先建立插件软链接。"
+[[ -f "$MINISIGN_SRC/Makefile" ]] || fail "找不到 minisign 包定义：$MINISIGN_SRC/Makefile"
 
 cd "$TOPDIR"
 
+# Register the bundled minisign package before Kconfig scans package metadata.
+mkdir -p package/lean
+if [[ -L "$MINISIGN_PATH" ]]; then
+    [[ "$(readlink -f "$MINISIGN_PATH")" == "$(readlink -f "$MINISIGN_SRC")" ]] || fail "$MINISIGN_PATH 已指向其他位置：$(readlink -f "$MINISIGN_PATH")"
+elif [[ -e "$MINISIGN_PATH" ]]; then
+    fail "$MINISIGN_PATH 已存在且不是指向仓库 minisign 目录的软链接。"
+else
+    ln -s "$MINISIGN_SRC" "$MINISIGN_PATH"
+fi
+
 echo "========== 单独编译 luci-app-myupdate =========="
 echo "源码：$TOPDIR/$PACKAGE_PATH"
+echo "minisign：$TOPDIR/$MINISIGN_PATH"
 echo "输出：$OUTPUT_DIR"
 
-# A fresh LEDE checkout has no .config. Generate it non-interactively.
 if [[ ! -f "$TOPDIR/.config" ]]; then
     echo "未找到 .config，先生成默认配置（非交互模式）..."
     make defconfig V=s
 fi
 
-# A direct package target can silently do nothing when the package is not
-# selected in .config. Select it as a module, preserving all other settings.
-sed -i \
-    -e "/^\${PACKAGE_CONFIG}=/d" \
-    -e "/^# \${PACKAGE_CONFIG} is not set$/d" \
-    .config
-printf '%s=m\n' "$PACKAGE_CONFIG" >> .config
+# Select both packages as modules; defconfig will resolve their dependencies.
+for package_config in CONFIG_PACKAGE_minisign "$PACKAGE_CONFIG"; do
+    sed -i \
+        -e "/^${package_config}=/d" \
+        -e "/^# ${package_config} is not set$/d" \
+        .config
+    printf '%s=m\n' "$package_config" >> .config
+done
 make defconfig V=s
 
-grep -qx "${PACKAGE_CONFIG}=m" .config || fail "无法在 .config 中启用 luci-app-myupdate；请检查 feeds 和包定义。"
-echo "已确认配置：$(grep -x "${PACKAGE_CONFIG}=m" .config)"
+grep -qx 'CONFIG_PACKAGE_minisign=m' .config || fail "无法启用 minisign；请检查 libsodium 包定义及 feeds。"
+grep -qx "${PACKAGE_CONFIG}=m" .config || fail "无法启用 luci-app-myupdate；请检查包定义和依赖。"
+echo "已确认配置："
+grep -E '^CONFIG_PACKAGE_(minisign|luci-app-myupdate)=m$' .config
 
-# A package-only build still needs the host tools and target toolchain.
-# This does not build the complete firmware image.
 make tools/install V=s -j2
 make toolchain/install V=s -j2
 
+make "$MINISIGN_PATH/clean" V=s
+make "$MINISIGN_PATH/compile" V=s -j1
 make "$PACKAGE_PATH/clean" V=s
 make "$PACKAGE_PATH/compile" V=s -j1
 
 mapfile -t packages < <(
     find "$TOPDIR/bin/packages" -type f \
-        \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' \) \
+        \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' -o -name 'minisign_*.ipk' \) \
         -print | sort
 )
 
