@@ -52,7 +52,7 @@ opkg install /tmp/luci-i18n-myupdate-zh-cn_*.ipk
 ## 安装与配置
 
 1. 将本目录放入 LEDE 的本地软件包目录，并选择 `luci-app-myupdate` 编译。
-2. 在 LuCI「系统 → 固件在线升级」填写 GitHub 仓库所有者、仓库名和 Minisign 公钥。
+2. 在 LuCI「系统 → 固件在线升级」填写完整 GitHub 仓库地址（例如 `https://github.com/OWNER/REPO`）和 Minisign 公钥。
 3. 公开仓库无需 Token；私有仓库需要只读 Fine-grained PAT。
 4. 默认使用手动模式。若要启用无人值守升级，在「检查模式」选择「每天定时检查并自动下载、验证和升级」，设置每天的升级时间（路由器本地时间，默认 04:00），然后保存设置。
 5. 自动升级每天最多触发一次；如果当天计划时间已过，启用后会在调度器下一轮检查时执行。没有新版本时不会下载或刷写。
