@@ -9,9 +9,9 @@ from pathlib import Path
 manifest_path, image_path = map(Path, sys.argv[1:3])
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 version = manifest.get("version", "")
-if not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{2}", version):
+if not re.fullmatch(r"\d{14}", version):
     raise SystemExit(f"invalid firmware version: {version!r}")
-if manifest.get("tag") != f"v{version}":
+if manifest.get("tag") != f"mylede-v{version}":
     raise SystemExit("manifest tag does not match its version")
 if manifest.get("schema_version") != 1 or manifest.get("channel") != "stable":
     raise SystemExit("unsupported manifest schema or channel")
