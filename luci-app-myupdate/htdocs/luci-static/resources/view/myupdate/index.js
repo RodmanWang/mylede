@@ -34,20 +34,20 @@ return view.extend({
 	},
 	render: function(data) {
 		var cfg = data[0] || {}, status = data[1] || {};
-		var m = new form.Map('myupdate', _('MyUpdate 固件升级设置'));
+		var m = new form.Map('myupdate');
 		var s = m.section(form.NamedSection, 'main', 'myupdate');
 		s.addremove = false;
 
 		var repo = s.option(form.Value, 'repo_url', _('GitHub 仓库地址'));
-		repo.placeholder = 'https://github.com/RodmanWang/mylede';
-		repo.description = _('填写仓库完整 HTTPS 地址，例如 https://github.com/RodmanWang/mylede。不要填写 Release 页面或其他子路径。');
+		repo.placeholder = 'https://github.com/OWNER/REPO';
+		repo.description = _('填写仓库完整 HTTPS 地址，例如 https://github.com/OWNER/REPO。不要填写 Release 页面或其他子路径。');
 		repo.rmempty = false;
 		repo.cfgvalue = function() {
 			return cfg.repo_url || '';
 		};
 		repo.validate = function(section_id, value) {
 			if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?(?:\.git)?$/.test(value || ''))
-				return _('请输入有效的 GitHub 仓库地址，例如 https://github.com/RodmanWang/mylede');
+				return _('请输入有效的 GitHub 仓库地址，例如 https://github.com/OWNER/REPO');
 			return true;
 		};
 
@@ -102,7 +102,7 @@ return view.extend({
 		autoTime.description = _('仅在选择自动升级模式时生效；每天最多自动执行一次。');
 
 		var pubkey = s.option(form.Value, 'minisign_public_key', _('Minisign 公钥'));
-		pubkey.description = _('必须填写与 GitHub Actions MINISIGN_SECRET_KEY 对应的公钥；没有正确公钥时，更新验证会失败。');
+		pubkey.description = _('填写 Base64 格式的公钥主体（以 RW 开头），不要填写 minisign.pub 文件中的 untrusted comment 行；该公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。');
 
 		var downgrade = s.option(form.ListValue, 'allow_downgrade', _('允许降级'));
 		downgrade.value('0', _('禁止'));
