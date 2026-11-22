@@ -17,7 +17,19 @@ function read_status() {
 		state: 'idle', message: '尚未检查更新', current_version: '', latest_version: '',
 		update_available: false, image_ready: false, image_verified: false, busy: false, updated_at: ''
 	};
-	try { return json(raw); }
+	try {
+		let status = json(raw);
+		let progress_raw = fs.readfile(RUNTIME + '/progress.json');
+		if (progress_raw != null && progress_raw != '') {
+			try {
+				let progress = json(progress_raw);
+				status.download_percent = progress.percent ?? 0;
+				status.downloaded_bytes = progress.downloaded_bytes ?? 0;
+				status.total_bytes = progress.total_bytes ?? 0;
+			} catch (e) {}
+		}
+		return status;
+	}
 	catch (e) { return { state: 'error', message: '状态文件无法解析', busy: false }; }
 }
 function get_config() {
