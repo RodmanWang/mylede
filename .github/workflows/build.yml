@@ -837,11 +837,12 @@ jobs:
           # by each unchanged package Makefile.
           # Match the complete package filename, not a shared prefix:
           # "smartdns-" also prefixes "smartdns-webui-".
-          # Archives can contain 8+ commit characters; publish the first 7.
+          # Capture the complete hexadecimal commit suffix after the final hyphen.
+          # Keep package names exact: smartdns must not match smartdns-webui.
           archive_patterns = {
-              "smartdns": re.compile(r"^smartdns-[^-]+-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$"),
-              "smartdns_webui": re.compile(r"^smartdns-webui-[^-]+-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$"),
-              "luci_app_smartdns": re.compile(r"^luci-app-smartdns-[^-]+-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$"),
+              "smartdns": re.compile(r"^smartdns-(?!webui-).+-([0-9a-fA-F]{7,40})\.tar\.(?:gz|xz|bz2)$"),
+              "smartdns_webui": re.compile(r"^smartdns-webui-.+-([0-9a-fA-F]{7,40})\.tar\.(?:gz|xz|bz2)$"),
+              "luci_app_smartdns": re.compile(r"^luci-app-smartdns-.+-([0-9a-fA-F]{7,40})\.tar\.(?:gz|xz|bz2)$"),
           }
 
           outputs = {}
@@ -852,7 +853,7 @@ jobs:
                       continue
                   match = filename_pattern.fullmatch(path.name)
                   if match:
-                      matches.append((path, match.group(1)[:7]))
+                      matches.append((path, match.group(1)))
               if len(matches) != 1:
                   package_prefix = {
                       "smartdns": "smartdns-",
@@ -867,9 +868,9 @@ jobs:
                       f"expected exactly one current {name} source archive, found {len(matches)}; "
                       f"matching files={candidates!r}"
                   )
-              path, short_sha = matches[0]
-              outputs[name] = short_sha
-              print(f"{name}: {short_sha} (from {path.name})")
+              path, commit_sha = matches[0]
+              outputs[name] = commit_sha
+              print(f"{name}: {commit_sha} (from {path.name})")
 
           repositories = {
               "lede_commit": (Path("/home/ubuntu/lede"), None),
