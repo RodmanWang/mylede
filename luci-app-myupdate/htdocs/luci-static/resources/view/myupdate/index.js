@@ -2,6 +2,7 @@
 'require view';
 'require form';
 'require rpc';
+'require uci';
 'require ui';
 'require poll';
 
