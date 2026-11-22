@@ -101,8 +101,46 @@ return view.extend({
 		autoTime.datatype = 'time';
 		autoTime.description = _('仅在选择自动升级模式时生效；每天最多自动执行一次。');
 
-		var pubkey = s.option(form.Value, 'minisign_public_key', _('Minisign 公钥'));
-		pubkey.description = _('填写 Base64 格式的公钥主体（以 RW 开头），不要填写 minisign.pub 文件中的 untrusted comment 行；该公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。');
+		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
+		pubkey.rows = 2;
+		pubkey.monospace = true;
+		pubkey.description = _('粘贴 minisign.pub 的完整内容或 Base64 公钥主体。若粘贴了包含 untrusted comment 的两行格式，请点击下方“识别并转换”按钮，转换后再保存。公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。');
+		pubkey.validate = function(section_id, value) {
+			var key = (value || '').trim();
+			if (!/^RW[A-Za-z0-9+/]{54}$/.test(key))
+				return _('公钥格式不正确。请填写 56 位 Base64 公钥主体；若使用 minisign.pub 两行格式，请先点击“识别并转换”。');
+			return true;
+		};
+
+		var convertKey = s.option(form.Button, '_convert_minisign_key', _('公钥格式转换'));
+		convertKey.inputtitle = _('识别并转换');
+		convertKey.inputstyle = 'apply';
+		convertKey.onclick = function(ev, section_id) {
+			var input = document.getElementById(pubkey.cbid(section_id));
+			if (!input) {
+				ui.addNotification(null, E('p', _('找不到公钥输入框，请刷新页面后重试。')), 'error');
+				return;
+			}
+
+			var raw = input.value.trim();
+			var lines = raw.split(/\\r?\\n/).map(function(line) { return line.trim(); }).filter(Boolean);
+			var candidates = lines.filter(function(line) { return /^RW/.test(line); });
+
+			if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
+				ui.addNotification(null, E('p', _('当前公钥已经是正确的 Base64 格式，无需转换。')), 'info');
+				return;
+			}
+
+			if (candidates.length != 1 || !/^RW[A-Za-z0-9+/]{54}$/.test(candidates[0])) {
+				ui.addNotification(null, E('p', _('无法识别公钥格式。请粘贴 minisign.pub 的完整两行内容，或直接填写以 RW 开头的 56 位 Base64 公钥主体。')), 'error');
+				return;
+			}
+
+			input.value = candidates[0];
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			input.dispatchEvent(new Event('change', { bubbles: true }));
+			ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
+		};
 
 		var downgrade = s.option(form.ListValue, 'allow_downgrade', _('允许降级'));
 		downgrade.value('0', _('禁止'));
