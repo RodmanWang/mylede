@@ -31,8 +31,11 @@ case "$CODE" in
 	case "$LOC" in https://release-assets.githubusercontent.com/*|https://objects.githubusercontent.com/*|https://github.com/*) ;; *) fail '资产重定向地址不受信任';; esac
 	if [ "$EXPECTED_SIZE" -gt 0 ]; then
 		(
-			curl --fail -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" "$LOC"
-			RESULT=$?
+			if curl --fail -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" "$LOC"; then
+				RESULT=0
+			else
+				RESULT=$?
+			fi
 			printf '%s\n' "$RESULT" > "$T/finished"
 			exit "$RESULT"
 		) &
