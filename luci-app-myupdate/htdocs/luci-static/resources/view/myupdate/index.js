@@ -123,7 +123,7 @@ return view.extend({
 			}
 
 			var raw = input.value.trim();
-			var lines = raw.split(/\\r?\\n/).map(function(line) { return line.trim(); }).filter(Boolean);
+			var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
 			var candidates = lines.filter(function(line) { return /^RW/.test(line); });
 
 			if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
