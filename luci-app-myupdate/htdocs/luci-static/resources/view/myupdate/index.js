@@ -204,6 +204,11 @@ return view.extend({
 			return callStatus().then(function(st) { showStatus(statusText, st || {}, progressFill, progressLabel, progressPanel); });
 		}, 3);
 
+			var keyDescription = pubkey.description;
+			pubkey.description = E('div', { 'class': 'myupdate-key-tools' }, [
+				E('span', {}, keyDescription),
+				convertKey
+			]);
 		return m.render().then(function(mapNode) {
 			var style = E('style', {}, `
 				.myupdate-status-panel{border:1px solid #c8d4df;border-left:4px solid #64748b;border-radius:8px;background:var(--background-color-high,#fff);padding:18px 20px;margin:12px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.045)}
@@ -228,11 +233,6 @@ return view.extend({
 				textarea[name="cbid.myupdate.main.minisign_public_key"]{min-height:3.6em!important;height:3.6em!important}
 				@media(max-width:767px){.myupdate-status-heading{align-items:flex-start;flex-direction:column}.myupdate-actions .btn{flex:1}.myupdate-status-panel{padding:14px}}
 			`);
-			var keyDescription = pubkey.description;
-			pubkey.description = E('div', { 'class': 'myupdate-key-tools' }, [
-				E('span', {}, keyDescription),
-				convertKey
-			]);
 			return E('div', { 'class': 'cbi-map myupdate-page' }, [
 				style,
 				E('h2', _('固件在线升级')),
