@@ -23,7 +23,7 @@ function get_config() {
 	for (let key in [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
 		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
-	out.token_configured = !!(fs.readfile(TOKEN) || '').trim();
+	out.token_configured = !!trim(fs.readfile(TOKEN) || '');
 	return out;
 }
 function valid_string(v, max) {
