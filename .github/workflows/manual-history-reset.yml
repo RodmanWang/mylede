@@ -160,7 +160,9 @@ jobs:
       - name: Archive closed historical pull requests
         if: ${{ inputs.confirm_reset == 'yes' && inputs.archive_closed_prs == 'yes' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          # archivePullRequest requires the token owner to have at least Triage access.
+          # Configure PR_ARCHIVE_TOKEN as a repository Actions secret (fine-grained PAT).
+          GH_TOKEN: ${{ secrets.PR_ARCHIVE_TOKEN }}
           EXPECTED_MAIN_SHA: ${{ github.sha }}
         shell: bash
         run: |
