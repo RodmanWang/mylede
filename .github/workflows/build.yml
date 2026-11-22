@@ -162,10 +162,6 @@ jobs:
               if url:
                   add(f'feed:{name}', url, ref)
 
-          add('smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
-          add('luci-app-smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
-          add('smartdns-webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
-          add('OpenClash', 'https://github.com/vernesong/OpenClash.git', 'refs/heads/dev')
 
           with output_file.open('w', encoding='utf-8') as stream:
               for (url, ref), name in sorted(repositories.items()):
@@ -668,69 +664,6 @@ jobs:
           echo 'Root filesystem partition: 4096 MB'
           echo 'Note: this step only displays upstream defaults; it does not write to GITHUB_STEP_SUMMARY or change the build configuration.'
 
-      - name: Record the exact LEDE commit used by this build
-        id: lede_revision
-        env:
-          EXPECTED_LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          LEDE_DIR=/home/ubuntu/lede
-          if ! git -C "$LEDE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            echo "::error::LEDE is not a valid Git working tree: $LEDE_DIR"
-            exit 1
-          fi
-          ACTUAL_LEDE_COMMIT="$(git -C "$LEDE_DIR" rev-parse HEAD)"
-          if [[ ! "$ACTUAL_LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Invalid actual LEDE commit: $ACTUAL_LEDE_COMMIT"
-            exit 1
-          fi
-          if [[ "$ACTUAL_LEDE_COMMIT" != "$EXPECTED_LEDE_COMMIT" ]]; then
-            echo "::error::Actual LEDE commit differs from the pinned preflight commit."
-            echo "::error::Expected: $EXPECTED_LEDE_COMMIT"
-            echo "::error::Actual:   $ACTUAL_LEDE_COMMIT"
-            exit 1
-          fi
-          echo "LEDE repository: $LEDE_DIR"
-          echo "LEDE branch: $(git -C "$LEDE_DIR" branch --show-current)"
-          echo "LEDE commit used by firmware build: $ACTUAL_LEDE_COMMIT"
-          echo "commit=$ACTUAL_LEDE_COMMIT" >> "$GITHUB_OUTPUT"
-
-      - name: Record the OpenClash feed commit used by this build
-        id: openclash_revision
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          OPENCLASH_DIR=/home/ubuntu/lede/feeds/OpenClash
-          if [[ ! -d "$OPENCLASH_DIR" ]]; then
-            echo "::error::OpenClash feed directory does not exist: $OPENCLASH_DIR"
-            exit 1
-          fi
-          if ! git -C "$OPENCLASH_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            echo "::error::OpenClash feed is not a Git working tree."
-            exit 1
-          fi
-          REMOTE_URL="$(git -C "$OPENCLASH_DIR" remote get-url origin)"
-          if [[ "$REMOTE_URL" != *'vernesong/OpenClash'* ]]; then
-            echo "::error::Unexpected OpenClash feed origin: $REMOTE_URL"
-            exit 1
-          fi
-          OPENCLASH_COMMIT="$(git -C "$OPENCLASH_DIR" rev-parse HEAD)"
-          EXPECTED_OPENCLASH_COMMIT="$(awk -F '\t' '$1=="OpenClash" {print $4; exit}' /home/ubuntu/source-revisions.tsv)"
-          if [[ "$OPENCLASH_COMMIT" != "$EXPECTED_OPENCLASH_COMMIT" ]]; then
-            echo "::error::OpenClash checkout differs from the preflight-pinned SHA."
-            echo "::error::Expected: $EXPECTED_OPENCLASH_COMMIT"
-            echo "::error::Actual:   $OPENCLASH_COMMIT"
-            exit 1
-          fi
-          if [[ ! "$OPENCLASH_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Cannot resolve the checked-out OpenClash commit."
-            exit 1
-          fi
-          echo "OpenClash feed origin: $REMOTE_URL"
-          echo "OpenClash commit used by this build: $OPENCLASH_COMMIT"
-          echo "commit=$OPENCLASH_COMMIT" >> "$GITHUB_OUTPUT"
-
       - name: Calculate stable toolchain cache namespace
         id: firmware_toolchain_key
         env:
@@ -816,7 +749,6 @@ jobs:
           #!/usr/bin/env bash
           set -Eeuo pipefail
           cd /home/ubuntu/lede
-          export MYLEDE_SOURCE_LOCK=/home/ubuntu/source-revisions.tsv
           make defconfig
           # The cached host/toolchain tree may not contain every config-dependent host utility.
           make V=1 -j"$(nproc)" tools/install
@@ -825,63 +757,6 @@ jobs:
           # Never allow workflow inputs or upstream defaults to alter the OTA partition layout.
           export KERNEL_PARTSIZE=256
           export ROOTFS_PARTSIZE=4096
-
-          # Capture the exact commit SHAs returned to the unchanged package Makefiles.
-          REAL_GIT="$(command -v git)"
-          SOURCE_COMMIT_CAPTURE="$RUNNER_TEMP/plugin-source-commits.tsv"
-          CAPTURE_BIN="$RUNNER_TEMP/source-capture-bin"
-          export REAL_GIT SOURCE_COMMIT_CAPTURE
-          mkdir -p "$CAPTURE_BIN"
-          : > "$SOURCE_COMMIT_CAPTURE"
-          for locked_name in smartdns smartdns-webui luci-app-smartdns; do
-            locked_commit="$(awk -F '\t' -v name="$locked_name" '$1 == name { print $4; exit }' "$MYLEDE_SOURCE_LOCK")"
-            [[ "$locked_commit" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "::error::Missing or invalid pinned SHA for $locked_name."
-              exit 1
-            }
-            case "$locked_name" in
-              smartdns) capture_name=smartdns ;;
-              smartdns-webui) capture_name=smartdns_webui ;;
-              luci-app-smartdns) capture_name=luci_app_smartdns ;;
-            esac
-            printf '%s\t%s\n' "$capture_name" "$locked_commit" >> "$SOURCE_COMMIT_CAPTURE"
-          done
-          cat > "$CAPTURE_BIN/git" <<'GIT_WRAPPER'
-          #!/usr/bin/env bash
-          set -u
-          source_name=''
-          if [[ "${1:-}" == 'ls-remote' ]]; then
-            has_head=false
-            repo=''
-            for arg in "${@:2}"; do
-              [[ "$arg" == 'HEAD' ]] && has_head=true
-              case "$arg" in
-                https://github.com/pymumu/smartdns|https://github.com/pymumu/smartdns.git|http://github.com/pymumu/smartdns|http://github.com/pymumu/smartdns.git|git@github.com:pymumu/smartdns|git@github.com:pymumu/smartdns.git|ssh://git@github.com/pymumu/smartdns|ssh://git@github.com/pymumu/smartdns.git) repo='smartdns' ;;
-                https://github.com/pymumu/smartdns-webui|https://github.com/pymumu/smartdns-webui.git|http://github.com/pymumu/smartdns-webui|http://github.com/pymumu/smartdns-webui.git|git@github.com:pymumu/smartdns-webui|git@github.com:pymumu/smartdns-webui.git|ssh://git@github.com/pymumu/smartdns-webui|ssh://git@github.com/pymumu/smartdns-webui.git) repo='smartdns_webui' ;;
-                https://github.com/pymumu/luci-app-smartdns|https://github.com/pymumu/luci-app-smartdns.git|http://github.com/pymumu/luci-app-smartdns|http://github.com/pymumu/luci-app-smartdns.git|git@github.com:pymumu/luci-app-smartdns|git@github.com:pymumu/luci-app-smartdns.git|ssh://git@github.com/pymumu/luci-app-smartdns|ssh://git@github.com/pymumu/luci-app-smartdns.git) repo='luci_app_smartdns' ;;
-              esac
-            done
-            if [[ "$has_head" == true ]]; then source_name="$repo"; fi
-          fi
-          if [[ -n "$source_name" ]]; then
-            lock_name="$source_name"
-            case "$source_name" in
-              smartdns_webui) lock_name='smartdns-webui' ;;
-              luci_app_smartdns) lock_name='luci-app-smartdns' ;;
-            esac
-            commit="$(awk -F '\t' -v name="$lock_name" '$1 == name { print $4; exit }' "$MYLEDE_SOURCE_LOCK")"
-            if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::No valid preflight-pinned SHA found for $source_name." >&2
-              exit 1
-            fi
-            printf '%s\t%s\n' "$source_name" "$commit" >> "$SOURCE_COMMIT_CAPTURE"
-            printf '%s HEAD\n' "$commit"
-            exit 0
-          fi
-          exec "$REAL_GIT" "$@"
-          GIT_WRAPPER
-          chmod +x "$CAPTURE_BIN/git"
-          export PATH="$CAPTURE_BIN:$PATH"
 
           bash /home/ubuntu/scripts/07-build.sh
           grep -qx 'CONFIG_TARGET_KERNEL_PARTSIZE=256' /home/ubuntu/lede/.config || {
@@ -941,55 +816,75 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Validate and publish captured SmartDNS source revisions
+      - name: Capture exact source revisions used by this build
         id: plugin_source_revisions
         if: success()
         shell: bash
         run: |
           set -Eeuo pipefail
-          CAPTURE_FILE="$RUNNER_TEMP/plugin-source-commits.tsv"
-          [[ -s "$CAPTURE_FILE" ]] || {
-            echo '::error::No SmartDNS source commits were captured during the actual package build.'
-            exit 1
-          }
-          python3 - "$CAPTURE_FILE" "$GITHUB_OUTPUT" <<'PY'
+          python3 - <<'PY'
+          import os
           import re
-          import sys
-          from collections import defaultdict
+          import subprocess
           from pathlib import Path
 
-          capture_path, output_path = map(Path, sys.argv[1:])
-          revisions = defaultdict(set)
-          for raw in capture_path.read_text(encoding='utf-8').splitlines():
-              if not raw.strip():
-                  continue
-              fields = raw.split('\t')
-              if len(fields) != 2:
-                  raise SystemExit(f'Invalid captured source revision row: {raw!r}')
-              name, commit = fields
-              if not re.fullmatch(r'[0-9a-f]{40}', commit):
-                  raise SystemExit(f'Invalid full commit SHA for {name}: {commit!r}')
-              revisions[name].add(commit)
+          dl = Path("/home/ubuntu/dl")
+          if not dl.is_dir():
+              raise SystemExit(f"download directory is missing: {dl}")
 
-          expected = {
-              'smartdns': 'smartdns_commit',
-              'smartdns_webui': 'smartdns_webui_commit',
-              'luci_app_smartdns': 'luci_app_smartdns_commit',
+          # 06-clean-build.sh removes old SmartDNS archives before this build.
+          # The resulting archive names contain the source commit prefix selected
+          # by each unchanged package Makefile.
+          archive_patterns = {
+              "smartdns": ("smartdns-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
+              "smartdns_webui": ("smartdns-webui-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
+              "luci_app_smartdns": ("luci-app-smartdns-", re.compile(r"-([0-9a-f]{7,40})\.tar\.(?:gz|xz|bz2)$")),
           }
-          output = []
-          for source, output_name in expected.items():
-              commits = revisions.get(source, set())
-              if len(commits) != 1:
-                  raise SystemExit(
-                      f'Expected exactly one unique commit for {source}; captured {sorted(commits)!r}. '
-                      'Refusing to publish an ambiguous source revision.'
-                  )
-              commit = next(iter(commits))
-              output.append(f'{output_name}={commit}')
-              print(f'{source}: {commit}')
 
-          with output_path.open('a', encoding='utf-8') as stream:
-              stream.write('\n'.join(output) + '\n')
+          outputs = {}
+          for name, (prefix, suffix_pattern) in archive_patterns.items():
+              matches = []
+              for path in dl.iterdir():
+                  if not path.is_file() or not path.name.startswith(prefix):
+                      continue
+                  match = suffix_pattern.search(path.name)
+                  if match:
+                      matches.append((path, match.group(1)[:7]))
+              if len(matches) != 1:
+                  candidates = [p.name for p in dl.iterdir() if p.is_file() and p.name.startswith(prefix)]
+                  raise SystemExit(
+                      f"expected exactly one current {name} source archive, found {len(matches)}; "
+                      f"matching files={candidates!r}"
+                  )
+              path, short_sha = matches[0]
+              outputs[name] = short_sha
+              print(f"{name}: {short_sha} (from {path.name})")
+
+          repositories = {
+              "lede_commit": (Path("/home/ubuntu/lede"), None),
+              "openclash_commit": (Path("/home/ubuntu/lede/feeds/OpenClash"), "vernesong/OpenClash"),
+          }
+          for output_name, (repo, expected_remote) in repositories.items():
+              if subprocess.run(["git", "-C", str(repo), "rev-parse", "--is-inside-work-tree"],
+                                capture_output=True, text=True).returncode != 0:
+                  raise SystemExit(f"not a Git working tree: {repo}")
+              if expected_remote:
+                  remote = subprocess.check_output(
+                      ["git", "-C", str(repo), "remote", "get-url", "origin"], text=True
+                  ).strip()
+                  if expected_remote.lower() not in remote.lower():
+                      raise SystemExit(f"unexpected {output_name} origin: {remote}")
+              sha = subprocess.check_output(
+                  ["git", "-C", str(repo), "rev-parse", "--short=7", "HEAD"], text=True
+              ).strip()
+              if not re.fullmatch(r"[0-9a-f]{7}", sha):
+                  raise SystemExit(f"invalid {output_name}: {sha!r}")
+              outputs[output_name] = sha
+              print(f"{output_name}: {sha} (actual checkout)")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              for name, value in outputs.items():
+                  stream.write(f"{name}={value}\n")
           PY
       - name: Select UEFI image and prepare release input
         if: success()
@@ -998,11 +893,11 @@ jobs:
           BUILD_VERSION: ${{ steps.build_version.outputs.version }}
           BUILD_TAG: ${{ steps.build_version.outputs.tag }}
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
-          LEDE_COMMIT: ${{ steps.lede_revision.outputs.commit }}
-          SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_commit }}
-          SMARTDNS_WEBUI_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_webui_commit }}
-          LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns_commit }}
-          OPENCLASH_COMMIT: ${{ steps.openclash_revision.outputs.commit }}
+          LEDE_COMMIT: ${{ steps.plugin_source_revisions.outputs.lede_commit }}
+          SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns }}
+          SMARTDNS_WEBUI_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_webui }}
+          LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns }}
+          OPENCLASH_COMMIT: ${{ steps.plugin_source_revisions.outputs.openclash_commit }}
           BUILD_TARGET: x86_64
         run: |
           set -Eeuo pipefail
@@ -1031,8 +926,8 @@ jobs:
               'openclash': os.environ['OPENCLASH_COMMIT'],
           }
           for name, commit in sources.items():
-              if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
-                  raise SystemExit(f'Invalid full commit SHA for {name}: {commit!r}')
+              if len(commit) != 7 or any(c not in '0123456789abcdef' for c in commit):
+                  raise SystemExit(f'Invalid seven-character source SHA for {name}: {commit!r}')
           with open(output, 'w', encoding='utf-8') as f:
               json.dump({
                   'version': version,
@@ -1254,17 +1149,17 @@ jobs:
                       'short_commit': meta['lede_commit'][:7]
                   },
                   'pymumu/smartdns': {
-                      'ref': 'preflight source lock commit',
+                      'ref': 'downloaded source archive',
                       'commit': meta['sources']['smartdns'],
                       'short_commit': meta['sources']['smartdns'][:7]
                   },
                   'pymumu/smartdns-webui': {
-                      'ref': 'preflight source lock commit',
+                      'ref': 'downloaded source archive',
                       'commit': meta['sources']['smartdns_webui'],
                       'short_commit': meta['sources']['smartdns_webui'][:7]
                   },
                   'pymumu/luci-app-smartdns': {
-                      'ref': 'preflight source lock commit',
+                      'ref': 'downloaded source archive',
                       'commit': meta['sources']['luci_app_smartdns'],
                       'short_commit': meta['sources']['luci_app_smartdns'][:7]
                   },
@@ -1352,11 +1247,11 @@ jobs:
 
           ### Source commits used for this build
 
-          - LEDE (master): [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
-          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
-          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
-          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
-          - OpenClash (dev): [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          - LEDE: [${LEDE_COMMIT}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash: [${OPENCLASH_COMMIT}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
           EOF
           gh release create "$RELEASE_TAG" \
             "$IMAGE" \
