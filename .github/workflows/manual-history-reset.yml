@@ -1,10 +1,22 @@
-name: Manual Git History Reset
+name: Repository-wide History Maintenance
 
 on:
+  schedule:
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
+      keep_days:
+        description: 保留最近多少天的历史记录
+        required: true
+        default: 7
+        type: number
+      keep_count:
+        description: 至少保留最近多少条记录
+        required: true
+        default: 30
+        type: number
       confirm_reset:
-        description: "是否将 main 分支历史重置为仅保留当前文件快照？"
+        description: "是否将所有分支历史重置为仅保留各分支当前文件快照？"
         required: true
         type: choice
         options:
@@ -12,7 +24,7 @@ on:
           - "yes"
         default: "no"
       confirmation_text:
-        description: '只有选择 yes 时，才输入：DELETE ALL COMMITS'
+        description: '只有选择 yes 时，才输入：DELETE ALL BRANCH COMMITS'
         required: false
         type: string
       archive_closed_prs:
@@ -30,14 +42,113 @@ on:
 
 permissions:
   contents: write
+  actions: write
   pull-requests: write
 
 concurrency:
-  group: manual-history-reset-main
+  group: repository-history-maintenance
   cancel-in-progress: false
 
 jobs:
-  reset-main-history:
+  cleanup-repository-history:
+    name: Clean releases and Actions across the repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate retention settings
+        shell: bash
+        env:
+          KEEP_DAYS_INPUT: ${{ inputs.keep_days || 7 }}
+          KEEP_COUNT_INPUT: ${{ inputs.keep_count || 30 }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$KEEP_DAYS_INPUT" =~ ^[1-9][0-9]*$ ]] || { echo '::error::保留天数必须是正整数。'; exit 1; }
+          [[ "$KEEP_COUNT_INPUT" =~ ^[1-9][0-9]*$ ]] || { echo '::error::保留数量必须是正整数。'; exit 1; }
+          echo "KEEP_DAYS=$KEEP_DAYS_INPUT" >> "$GITHUB_ENV"
+          echo "KEEP_COUNT=$KEEP_COUNT_INPUT" >> "$GITHUB_ENV"
+
+      - name: Delete old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CUTOFF="$(date -u -d "$KEEP_DAYS days ago" +%s)"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq '[.[][]]' > "$RUNNER_TEMP/releases.json"
+          python3 - "$RUNNER_TEMP/releases.json" "$CUTOFF" "$KEEP_COUNT" <<'PY' > "$RUNNER_TEMP/old-release-tags.txt"
+          import datetime, json, sys
+          path, cutoff, keep_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+          releases = json.load(open(path, encoding='utf-8'))
+          stable = [r for r in releases if not r.get('prerelease') and r.get('tag_name') != 'toolchain-cache']
+          stable.sort(key=lambda r: r.get('published_at') or '', reverse=True)
+          kept = 0
+          for release in stable:
+              tag, published = release.get('tag_name'), release.get('published_at')
+              if not tag or not published:
+                  continue
+              dt = datetime.datetime.fromisoformat(published.replace('Z', '+00:00'))
+              if kept == 0 or (dt.timestamp() >= cutoff and kept < keep_count):
+                  kept += 1
+              else:
+                  print(tag)
+          PY
+          RELEASE_DELETED=0
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            echo "删除旧 Release：$tag"
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            RELEASE_DELETED=$((RELEASE_DELETED + 1))
+          done < "$RUNNER_TEMP/old-release-tags.txt"
+
+      - name: Delete old Actions runs from every workflow and branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" \
+            | jq '[.[][] | .workflow_runs[]?]' > "$RUNNER_TEMP/all-workflow-runs.json"
+          CUTOFF="$(date -u -d "$KEEP_DAYS days ago" +%s)"
+          python3 - "$RUNNER_TEMP/all-workflow-runs.json" "$CUTOFF" "$KEEP_COUNT" "$CURRENT_RUN_ID" <<'PY' > "$RUNNER_TEMP/old-run-ids.txt"
+          import datetime, json, sys
+          path, cutoff, keep_count, current_id = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+          runs = json.load(open(path, encoding='utf-8'))
+          completed = [r for r in runs if r.get('status') == 'completed']
+          completed.sort(key=lambda r: r.get('created_at') or '', reverse=True)
+          kept = 0
+          for run in completed:
+              run_id = str(run.get('id', ''))
+              if not run_id or run_id == current_id:
+                  continue
+              created = run.get('created_at')
+              if not created:
+                  print(run_id)
+                  continue
+              dt = datetime.datetime.fromisoformat(created.replace('Z', '+00:00'))
+              if dt.timestamp() >= cutoff and kept < keep_count:
+                  kept += 1
+              else:
+                  print(run_id)
+          PY
+          RUN_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            echo "删除 Actions 运行记录：$run_id"
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            RUN_DELETED=$((RUN_DELETED + 1))
+          done < "$RUNNER_TEMP/old-run-ids.txt"
+          {
+            echo '## 全仓库历史清理结果'
+            echo "- 范围：全部 workflows、全部分支的 Actions 运行记录"
+            echo "- 保留天数：$KEEP_DAYS 天"
+            echo "- 保留数量：$KEEP_COUNT 条"
+            echo "- 删除 Actions 运行记录：$RUN_DELETED 条"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  reset-all-branch-history:
+    name: Manually reset commit history on all branches
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
     runs-on: ubuntu-latest
     steps:
       - name: Explain that no changes will be made
@@ -54,8 +165,8 @@ jobs:
           ARCHIVE_CONFIRMATION: ${{ inputs.archive_confirmation }}
         run: |
           set -euo pipefail
-          if [[ "$CONFIRMATION_TEXT" != "DELETE ALL COMMITS" ]]; then
-            echo "::error::二次确认不匹配。必须准确输入 DELETE ALL COMMITS。"
+          if [[ "$CONFIRMATION_TEXT" != "DELETE ALL BRANCH COMMITS" ]]; then
+            echo "::error::二次确认不匹配。必须准确输入 DELETE ALL BRANCH COMMITS。"
             exit 1
           fi
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
@@ -138,44 +249,54 @@ jobs:
 
           echo "已完成历史 PR 归档；这些 PR 对无仓库访问权限的访客将返回 404。"
 
-      - name: Checkout the exact dispatched main revision
-        if: ${{ inputs.confirm_reset == 'yes' }}
+      - name: Checkout repository and reset every branch to its current snapshot
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: main
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Replace main history with one new root commit
-        if: ${{ inputs.confirm_reset == 'yes' }}
+      - name: Replace commit history on every branch with one root commit
         shell: bash
         env:
           EXPECTED_MAIN_SHA: ${{ github.sha }}
         run: |
-          set -euo pipefail
-
+          set -Eeuo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           if [[ -z "$current_main_sha" || "$current_main_sha" != "$EXPECTED_MAIN_SHA" ]]; then
-            echo "::error::main 分支在启动后已发生变化。为避免覆盖新提交，已中止；请重新检查后再运行。"
+            echo "::error::main 分支在启动后已发生变化。为避免覆盖新提交，已中止。"
             exit 1
           fi
 
-          orphan_branch="history-reset-${GITHUB_RUN_ID}"
-          git checkout --orphan "$orphan_branch"
-          git add --all
-
-          if git diff --cached --quiet; then
-            echo "::error::当前工作树没有可提交的文件，已中止。"
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+          mapfile -t branches < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin | grep -v '^HEAD$' | sort)
+          if (( ${#branches[@]} == 0 )); then
+            echo "::error::没有发现远程分支。"
             exit 1
           fi
 
-          git commit -m "Reset main history to current repository snapshot"
+          printf '即将重写以下 %s 个分支的提交历史：\n' "${#branches[@]}"
+          printf ' - %s\n' "${branches[@]}"
 
-          # Force-with-lease ensures main is still exactly the revision reviewed above.
-          git push --force-with-lease="refs/heads/main:$EXPECTED_MAIN_SHA" origin "HEAD:refs/heads/main"
+          for branch in "${branches[@]}"; do
+            expected_sha="$(git rev-parse "refs/remotes/origin/$branch")"
+            safe_branch="$(printf '%s' "$branch" | tr '/:' '--')"
+            orphan_branch="history-reset-${GITHUB_RUN_ID}-${safe_branch}"
+            echo "::group::重置分支 $branch"
+            git checkout --orphan "$orphan_branch" "refs/remotes/origin/$branch"
+            git add --all
+            if git diff --cached --quiet; then
+              echo "::error::分支 $branch 没有可提交的文件，停止以避免产生空快照。"
+              exit 1
+            fi
+            git commit -m "Reset $branch history to current repository snapshot"
+            git push --force-with-lease="refs/heads/$branch:$expected_sha" origin "HEAD:refs/heads/$branch"
+            echo "分支 $branch 已重置为单个根提交。"
+            echo "::endgroup::"
+          done
 
-          echo "main 分支现已替换为一个新的根提交。"
-          echo "::notice::此操作只重写 main；其他分支、标签、PR 引用、fork、缓存及 GitHub 保留的数据不会因此自动清除。"
+          echo "所有远程分支的提交历史已重置。"
+          echo "::warning::此操作不会自动删除标签、Release 引用、PR 引用、fork 或 GitHub 保留的数据；受分支保护规则限制的分支可能拒绝强制推送。"
