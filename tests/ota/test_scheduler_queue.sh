@@ -40,6 +40,7 @@ export MYUPDATE_CONFIG_DIR="$TMP/config"
 export MYUPDATE_LAST_RUN_FILE="$TMP/config/last-run"
 export MYUPDATE_TASK_SCRIPT="$TMP/fake-task.sh"
 export MYUPDATE_TEST_LOG="$TMP/task.log"
+mkdir -p "$MYUPDATE_RUNTIME_DIR"
 
 sh "$SCHEDULER" &
 SCHED_PID="$!"
