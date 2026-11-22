@@ -45,8 +45,9 @@ sh "$SCHEDULER" &
 SCHED_PID="$!"
 
 # A queued check request must be consumed and dispatched exactly once.
-mkdir -p "$MYUPDATE_RUNTIME_DIR/request"
-printf '%s\n' check > "$MYUPDATE_RUNTIME_DIR/request/action"
+mkdir "$MYUPDATE_RUNTIME_DIR/request.tmp"
+printf '%s\n' check > "$MYUPDATE_RUNTIME_DIR/request.tmp/action"
+mv "$MYUPDATE_RUNTIME_DIR/request.tmp" "$MYUPDATE_RUNTIME_DIR/request"
 attempt=0
 while [ "$attempt" -lt 8 ] && [ ! -s "$MYUPDATE_TEST_LOG" ]; do
 	sleep 1
@@ -58,8 +59,9 @@ done
 
 # A request must remain queued while another task owns the task lock.
 mkdir -p "$MYUPDATE_RUNTIME_DIR/task.lock"
-mkdir -p "$MYUPDATE_RUNTIME_DIR/request"
-printf '%s\n' download > "$MYUPDATE_RUNTIME_DIR/request/action"
+mkdir "$MYUPDATE_RUNTIME_DIR/request.tmp"
+printf '%s\n' download > "$MYUPDATE_RUNTIME_DIR/request.tmp/action"
+mv "$MYUPDATE_RUNTIME_DIR/request.tmp" "$MYUPDATE_RUNTIME_DIR/request"
 sleep 2
 [ -d "$MYUPDATE_RUNTIME_DIR/request" ] || { echo "request was consumed while task lock was held" >&2; exit 1; }
 [ "$(wc -l < "$MYUPDATE_TEST_LOG" | tr -d ' ')" = 1 ] || { echo "task ran while task lock was held" >&2; exit 1; }
