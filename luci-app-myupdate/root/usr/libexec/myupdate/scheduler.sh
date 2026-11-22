@@ -41,8 +41,8 @@ wait_interval() {
 	WAIT_SECONDS="$1"
 	ELAPSED=0
 	while [ "$ELAPSED" -lt "$WAIT_SECONDS" ]; do
-		sleep 1
-		ELAPSED=$((ELAPSED + 1))
+		sleep 2
+		ELAPSED=$((ELAPSED + 2))
 		process_manual_request
 	done
 }
