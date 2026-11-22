@@ -21,6 +21,12 @@ chmod 0600 /etc/config/myupdate || exit 1
 chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
 [ ! -e /etc/myupdate/token ] || chmod 0600 /etc/myupdate/token || exit 1
 
+# Migrate the previous package default (6 hours) to the new default (1 day).
+# Preserve any non-default interval explicitly chosen by the administrator.
+if [ "$(uci -q get myupdate.main.check_interval 2>/dev/null)" = "21600" ]; then
+	uci set myupdate.main.check_interval='86400' && uci commit myupdate || exit 1
+fi
+
 if [ -x /etc/init.d/rpcd ]; then
 	/etc/init.d/rpcd restart
 fi
