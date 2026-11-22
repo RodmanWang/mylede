@@ -18,6 +18,16 @@ function showStatus(node, s) {
 	node.textContent = (s.message || '尚未检查更新') + (current ? '（' + current + latest + '）' : '');
 }
 
+function reportTaskStart(promise, fallback) {
+	return promise.then(function(result) {
+		if (!result || !result.ok)
+			ui.addNotification(null, E('p', result && result.error ? result.error : fallback), 'error');
+	}).catch(function(error) {
+		var message = error && error.message ? error.message : String(error || fallback);
+		ui.addNotification(null, E('p', message), 'error');
+	});
+}
+
 return view.extend({
 	load: function() {
 		return Promise.all([ callConfig(), callStatus() ]);
@@ -110,20 +120,14 @@ return view.extend({
 			statusText,
 			E('p', _('自动升级会在设定时间检查更新；如发现新版本，将自动下载并验证签名、兼容性和 SHA256，通过 sysupgrade -T 后执行 sysupgrade -v 并重启。升级使用 LEDE 默认配置备份与恢复机制。只接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
 			E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
-				return callCheck().then(function(r) {
-					if (!r || !r.ok) ui.addNotification(null, E('p', r && r.error ? r.error : _('检查任务启动失败')), 'error');
-				});
+				return reportTaskStart(callCheck(), _('检查任务启动失败'));
 			} }, _('检查更新')), ' ',
 			E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
-				return callDownload().then(function(r) {
-					if (!r || !r.ok) ui.addNotification(null, E('p', r && r.error ? r.error : _('下载任务启动失败')), 'error');
-				});
+				return reportTaskStart(callDownload(), _('下载任务启动失败'));
 			} }, _('下载并验证')), ' ',
 			E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
 				if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
-				return callUpgrade().then(function(r) {
-					if (!r || !r.ok) ui.addNotification(null, E('p', r && r.error ? r.error : _('升级任务启动失败，请先下载并验证固件')), 'error');
-				});
+				return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'));
 			} }, _('执行升级'))
 		]);
 

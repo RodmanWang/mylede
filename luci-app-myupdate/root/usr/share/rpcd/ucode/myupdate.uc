@@ -91,11 +91,25 @@ function set_token(args) {
 	return { ok: true };
 }
 function start_task(action) {
-	if (![ 'check', 'download', 'upgrade' ].includes(action)) return { ok: false, error: '操作无效' };
-	let p = fs.popen("/bin/sh -c '" + TASK + ' ' + action + " >/dev/null 2>&1 &'", 'r');
-	if (p == null) return { ok: false, error: '无法启动后台任务' };
-	p.close();
-	return { ok: true };
+	if (![ 'check', 'download', 'upgrade' ].includes(action))
+		return { ok: false, error: '操作无效' };
+
+	try {
+		let command = TASK + ' ' + action + ' >/dev/null 2>&1 &';
+		let p = fs.popen([ '/bin/sh', '-c', command ], 'r');
+
+		if (p == null)
+			return { ok: false, error: '无法创建任务进程：' + (fs.error() || '未知进程错误') };
+
+		let rc = p.close();
+		if (rc == null)
+			return { ok: false, error: '无法确认任务启动状态：' + (fs.error() || '进程句柄关闭失败') };
+
+		return { ok: true };
+	}
+	catch (e) {
+		return { ok: false, error: '启动任务时发生 Ucode 异常：' + e };
+	}
 }
 return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
