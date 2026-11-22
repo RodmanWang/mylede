@@ -22,6 +22,8 @@ function reportTaskStart(promise, fallback) {
 	return promise.then(function(result) {
 		if (!result || !result.ok)
 			ui.addNotification(null, E('p', result && result.error ? result.error : fallback), 'error');
+		else if (result.queued)
+			ui.addNotification(null, E('p', result.message || _('任务请求已排队，后台服务将在数秒内执行。')), 'info');
 	}).catch(function(error) {
 		var message = error && error.message ? error.message : String(error || fallback);
 		ui.addNotification(null, E('p', message), 'error');
