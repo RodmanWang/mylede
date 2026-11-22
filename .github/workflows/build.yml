@@ -96,8 +96,8 @@ jobs:
         env:
           BUILD_TARGET: x86_64
           KERNEL_VERSION: ${{ inputs.kernel_version }}
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
@@ -653,8 +653,8 @@ jobs:
 
       - name: Read and display partition defaults from pinned LEDE source
         env:
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -739,8 +739,8 @@ jobs:
       - name: Run tools/install and build script 07 with disk watchdog
         id: firmware_build
         env:
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
         shell: bash
         run: |
           set -Eeuo pipefail
