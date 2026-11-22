@@ -1,42 +1,34 @@
-# Copyright (c) 2018-2025 Nick Peng (pymumu@gmail.com)
-# This is free software, licensed under the GNU General Public License v3.
-#
 include $(TOPDIR)/rules.mk
 
 # Use Asia/Shanghai timezone
-
 export TZ:=Asia/Shanghai
 
 PKG_NAME:=luci-app-smartdns
 
+# 虚拟机当天日期，例如：
+# 2026-10-16 -> 26.10.16
 PKG_VERSION:=$(shell TZ=Asia/Shanghai date +%y.%m.%d)
 
 # 获取 pymumu/luci-app-smartdns master 最新 Commit
-
 PKG_SOURCE_VERSION:=$(shell \
 	git ls-remote https://github.com/pymumu/luci-app-smartdns.git HEAD \
 	| awk '{print $$1}')
 
 # Commit 前 7 位
-
 PKG_SOURCE_VERSION_SHORT:=$(shell \
 	echo $(PKG_SOURCE_VERSION) | cut -c1-7)
 
 # 版本发布号
-
 # 例如：1.581e5e8
-
 PKG_RELEASE:=1.$(PKG_SOURCE_VERSION_SHORT)
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/pymumu/luci-app-smartdns.git
 
 # Git 下载后的源码目录
-
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)-$(PKG_SOURCE_VERSION_SHORT)
 
 # 明确让 PKG_BUILD_DIR 指向实际 Git 源码目录
-
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_SOURCE_SUBDIR)
 
 PKG_SOURCE:=$(PKG_SOURCE_SUBDIR).tar.gz
@@ -59,11 +51,8 @@ define Package/luci-app-smartdns/description
 endef
 
 #
-
 # 保留官方配置
-
 # smartdns-ui 固定
-
 #
 
 define Package/luci-app-smartdns/config
@@ -73,9 +62,7 @@ define Package/luci-app-smartdns/config
 endef
 
 #
-
 # 安装
-
 #
 
 define Package/luci-app-smartdns/install
@@ -87,16 +74,16 @@ define Package/luci-app-smartdns/install
 		$(INSTALL_DIR) $(1)/; \
 		$(CP) $(PKG_BUILD_DIR)/root/. $(1)/; \
 	fi
-	
+
 	#
 	# LuCI 前端
 	#
-	
+
 	if [ -d "$(PKG_BUILD_DIR)/htdocs" ]; then \
 		$(INSTALL_DIR) $(1)/www; \
 		$(CP) $(PKG_BUILD_DIR)/htdocs/. $(1)/www/; \
 	fi
-	
+
 	#
 	# LuCI 翻译
 	#
@@ -107,7 +94,7 @@ define Package/luci-app-smartdns/install
 	#
 	# 使用 LEDE/coolsnowwolf/luci 的 po2lmo
 	#
-	
+
 	if [ -d "$(PKG_BUILD_DIR)/po" ]; then \
 		$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n; \
 		for langdir in $(PKG_BUILD_DIR)/po/*; do \
@@ -127,7 +114,6 @@ define Package/luci-app-smartdns/install
 			fi; \
 		done; \
 	fi
-
 endef
 
 $(eval $(call BuildPackage,luci-app-smartdns))
