@@ -12,10 +12,28 @@ var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
 var callUpgrade = rpc.declare({ object: 'myupdate', method: 'start_upgrade' });
 
-function showStatus(node, s) {
+function formatBytes(value) {
+	var n = Number(value || 0);
+	if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GiB';
+	if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MiB';
+	if (n >= 1024) return (n / 1024).toFixed(0) + ' KiB';
+	return n + ' B';
+}
+
+function showStatus(node, s, progressFill, progressLabel, progressPanel) {
+	var state = s.state || 'idle';
 	var current = s.current_version ? '当前版本：' + s.current_version : '';
-	var latest = s.latest_version ? '；最新版本：' + s.latest_version : '';
-	node.textContent = (s.message || '尚未检查更新') + (current ? '（' + current + latest + '）' : '');
+	var latest = s.latest_version ? '最新版本：' + s.latest_version : '';
+	var details = [ current, latest ].filter(Boolean).join('　');
+	node.textContent = (s.message || '尚未检测更新') + (details ? '　｜　' + details : '');
+	node.className = 'myupdate-status-message state-' + state;
+	var downloading = state == 'downloading';
+	progressPanel.style.display = downloading ? '' : 'none';
+	if (downloading) {
+		var percent = Math.max(0, Math.min(99, Number(s.download_percent || 0)));
+		progressFill.style.width = percent + '%';
+		progressLabel.textContent = percent + '%　' + formatBytes(s.downloaded_bytes) + ' / ' + formatBytes(s.total_bytes);
+	}
 }
 
 function reportTaskStart(promise, fallback) {
@@ -106,7 +124,7 @@ return view.extend({
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
 		pubkey.monospace = true;
-		pubkey.description = _('粘贴 minisign.pub 的完整内容或 Base64 公钥主体。若粘贴了包含 untrusted comment 的两行格式，请点击下方“识别并转换”按钮，转换后再保存。公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。');
+		pubkey.description = _('公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。支持粘贴 minisign.pub 完整两行内容，或直接填写 Base64 公钥主体。');
 		pubkey.validate = function(section_id, value) {
 			var key = (value || '').trim();
 			if (!/^RW[A-Za-z0-9+/]{54}$/.test(key))
@@ -114,34 +132,30 @@ return view.extend({
 			return true;
 		};
 
-		var convertKey = s.option(form.Button, '_convert_minisign_key', _('公钥格式转换'));
-		convertKey.inputtitle = _('识别并转换');
-		convertKey.inputstyle = 'apply';
-		convertKey.onclick = function(ev, section_id) {
-			var widget = pubkey.getUIElement(section_id);
-			if (!widget) {
-				ui.addNotification(null, E('p', _('找不到公钥输入框，请刷新页面后重试。')), 'error');
-				return;
+		var convertKey = E('button', {
+			'class': 'btn cbi-button cbi-button-action',
+			click: function() {
+				var widget = pubkey.getUIElement('main');
+				if (!widget) {
+					ui.addNotification(null, E('p', _('找不到公钥输入框，请刷新页面后重试。')), 'error');
+					return;
+				}
+				var raw = (widget.getValue() || '').trim();
+				var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
+				var candidates = lines.filter(function(line) { return /^RW/.test(line); });
+				if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
+					ui.addNotification(null, E('p', _('当前公钥已经是正确的 Base64 格式，无需转换。')), 'info');
+					return;
+				}
+				if (candidates.length != 1 || !/^RW[A-Za-z0-9+/]{54}$/.test(candidates[0])) {
+					ui.addNotification(null, E('p', _('无法识别公钥格式。请粘贴 minisign.pub 的完整两行内容，或直接填写以 RW 开头的 56 位 Base64 公钥主体。')), 'error');
+					return;
+				}
+				widget.setValue(candidates[0]);
+				widget.node.firstElementChild.dispatchEvent(new Event('change', { bubbles: true }));
+				ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
 			}
-
-			var raw = (widget.getValue() || '').trim();
-			var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
-			var candidates = lines.filter(function(line) { return /^RW/.test(line); });
-
-			if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
-				ui.addNotification(null, E('p', _('当前公钥已经是正确的 Base64 格式，无需转换。')), 'info');
-				return;
-			}
-
-			if (candidates.length != 1 || !/^RW[A-Za-z0-9+/]{54}$/.test(candidates[0])) {
-				ui.addNotification(null, E('p', _('无法识别公钥格式。请粘贴 minisign.pub 的完整两行内容，或直接填写以 RW 开头的 56 位 Base64 公钥主体。')), 'error');
-				return;
-			}
-
-			widget.setValue(candidates[0]);
-			widget.node.firstElementChild.dispatchEvent(new Event('change', { bubbles: true }));
-			ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
-		};
+		}, _('识别并转换'));
 
 		var downgrade = s.option(form.ListValue, 'allow_downgrade', _('允许降级'));
 		downgrade.value('0', _('禁止'));
@@ -156,30 +170,71 @@ return view.extend({
 		};
 		keepPaths.description = _('每项填写一个路由器上的绝对路径；点击“添加”增加路径。保存后会以 UCI list 格式逐项保存。不要填写 /、/proc、/sys、/dev、/tmp、/rom 或 /overlay。');
 
-		var statusText = E('p', { id: 'myupdate-status' });
-		showStatus(statusText, status);
-		var statusPanel = E('div', { 'class': 'cbi-section' }, [
-			E('h3', _('升级状态')),
-			statusText,
-			E('p', _('自动升级会在设定时间检查更新；如发现新版本，将自动下载并验证签名、兼容性和 SHA256，通过 sysupgrade -T 后执行 sysupgrade -v 并重启。升级使用 LEDE 默认配置备份与恢复机制。只接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
-			E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
-				return reportTaskStart(callCheck(), _('检查任务启动失败'));
-			} }, _('检查更新')), ' ',
-			E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
-				return reportTaskStart(callDownload(), _('下载任务启动失败'));
-			} }, _('下载并验证')), ' ',
-			E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
-				if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
-				return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'));
-			} }, _('执行升级'))
+		var statusText = E('div', { id: 'myupdate-status', 'class': 'myupdate-status-message' });
+		var progressFill = E('div', { 'class': 'myupdate-progress-fill' });
+		var progressLabel = E('div', { 'class': 'myupdate-progress-label' }, '0%');
+		var progressPanel = E('div', { 'class': 'myupdate-progress', style: 'display:none' }, [
+			E('div', { 'class': 'myupdate-progress-track' }, [ progressFill ]),
+			progressLabel
 		]);
+		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
+			E('div', { 'class': 'myupdate-status-heading' }, [
+				E('h3', _('检测状态')),
+				E('span', { 'class': 'myupdate-status-caption' }, _('固件检查、下载与验证进度'))
+			]),
+			statusText,
+			progressPanel,
+			E('div', { 'class': 'myupdate-status-note' }, _('自动升级会按设定时间检查更新；发现新版本后可下载并验证签名、设备兼容性和 SHA256。验证通过后，需手动确认才会执行 sysupgrade 并重启。升级使用 LEDE 默认配置备份与恢复机制。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
+			E('div', { 'class': 'myupdate-actions' }, [
+				E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
+					return reportTaskStart(callCheck(), _('检查任务启动失败'));
+				} }, _('检查更新')),
+				E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
+					return reportTaskStart(callDownload(), _('下载并验证任务启动失败'));
+				} }, _('下载并验证')),
+				E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
+					if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
+					return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'));
+				} }, _('执行升级'))
+			])
+		]);
+		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
 
 		poll.add(function() {
-			return callStatus().then(function(st) { showStatus(statusText, st || {}); });
+			return callStatus().then(function(st) { showStatus(statusText, st || {}, progressFill, progressLabel, progressPanel); });
 		}, 3);
 
+			var keyDescription = pubkey.description;
+			pubkey.description = E('div', { 'class': 'myupdate-key-tools' }, [
+				E('span', {}, keyDescription),
+				convertKey
+			]);
 		return m.render().then(function(mapNode) {
-			return E('div', { 'class': 'cbi-map' }, [
+			var style = E('style', {}, `
+				.myupdate-status-panel{border:1px solid #c8d4df;border-left:4px solid #64748b;border-radius:8px;background:var(--background-color-high,#fff);padding:18px 20px;margin:12px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.045)}
+				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+				.myupdate-status-heading h3{margin:0;font-size:1.2rem}
+				.myupdate-status-caption{font-size:.9em;color:var(--gray-color-medium,#777)}
+				.myupdate-status-message{padding:12px 14px;border-radius:6px;background:#f1f5f9;color:#334155;font-weight:600;line-height:1.65}
+				.myupdate-status-message.state-checked,.myupdate-status-message.state-downloaded,.myupdate-status-message.state-current{background:#ecfdf3;color:#166534;border-left:4px solid #16a34a}
+				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running,.myupdate-status-message.state-verifying{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
+				.myupdate-status-message.state-error{background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626}
+				.myupdate-status-message.state-upgrading{background:#fff7ed;color:#c2410c;border-left:4px solid #f97316}
+				.myupdate-status-note{margin:12px 0;color:var(--gray-color-medium,#666);font-size:.92em;line-height:1.7}
+				.myupdate-actions{display:flex;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--border-color-medium,#ddd)}
+				.myupdate-progress{margin-top:14px}
+				.myupdate-progress-track{height:13px;border-radius:10px;background:#e2e8f0;overflow:hidden}
+				.myupdate-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#2563eb,#16a34a);border-radius:10px;transition:width .35s ease}
+				.myupdate-progress-label{margin-top:6px;text-align:right;font-size:.9em;color:var(--gray-color-medium,#555);font-variant-numeric:tabular-nums}
+				#myupdate-status{min-width:0}
+				#myupdate-status + div{margin-top:8px}
+				.cbi-value-description .myupdate-key-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+				.cbi-value-description .myupdate-key-tools span{flex:1;min-width:240px}
+				textarea[name="cbid.myupdate.main.minisign_public_key"]{min-height:3.6em!important;height:3.6em!important}
+				@media(max-width:767px){.myupdate-status-heading{align-items:flex-start;flex-direction:column}.myupdate-actions .btn{flex:1}.myupdate-status-panel{padding:14px}}
+			`);
+			return E('div', { 'class': 'cbi-map myupdate-page' }, [
+				style,
 				E('h2', _('固件在线升级')),
 				statusPanel,
 				mapNode

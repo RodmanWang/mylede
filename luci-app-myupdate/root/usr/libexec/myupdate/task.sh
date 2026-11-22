@@ -17,7 +17,7 @@ write_status() {
 	TMP="$R/status.tmp"
 	printf '{"state":"%s","message":"%s","current_version":"%s","latest_version":"%s","update_available":%s,"image_ready":%s,"image_verified":%s,"busy":%s,"updated_at":"%s"}\n' \
 		"$(json_escape "$STATE")" "$(json_escape "$MSG")" "$(json_escape "$CURRENT")" "$(json_escape "$LATEST")" \
-		"$UPDATE" "$READY" "$VERIFIED" "$(case "$STATE" in running|downloading|upgrading) echo true;; *) echo false;; esac)" \
+		"$UPDATE" "$READY" "$VERIFIED" "$(case "$STATE" in running|downloading|verifying|upgrading) echo true;; *) echo false;; esac)" \
 		"$(date -Iseconds 2>/dev/null || date)" > "$TMP"
 	chmod 600 "$TMP"; mv "$TMP" "$STATUS"
 }
@@ -100,7 +100,10 @@ if [ "$ACTION" = download ]; then
 	FREE_KB="$(df -Pk /tmp | awk 'NR==2 {print $4}')"
 	NEED_KB=$(( (SIZE + 1023) / 1024 + 32768 ))
 	[ "$FREE_KB" -ge "$NEED_KB" ] || { write_status error ' /tmp 可用空间不足，无法安全下载和升级' true false false; exit 1; }
-	/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$ASSET_ID" "$R/firmware.bin" || { write_status error '固件下载失败' true false false; exit 1; }
+	rm -f "$R/progress.json"
+	/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$ASSET_ID" "$R/firmware.bin" "$SIZE" || { rm -f "$R/progress.json"; write_status error '固件下载失败' true false false; exit 1; }
+	rm -f "$R/progress.json"
+	write_status verifying '下载完成，正在校验固件大小和 SHA256' true false false
 	/usr/libexec/myupdate/verify-image.sh "$R/firmware.bin" "$HASH" "$SIZE" >/dev/null || { rm -f "$R/firmware.bin"; write_status error '固件大小或 SHA256 校验失败' true false false; exit 1; }
 	printf '%s\n' "$ASSET" > "$R/image-name"; printf '%s\n' "$VERSION" > "$R/image-version"
 	chmod 600 "$R/image-name" "$R/image-version"
