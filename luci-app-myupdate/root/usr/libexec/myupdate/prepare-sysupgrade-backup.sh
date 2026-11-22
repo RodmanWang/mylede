@@ -15,6 +15,10 @@ else
 fi
 
 printf '\n%s\n' "$BEGIN" >> "$TMP"
+# Preserve the daily unattended-upgrade guard across sysupgrade reboots.
+if [ -f /etc/myupdate/last-auto-upgrade-date ]; then
+	printf '%s\n' /etc/myupdate/last-auto-upgrade-date >> "$TMP"
+fi
 KEEP_PATHS="$(uci -q get myupdate.main.custom_keep_paths 2>/dev/null || true)"
 printf '%s\n' "$KEEP_PATHS" | while IFS= read -r path; do
 	[ -n "$path" ] || continue
