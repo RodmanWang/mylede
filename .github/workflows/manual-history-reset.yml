@@ -137,7 +137,6 @@ jobs:
       # archivePullRequest requires the token owner to have at least Triage access.
       # Configure PERSON_TOKEN as a repository Actions secret (fine-grained PAT).
       GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
-      EXPECTED_MAIN_SHA: ${{ github.sha }}
     steps:
       - name: Validate archive confirmation
         shell: bash
@@ -159,12 +158,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Refuse to archive anything if main has moved since this run was dispatched.
-          current_main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
-          if [[ "$current_main_sha" != "$EXPECTED_MAIN_SHA" ]]; then
-            echo "::error::main 分支在启动后已发生变化。为避免归档错误的 PR，已中止。"
-            exit 1
-          fi
+          # Archive the repository's current closed-PR inventory; it does not depend on the dispatch commit SHA.
 
           owner="${GITHUB_REPOSITORY%%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
