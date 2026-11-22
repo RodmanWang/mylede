@@ -73,12 +73,12 @@ function save_config(args) {
 	let mode = args.upgrade_mode ?? c.get(CONFIG, 'main', 'upgrade_mode');
 	let interval = int(args.check_interval ?? c.get(CONFIG, 'main', 'check_interval'));
 	let auto_time = args.auto_upgrade_time ?? c.get(CONFIG, 'main', 'auto_upgrade_time') ?? '04:00';
-	if (![ 'public', 'private' ].includes(visibility)) return { ok: false, error: '仓库可见性无效' };
+	if (visibility != 'public' && visibility != 'private') return { ok: false, error: '仓库可见性无效' };
 	if (channel != 'stable') return { ok: false, error: '更新通道无效' };
 	if (!valid_string(auto_time, 5) || !match(auto_time, /^([01][0-9]|2[0-3]):[0-5][0-9]$/))
 		return { ok: false, error: '自动升级时间必须为 HH:MM（24 小时制）' };
 	c.set(CONFIG, 'main', 'auto_upgrade_time', auto_time);
-	if (![ 'manual', 'notify', 'auto' ].includes(mode)) return { ok: false, error: '检查模式无效' };
+	if (mode != 'manual' && mode != 'notify' && mode != 'auto') return { ok: false, error: '检查模式无效' };
 	if (isNaN(interval) || interval < 900 || interval > 604800) return { ok: false, error: '检查间隔必须为 900 至 604800 秒' };
 	if (c.commit(CONFIG) !== true) {
 		let reason = uci.error() || '未知 UCI 错误';
@@ -100,7 +100,7 @@ function cleanup_task_request(temp_dir, action_file) {
 	if (temp_dir != null) fs.rmdir(temp_dir);
 }
 function start_task(action) {
-	if (![ 'check', 'download', 'upgrade' ].includes(action))
+	if (action != 'check' && action != 'download' && action != 'upgrade')
 		return { ok: false, error: '操作无效' };
 
 	let temp_dir = null, action_file = null, error = null;
