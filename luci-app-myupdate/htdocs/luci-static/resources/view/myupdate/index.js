@@ -192,6 +192,7 @@ return view.extend({
 			var message = E('div', { 'class': 'myupdate-path-hint' });
 			var rootSelect = E('select', { 'class': 'myupdate-path-root-select' }, [
 				E('option', { value: '' }, _('从常用固件目录中选择…')),
+				E('option', { value: '/' }, _('根目录 /（可填写根目录下的文件）')),
 				E('option', { value: '/etc' }, '/etc'),
 				E('option', { value: '/root' }, '/root'),
 				E('option', { value: '/usr' }, '/usr'),
@@ -239,7 +240,7 @@ return view.extend({
 			return E('div', { 'class': 'myupdate-path-editor' }, [
 				E('div', { 'class': 'myupdate-path-entry-row' }, [ input, addButton ]),
 				E('div', { 'class': 'myupdate-path-picker-row' }, [ rootSelect,
-					E('span', {}, _('快捷选择常见固件目录；也可直接输入任意绝对路径。')) ]),
+					E('span', {}, _('快捷入口包含根目录 /、/etc 和 /root；选择根目录后可在输入框补全文件名，例如 /.uuplugin_uuid。根目录本身不能作为保留项添加。')) ]),
 				message, chips
 			]);
 		};
