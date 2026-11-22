@@ -2,7 +2,6 @@
 'require view';
 'require form';
 'require rpc';
-'require uci';
 'require ui';
 'require poll';
 
@@ -33,12 +32,8 @@ return view.extend({
 		repo.placeholder = 'https://github.com/RodmanWang/mylede';
 		repo.description = _('填写仓库完整 HTTPS 地址，例如 https://github.com/RodmanWang/mylede。不要填写 Release 页面或其他子路径。');
 		repo.rmempty = false;
-		repo.cfgvalue = function(section_id) {
-			var value = uci.get('myupdate', section_id, 'repo_url');
-			if (value) return value;
-			if (cfg.repo_owner && cfg.repo_name)
-				return 'https://github.com/' + cfg.repo_owner + '/' + cfg.repo_name;
-			return '';
+		repo.cfgvalue = function() {
+			return cfg.repo_url || '';
 		};
 		repo.validate = function(section_id, value) {
 			if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?(?:\.git)?$/.test(value || ''))
