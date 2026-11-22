@@ -162,13 +162,85 @@ return view.extend({
 		downgrade.value('1', _('允许'));
 		downgrade.default = '0';
 
+		var keepPathValues = (cfg.custom_keep_paths || []).slice();
 		var keepPaths = s.option(form.DynamicList, 'custom_keep_paths', _('自定义文件保留路径'));
 		keepPaths.optional = true;
 		keepPaths.rmempty = true;
-		keepPaths.cfgvalue = function() {
-			return cfg.custom_keep_paths || [];
+		keepPaths.cfgvalue = function() { return keepPathValues.slice(); };
+		keepPaths.formvalue = function() { return keepPathValues.slice(); };
+		keepPaths.validate = function(section_id, values) {
+			var paths = Array.isArray(values) ? values : keepPathValues;
+			for (var i = 0; i < paths.length; i++) {
+				var path = String(paths[i] || '').trim();
+				if (!/^\\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\\/)\\.\\.?($|\\/)/.test(path))
+					return _('路径格式无效：请填写以 / 开头的文件或目录绝对路径。');
+				if (/^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path))
+					return _('不能保留 /proc、/sys、/dev、/tmp、/rom 或 /overlay 下的路径。');
+			}
+			return true;
 		};
-		keepPaths.description = _('每项填写一个路由器上的绝对路径；点击“添加”增加路径。保存后会以 UCI list 格式逐项保存。不要填写 /、/proc、/sys、/dev、/tmp、/rom 或 /overlay。');
+		keepPaths.description = _('支持批量输入：每行一条，或使用英文逗号分隔。添加后会拆分为独立项目；保存时仍按 UCI list 逐项写入。');
+		keepPaths.renderWidget = function(section_id) {
+			var input = E('textarea', {
+				'class': 'myupdate-path-batch-input',
+				'placeholder': _('例如：\\n/.uuplugin_uuid\\n/etc/config/network\\n/etc/ssl/nas_ssl'),
+				'rows': '4'
+			});
+			var chips = E('div', { 'class': 'myupdate-path-chips' });
+			var message = E('div', { 'class': 'myupdate-path-hint' });
+			var rootSelect = E('select', { 'class': 'myupdate-path-root-select' }, [
+				E('option', { value: '' }, _('从常用固件目录中选择…')),
+				E('option', { value: '/etc' }, '/etc'),
+				E('option', { value: '/root' }, '/root'),
+				E('option', { value: '/usr' }, '/usr'),
+				E('option', { value: '/www' }, '/www'),
+				E('option', { value: '/mnt' }, '/mnt'),
+				E('option', { value: '/opt' }, '/opt'),
+				E('option', { value: '/var' }, '/var'),
+				E('option', { value: '/home' }, '/home')
+			]);
+			function renderChips() {
+				while (chips.firstChild) chips.removeChild(chips.firstChild);
+				keepPathValues.forEach(function(path, index) {
+					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
+						E('span', { 'class': 'myupdate-path-chip-text' }, path),
+						E('button', { 'type': 'button', 'class': 'myupdate-path-chip-remove', 'aria-label': _('删除 ') + path,
+							click: function() { keepPathValues.splice(index, 1); renderChips(); } }, '×')
+					]));
+				});
+			}
+			function addPaths(raw) {
+				var items = String(raw || '').split(/[\\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
+				var added = 0, invalid = [];
+				items.forEach(function(path) {
+					if (!/^\\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\\/)\\.\\.?($|\\/)/.test(path) ||
+					    /^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path)) {
+						invalid.push(path);
+						return;
+					}
+					if (keepPathValues.indexOf(path) < 0) { keepPathValues.push(path); added++; }
+				});
+				renderChips();
+				message.textContent = invalid.length ? _('以下路径格式无效或属于禁止保留目录：') + ' ' + invalid.join(', ') :
+					(added ? _('已添加 ') + added + _(' 个路径。') : _('没有新增路径（可能已存在或输入为空）。'));
+				if (!invalid.length) input.value = '';
+			}
+			var addButton = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add',
+				click: function() { addPaths(input.value); } }, _('添加'));
+			rootSelect.addEventListener('change', function(ev) {
+				if (ev.target.value) { input.value = (input.value ? input.value.replace(/\\s+$/, '') + '\\n' : '') + ev.target.value; ev.target.value = ''; }
+			});
+			input.addEventListener('keydown', function(ev) {
+				if ((ev.ctrlKey || ev.metaKey) && ev.key == 'Enter') { ev.preventDefault(); addPaths(input.value); }
+			});
+			renderChips();
+			return E('div', { 'class': 'myupdate-path-editor' }, [
+				E('div', { 'class': 'myupdate-path-entry-row' }, [ input, addButton ]),
+				E('div', { 'class': 'myupdate-path-picker-row' }, [ rootSelect,
+					E('span', {}, _('快捷选择常见固件目录；也可直接输入任意绝对路径。')) ]),
+				message, chips
+			]);
+		};
 
 		var statusText = E('div', { id: 'myupdate-status', 'class': 'myupdate-status-message' });
 		var progressFill = E('div', { 'class': 'myupdate-progress-fill' });
@@ -204,11 +276,14 @@ return view.extend({
 			return callStatus().then(function(st) { showStatus(statusText, st || {}, progressFill, progressLabel, progressPanel); });
 		}, 3);
 
-			var keyDescription = pubkey.description;
-			pubkey.description = E('div', { 'class': 'myupdate-key-tools' }, [
-				E('span', {}, keyDescription),
-				convertKey
-			]);
+			var originalPubkeyRender = pubkey.renderWidget;
+			pubkey.renderWidget = function(section_id, option_index, cfgvalue) {
+				var inputWidget = originalPubkeyRender.apply(this, arguments);
+				return E('div', { 'class': 'myupdate-key-input-row' }, [
+					E('div', { 'class': 'myupdate-key-input' }, [ inputWidget ]),
+					E('div', { 'class': 'myupdate-key-convert' }, [ convertKey ])
+				]);
+			};
 		return m.render().then(function(mapNode) {
 			var style = E('style', {}, `
 				.myupdate-status-panel{border:1px solid #c8d4df;border-left:4px solid #64748b;border-radius:8px;background:var(--background-color-high,#fff);padding:18px 20px;margin:12px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.045)}
@@ -228,9 +303,23 @@ return view.extend({
 				.myupdate-progress-label{margin-top:6px;text-align:right;font-size:.9em;color:var(--gray-color-medium,#555);font-variant-numeric:tabular-nums}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.cbi-value-description .myupdate-key-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-				.cbi-value-description .myupdate-key-tools span{flex:1;min-width:240px}
-				textarea[name="cbid.myupdate.main.minisign_public_key"]{min-height:3.6em!important;height:3.6em!important}
+				.myupdate-key-input-row{display:flex;align-items:stretch;gap:10px;width:100%}
+				.myupdate-key-input{flex:1;min-width:0}
+				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important}
+				.myupdate-key-convert{display:flex;align-items:center;flex:0 0 auto}
+				.myupdate-path-editor{width:100%}
+				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:10px}
+				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;resize:vertical}
+				.myupdate-path-entry-row .btn{align-self:stretch;min-width:76px}
+				.myupdate-path-picker-row{display:flex;align-items:center;gap:10px;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
+				.myupdate-path-root-select{max-width:260px}
+				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
+				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+				.myupdate-path-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:7px 10px;border-radius:4px;background:var(--background-color-high,#f1f1f1);border:1px solid var(--border-color-medium,#ddd)}
+				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
+				.myupdate-path-chip-remove{border:0;background:transparent;color:var(--gray-color-high,#555);font-size:1.25em;line-height:1;cursor:pointer;padding:0 1px}
+				.myupdate-path-chip-remove:hover{color:#dc2626}
+				@media(max-width:767px){.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:column}.myupdate-key-convert .btn{width:100%}.myupdate-path-picker-row{align-items:flex-start;flex-direction:column}}
 				@media(max-width:767px){.myupdate-status-heading{align-items:flex-start;flex-direction:column}.myupdate-actions .btn{flex:1}.myupdate-status-panel{padding:14px}}
 			`);
 			return E('div', { 'class': 'cbi-map myupdate-page' }, [
