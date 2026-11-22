@@ -73,7 +73,10 @@ function save_config(args) {
 	c.set(CONFIG, 'main', 'auto_upgrade_time', auto_time);
 	if (![ 'manual', 'notify', 'auto' ].includes(mode)) return { ok: false, error: '检查模式无效' };
 	if (isNaN(interval) || interval < 900 || interval > 604800) return { ok: false, error: '检查间隔必须为 900 至 604800 秒' };
-	if (!c.commit(CONFIG)) return { ok: false, error: '保存配置失败' };
+	if (c.commit(CONFIG) !== true) {
+		let reason = uci.error() || '未知 UCI 错误';
+		return { ok: false, error: '保存配置失败：' + reason };
+	}
 	return { ok: true };
 }
 function set_token(args) {
