@@ -26,6 +26,7 @@ chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
 if [ "$(uci -q get myupdate.main.check_interval 2>/dev/null)" = "21600" ]; then
 	uci set myupdate.main.check_interval='86400' && uci commit myupdate || exit 1
 fi
+chmod 0600 /etc/config/myupdate || exit 1
 
 if [ -x /etc/init.d/rpcd ]; then
 	/etc/init.d/rpcd restart
