@@ -16,7 +16,7 @@
 
 ### 1. OpenClash
 
-源码仓库：[vernesong/OpenClash]([https://github.com/vernesong/OpenClash/tree/dev)]
+源码仓库：[vernesong/OpenClash]([https://github.com/vernesong/OpenClash/tree/dev)
 
 使用 `dev` 分支，编译时自动拉取源码仓库最新提交，并参与固件编译。
 
