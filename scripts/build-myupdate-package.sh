@@ -50,15 +50,31 @@ for package_config in CONFIG_PACKAGE_minisign "$PACKAGE_CONFIG"; do
         .config
     printf '%s=m\n' "$package_config" >> .config
 done
+
+# Minisign uses libsodium's scrypt API, which LEDE's default minimal
+# configuration disables. Keep the full API enabled for this dependency.
+sed -i \
+    -e '/^CONFIG_LIBSODIUM_MINIMAL=/d' \
+    -e '/^# CONFIG_LIBSODIUM_MINIMAL is not set$/d' \
+    .config
+printf '%s\n' '# CONFIG_LIBSODIUM_MINIMAL is not set' >> .config
+
 make defconfig V=s
 
-grep -qx 'CONFIG_PACKAGE_minisign=m' .config || fail "无法启用 minisign；请检查 libsodium 包定义及 feeds。"
+grep -qx 'CONFIG_PACKAGE_minisign=m' .config || fail "无法启用 minisign；请检查 libsodium 包定义及 feeds."
+grep -qx '# CONFIG_LIBSODIUM_MINIMAL is not set' .config || fail "无法关闭 libsodium minimal 模式；Minisign 需要 scrypt API。"
 grep -qx "${PACKAGE_CONFIG}=m" .config || fail "无法启用 luci-app-myupdate；请检查包定义和依赖。"
 echo "已确认配置："
 grep -E '^CONFIG_PACKAGE_(minisign|luci-app-myupdate)=m$' .config
 
 make tools/install V=s -j2
 make toolchain/install V=s -j2
+
+# Rebuild libsodium without its minimal feature set before compiling Minisign.
+LIBSODIUM_PATH="package/feeds/packages/libsodium"
+[[ -f "$TOPDIR/$LIBSODIUM_PATH/Makefile" ]] || fail "找不到 libsodium 包定义：$LIBSODIUM_PATH/Makefile"
+make "$LIBSODIUM_PATH/clean" V=s
+make "$LIBSODIUM_PATH/compile" V=s -j1
 
 make "$MINISIGN_PATH/clean" V=s
 make "$MINISIGN_PATH/compile" V=s -j1
