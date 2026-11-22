@@ -21,7 +21,7 @@ function read_status() {
 function get_config() {
 	let c = cursor(), out = {};
 	for (let key in [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
-		'check_interval', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ])
+		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
 	out.token_configured = !!(fs.readfile(TOKEN) || '').trim();
 	return out;
@@ -48,7 +48,7 @@ function valid_keep_paths(value) {
 }
 function save_config(args) {
 	let allowed = { repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
-		upgrade_mode: 10, check_interval: 6, minisign_public_key: 256, allow_downgrade: 1 };
+		upgrade_mode: 10, check_interval: 6, auto_upgrade_time: 5, minisign_public_key: 256, allow_downgrade: 1 };
 	let c = cursor();
 	for (let key, max in allowed) {
 		if (!(key in args)) continue;
@@ -65,8 +65,12 @@ function save_config(args) {
 	let channel = args.release_channel ?? c.get(CONFIG, 'main', 'release_channel');
 	let mode = args.upgrade_mode ?? c.get(CONFIG, 'main', 'upgrade_mode');
 	let interval = int(args.check_interval ?? c.get(CONFIG, 'main', 'check_interval'));
+	let auto_time = args.auto_upgrade_time ?? c.get(CONFIG, 'main', 'auto_upgrade_time') ?? '04:00';
 	if (![ 'public', 'private' ].includes(visibility)) return { ok: false, error: '仓库可见性无效' };
 	if (channel != 'stable') return { ok: false, error: '更新通道无效' };
+	if (!valid_string(auto_time, 5) || !match(auto_time, /^([01][0-9]|2[0-3]):[0-5][0-9]$/))
+		return { ok: false, error: '自动升级时间必须为 HH:MM（24 小时制）' };
+	c.set(CONFIG, 'main', 'auto_upgrade_time', auto_time);
 	if (![ 'manual', 'notify', 'auto' ].includes(mode)) return { ok: false, error: '检查模式无效' };
 	if (isNaN(interval) || interval < 900 || interval > 604800) return { ok: false, error: '检查间隔必须为 900 至 604800 秒' };
 	if (!c.commit(CONFIG)) return { ok: false, error: '保存配置失败' };
@@ -92,7 +96,7 @@ return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
 	save_config: { args: { repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
-		upgrade_mode: 'String', check_interval: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
+		upgrade_mode: 'String', check_interval: 'String', auto_upgrade_time: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
 		custom_keep_paths: 'String' },
 		call: function(request) { return save_config(request.args); } },
 	set_token: { args: { token: 'String' }, call: function(request) { return set_token(request.args); } },
