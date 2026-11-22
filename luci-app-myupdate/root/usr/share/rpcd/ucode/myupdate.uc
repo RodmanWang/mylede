@@ -20,9 +20,11 @@ function read_status() {
 }
 function get_config() {
 	let c = cursor(), out = {};
-	for (let key in [ 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
+	for (let key in [ 'repo_url', 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
 		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade', 'custom_keep_paths' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
+	if (!out.repo_url && out.repo_owner && out.repo_name)
+		out.repo_url = 'https://github.com/' + out.repo_owner + '/' + out.repo_name;
 	out.token_configured = !!trim(fs.readfile(TOKEN) || '');
 	return out;
 }
