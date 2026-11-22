@@ -20,11 +20,10 @@ echo "========== 单独编译 luci-app-myupdate =========="
 echo "源码：$TOPDIR/$PACKAGE_PATH"
 echo "输出：$OUTPUT_DIR"
 
-# Force the package to module mode so this target can be built even when it
-# is not selected for inclusion in the firmware image.
-./scripts/config -m CONFIG_PACKAGE_luci-app-myupdate
-make defconfig
-
+# Buildroot exposes a direct per-package target. Do not call scripts/config:
+# in some LEDE revisions scripts/config is a directory, not an executable.
+# The explicit package target builds this package without selecting it for
+# inclusion in a complete firmware image.
 make "$PACKAGE_PATH/clean" V=s
 make "$PACKAGE_PATH/compile" V=s -j1
 
