@@ -33,7 +33,7 @@ case "$CODE" in
 		(
 			curl --fail -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" "$LOC"
 			RESULT=$?
-			printf '%s\\n' "$RESULT" > "$T/finished"
+			printf '%s\n' "$RESULT" > "$T/finished"
 			exit "$RESULT"
 		) &
 		CURL_PID=$!
@@ -43,14 +43,14 @@ case "$CODE" in
 			PERCENT=$((DOWNLOADED * 100 / EXPECTED_SIZE))
 			[ "$PERCENT" -le 99 ] || PERCENT=99
 			PROGRESS_TMP="/tmp/myupdate/progress.tmp"
-			printf '{"percent":%s,"downloaded_bytes":%s,"total_bytes":%s}\\n' "$PERCENT" "$DOWNLOADED" "$EXPECTED_SIZE" > "$PROGRESS_TMP"
+			printf '{"percent":%s,"downloaded_bytes":%s,"total_bytes":%s}\n' "$PERCENT" "$DOWNLOADED" "$EXPECTED_SIZE" > "$PROGRESS_TMP"
 			chmod 600 "$PROGRESS_TMP"; mv "$PROGRESS_TMP" /tmp/myupdate/progress.json
 			sleep 1
 		done
 		CURL_RESULT="$(cat "$T/finished")"
 		wait "$CURL_PID" || true
 		[ "$CURL_RESULT" = 0 ] || fail '资产下载失败'
-		printf '{"percent":100,"downloaded_bytes":%s,"total_bytes":%s}\\n' "$EXPECTED_SIZE" "$EXPECTED_SIZE" > /tmp/myupdate/progress.json
+		printf '{"percent":100,"downloaded_bytes":%s,"total_bytes":%s}\n' "$EXPECTED_SIZE" "$EXPECTED_SIZE" > /tmp/myupdate/progress.json
 		chmod 600 /tmp/myupdate/progress.json
 	else
 		R="$(curl -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" -w '%{http_code}' "$LOC")" || fail '资产下载失败'
