@@ -58,7 +58,7 @@ return view.extend({
 		token.optional = true;
 		token.depends('repo_visibility', 'private');
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独加密权限保存，不写入 UCI 配置。');
+		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置。');
 		token.cfgvalue = function() { return ''; };
 		token.validate = function(section_id, value) {
 			if (visibility.formvalue(section_id) == 'private' && !value && !cfg.token_configured)
