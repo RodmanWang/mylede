@@ -61,7 +61,7 @@ function save_config(args) {
 		c.set(CONFIG, 'main', key, value);
 	}
 	if ('repo_url' in args && args.repo_url != '' &&
-	    !match(args.repo_url, /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?(?:\.git)?$/))
+	    !match(args.repo_url, /^https:\/\/github[.]com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+([.]git)?\/?$/))
 		return { ok: false, error: 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' };
 	if ('custom_keep_paths' in args) {
 		if (!valid_keep_paths(args.custom_keep_paths))
@@ -95,14 +95,20 @@ function set_token(args) {
 	fs.chmod(TOKEN, 0o600);
 	return { ok: true };
 }
+function cleanup_task_request(temp_dir, action_file) {
+	if (action_file != null) fs.unlink(action_file);
+	if (temp_dir != null) fs.rmdir(temp_dir);
+}
 function start_task(action) {
 	if (![ 'check', 'download', 'upgrade' ].includes(action))
 		return { ok: false, error: '操作无效' };
 
-	let temp_dir = null, action_file = null;
+	let temp_dir = null, action_file = null, error = null;
 
 	try {
-		if (fs.access(RUNTIME) !== true && fs.mkdir(RUNTIME, 0o700) !== true)
+		if (fs.access(RUNTIME) !== true &&
+		    fs.mkdir(RUNTIME, 0o700) !== true &&
+		    fs.access(RUNTIME) !== true)
 			return { ok: false, error: '无法创建 MyUpdate 运行目录：' + (fs.error() || '未知文件系统错误') };
 
 		if (fs.access(LOCK) === true)
@@ -119,25 +125,23 @@ function start_task(action) {
 
 		action_file = temp_dir + '/action';
 		if (fs.writefile(action_file, action + '\n') == null)
-			return { ok: false, error: '无法写入任务请求：' + (fs.error() || '未知文件系统错误') };
-
-		if (fs.chmod(action_file, 0o600) !== true)
-			return { ok: false, error: '无法设置任务请求权限：' + (fs.error() || '未知文件系统错误') };
-
-		if (fs.rename(temp_dir, REQUEST) !== true)
-			return { ok: false, error: '任务队列已被占用或无法发布请求：' + (fs.error() || '未知文件系统错误') };
-
-		temp_dir = null;
-		action_file = null;
-		return { ok: true, queued: true, message: '任务请求已排队，后台服务将在数秒内执行' };
+			error = '无法写入任务请求：' + (fs.error() || '未知文件系统错误');
+		else if (fs.chmod(action_file, 0o600) !== true)
+			error = '无法设置任务请求权限：' + (fs.error() || '未知文件系统错误');
+		else if (fs.rename(temp_dir, REQUEST) !== true)
+			error = '任务队列已被占用或无法发布请求：' + (fs.error() || '未知文件系统错误');
+		else {
+			temp_dir = null;
+			action_file = null;
+			return { ok: true, queued: true, message: '任务请求已排队，后台服务将在数秒内执行' };
+		}
 	}
 	catch (e) {
-		return { ok: false, error: '提交任务请求时发生 Ucode 异常：' + e };
+		error = '提交任务请求时发生 Ucode 异常：' + e;
 	}
-	finally {
-		if (action_file != null) fs.unlink(action_file);
-		if (temp_dir != null) fs.rmdir(temp_dir);
-	}
+
+	cleanup_task_request(temp_dir, action_file);
+	return { ok: false, error: error || '提交任务请求失败' };
 }
 return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
