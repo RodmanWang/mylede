@@ -30,9 +30,14 @@ case "$CODE" in
 	LOC="$(awk 'tolower($1)=="location:" { sub(/\r$/, "", $2); v=$2 } END { print v }' "$T/headers")"
 	case "$LOC" in https://release-assets.githubusercontent.com/*|https://objects.githubusercontent.com/*|https://github.com/*) ;; *) fail '资产重定向地址不受信任';; esac
 	if [ "$EXPECTED_SIZE" -gt 0 ]; then
-		curl -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" "$LOC" &
+		(
+			curl --fail -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" "$LOC"
+			RESULT=$?
+			printf '%s\\n' "$RESULT" > "$T/finished"
+			exit "$RESULT"
+		) &
 		CURL_PID=$!
-		while kill -0 "$CURL_PID" 2>/dev/null; do
+		while [ ! -f "$T/finished" ]; do
 			DOWNLOADED="$(wc -c < "$T/file" 2>/dev/null | tr -d ' ' || echo 0)"
 			case "$DOWNLOADED" in ''|*[!0-9]*) DOWNLOADED=0;; esac
 			PERCENT=$((DOWNLOADED * 100 / EXPECTED_SIZE))
@@ -42,7 +47,9 @@ case "$CODE" in
 			chmod 600 "$PROGRESS_TMP"; mv "$PROGRESS_TMP" /tmp/myupdate/progress.json
 			sleep 1
 		done
-		wait "$CURL_PID" || fail '资产下载失败'
+		CURL_RESULT="$(cat "$T/finished")"
+		wait "$CURL_PID" || true
+		[ "$CURL_RESULT" = 0 ] || fail '资产下载失败'
 		printf '{"percent":100,"downloaded_bytes":%s,"total_bytes":%s}\\n' "$EXPECTED_SIZE" "$EXPECTED_SIZE" > /tmp/myupdate/progress.json
 		chmod 600 /tmp/myupdate/progress.json
 	else
