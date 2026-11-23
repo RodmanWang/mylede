@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 BASE_DIR=/home/ubuntu
 
-for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate; do
+for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate minisign; do
   if [[ ! -e "$ROOT/$item" ]]; then
     echo "::error::Required repository item is missing: $item"
     exit 1
