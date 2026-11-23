@@ -1,0 +1,336 @@
+'use strict';
+'require view';
+'require form';
+'require rpc';
+'require ui';
+'require poll';
+
+var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
+var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
+var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
+var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
+var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
+var callUpgrade = rpc.declare({ object: 'myupdate', method: 'start_upgrade' });
+
+function formatBytes(value) {
+	var n = Number(value || 0);
+	if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GiB';
+	if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MiB';
+	if (n >= 1024) return (n / 1024).toFixed(0) + ' KiB';
+	return n + ' B';
+}
+
+function showStatus(node, s, progressFill, progressLabel, progressPanel) {
+	var state = s.state || 'idle';
+	var current = s.current_version ? '当前版本：' + s.current_version : '';
+	var latest = s.latest_version ? '最新版本：' + s.latest_version : '';
+	var details = [ current, latest ].filter(Boolean).join('　');
+	node.textContent = (s.message || '尚未检测更新') + (details ? '　｜　' + details : '');
+	node.className = 'myupdate-status-message state-' + state;
+	var downloading = state == 'downloading';
+	progressPanel.style.display = downloading ? '' : 'none';
+	if (downloading) {
+		var percent = Math.max(0, Math.min(99, Number(s.download_percent || 0)));
+		progressFill.style.width = percent + '%';
+		progressLabel.textContent = percent + '%　' + formatBytes(s.downloaded_bytes) + ' / ' + formatBytes(s.total_bytes);
+	}
+}
+
+function reportTaskStart(promise, fallback) {
+	return promise.then(function(result) {
+		if (!result || !result.ok)
+			ui.addNotification(null, E('p', result && result.error ? result.error : fallback), 'error');
+		else if (result.queued)
+			ui.addNotification(null, E('p', result.message || _('任务请求已排队，后台服务将在数秒内执行。')), 'info');
+	}).catch(function(error) {
+		var message = error && error.message ? error.message : String(error || fallback);
+		ui.addNotification(null, E('p', message), 'error');
+	});
+}
+
+return view.extend({
+	load: function() {
+		return Promise.all([ callConfig(), callStatus() ]);
+	},
+	render: function(data) {
+		var cfg = data[0] || {}, status = data[1] || {};
+		var m = new form.Map('myupdate');
+		var s = m.section(form.NamedSection, 'main', 'myupdate');
+		s.addremove = false;
+
+		var repo = s.option(form.Value, 'repo_url', _('GitHub 仓库地址'));
+		repo.placeholder = 'https://github.com/OWNER/REPO';
+		repo.description = _('填写仓库完整 HTTPS 地址，例如 https://github.com/OWNER/REPO。不要填写 Release 页面或其他子路径。');
+		repo.rmempty = false;
+		repo.cfgvalue = function() {
+			return cfg.repo_url || '';
+		};
+		repo.validate = function(section_id, value) {
+			if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(value || ''))
+				return _('请输入有效的 GitHub 仓库地址，例如 https://github.com/OWNER/REPO');
+			return true;
+		};
+
+		var visibility = s.option(form.ListValue, 'repo_visibility', _('仓库可见性'));
+		visibility.value('public', _('公开'));
+		visibility.value('private', _('私有'));
+		visibility.default = 'public';
+		visibility.description = _('公开仓库无需访问令牌；选择私有后，需要在下方配置 GitHub Token。');
+
+		var token = s.option(form.Value, '_github_token', _('GitHub Token'));
+		token.password = true;
+		token.rmempty = true;
+		token.optional = true;
+		token.depends('repo_visibility', 'private');
+		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
+		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置。');
+		token.cfgvalue = function() { return ''; };
+		token.validate = function(section_id, value) {
+			if (visibility.formvalue(section_id) == 'private' && !value && !cfg.token_configured)
+				return _('私有仓库尚未配置 GitHub Token，请在此输入 Token。');
+			return true;
+		};
+		token.write = function(section_id, value) {
+			if (!value) return Promise.resolve();
+			return callToken(value).then(function(result) {
+				if (!result || !result.ok)
+					throw new Error(result && result.error ? result.error : _('GitHub Token 保存失败'));
+			});
+		};
+
+		var mode = s.option(form.ListValue, 'upgrade_mode', _('检查模式'));
+		mode.value('manual', _('手动检查'));
+		mode.value('notify', _('定时检查，有更新时显示状态'));
+		mode.value('auto', _('每天定时检查并自动下载、验证和升级'));
+		mode.default = 'manual';
+
+		var interval = s.option(form.Value, 'check_interval', _('检查间隔（秒）'));
+		interval.datatype = 'uinteger';
+		interval.default = '86400';
+		interval.rmempty = false;
+		interval.validate = function(section_id, value) {
+			var n = Number(value);
+			if (!Number.isInteger(n) || n < 900 || n > 604800)
+				return _('检查间隔必须为 900 至 604800 秒。86400 秒为一天。');
+			return true;
+		};
+		interval.description = _('用于定时检查模式；默认 86400 秒（一天）。');
+
+		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('每天自动升级时间（路由器本地时间）'));
+		autoTime.default = '04:00';
+		autoTime.datatype = 'time';
+		autoTime.description = _('仅在选择自动升级模式时生效；每天最多自动执行一次。');
+
+		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
+		pubkey.rows = 2;
+		pubkey.monospace = true;
+		pubkey.description = _('公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。支持粘贴 minisign.pub 完整两行内容，或直接填写 Base64 公钥主体。');
+		pubkey.validate = function(section_id, value) {
+			var key = (value || '').trim();
+			if (!/^RW[A-Za-z0-9+/]{54}$/.test(key))
+				return _('公钥格式不正确。请填写 56 位 Base64 公钥主体；若使用 minisign.pub 两行格式，请先点击“识别并转换”。');
+			return true;
+		};
+
+		var convertKey = E('button', {
+			'class': 'btn cbi-button cbi-button-action',
+			click: function() {
+				var widget = pubkey.getUIElement('main');
+				if (!widget) {
+					ui.addNotification(null, E('p', _('找不到公钥输入框，请刷新页面后重试。')), 'error');
+					return;
+				}
+				var raw = (widget.getValue() || '').trim();
+				var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
+				var candidates = lines.filter(function(line) { return /^RW/.test(line); });
+				if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
+					ui.addNotification(null, E('p', _('当前公钥已经是正确的 Base64 格式，无需转换。')), 'info');
+					return;
+				}
+				if (candidates.length != 1 || !/^RW[A-Za-z0-9+/]{54}$/.test(candidates[0])) {
+					ui.addNotification(null, E('p', _('无法识别公钥格式。请粘贴 minisign.pub 的完整两行内容，或直接填写以 RW 开头的 56 位 Base64 公钥主体。')), 'error');
+					return;
+				}
+				widget.setValue(candidates[0]);
+				var inputNode = widget.node || widget;
+				if (inputNode && inputNode.dispatchEvent)
+					inputNode.dispatchEvent(new Event('change', { bubbles: true }));
+				ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
+			}
+		}, _('识别并转换'));
+
+		var downgrade = s.option(form.ListValue, 'allow_downgrade', _('允许降级'));
+		downgrade.value('0', _('禁止'));
+		downgrade.value('1', _('允许'));
+		downgrade.default = '0';
+
+		var keepPathValues = (cfg.custom_keep_paths || []).slice();
+		var keepPaths = s.option(form.DynamicList, 'custom_keep_paths', _('自定义文件保留路径'));
+		keepPaths.optional = true;
+		keepPaths.rmempty = true;
+		keepPaths.cfgvalue = function() { return keepPathValues.slice(); };
+		keepPaths.formvalue = function() { return keepPathValues.slice(); };
+		keepPaths.validate = function(section_id, values) {
+			var paths = Array.isArray(values) ? values : keepPathValues;
+			for (var i = 0; i < paths.length; i++) {
+				var path = String(paths[i] || '').trim();
+				if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path))
+					return _('路径格式无效：请填写以 / 开头的文件或目录绝对路径。');
+				if (/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path))
+					return _('不能保留 /proc、/sys、/dev、/tmp、/rom 或 /overlay 下的路径。');
+			}
+			return true;
+		};
+		keepPaths.description = _('支持批量输入：每行一条，或使用英文逗号分隔。添加后会拆分为独立项目；保存时仍按 UCI list 逐项写入。');
+		keepPaths.renderWidget = function(section_id) {
+			var input = E('textarea', {
+				'class': 'myupdate-path-batch-input',
+				'placeholder': _('例如：\n/.uuplugin_uuid\n/etc/config/network\n/etc/ssl/nas_ssl'),
+				'rows': '4'
+			});
+			var chips = E('div', { 'class': 'myupdate-path-chips' });
+			var message = E('div', { 'class': 'myupdate-path-hint' });
+			var rootSelect = E('select', { 'class': 'myupdate-path-root-select' }, [
+				E('option', { value: '' }, _('从常用固件目录中选择…')),
+				E('option', { value: '/' }, _('根目录 /（可填写根目录下的文件）')),
+				E('option', { value: '/etc' }, '/etc'),
+				E('option', { value: '/root' }, '/root'),
+				E('option', { value: '/usr' }, '/usr'),
+				E('option', { value: '/www' }, '/www'),
+				E('option', { value: '/mnt' }, '/mnt'),
+				E('option', { value: '/opt' }, '/opt'),
+				E('option', { value: '/var' }, '/var'),
+				E('option', { value: '/home' }, '/home')
+			]);
+			function renderChips() {
+				while (chips.firstChild) chips.removeChild(chips.firstChild);
+				keepPathValues.forEach(function(path, index) {
+					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
+						E('span', { 'class': 'myupdate-path-chip-text' }, path),
+						E('button', { 'type': 'button', 'class': 'myupdate-path-chip-remove', 'aria-label': _('删除 ') + path,
+							click: function() { keepPathValues.splice(index, 1); renderChips(); } }, '×')
+					]));
+				});
+			}
+			function addPaths(raw) {
+				var items = String(raw || '').split(/[\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
+				var added = 0, invalid = [];
+				items.forEach(function(path) {
+					if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path) ||
+					    /^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path)) {
+						invalid.push(path);
+						return;
+					}
+					if (keepPathValues.indexOf(path) < 0) { keepPathValues.push(path); added++; }
+				});
+				renderChips();
+				message.textContent = invalid.length ? _('以下路径格式无效或属于禁止保留目录：') + ' ' + invalid.join(', ') :
+					(added ? _('已添加 ') + added + _(' 个路径。') : _('没有新增路径（可能已存在或输入为空）。'));
+				if (!invalid.length) input.value = '';
+			}
+			var addButton = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add',
+				click: function() { addPaths(input.value); } }, _('添加'));
+			rootSelect.addEventListener('change', function(ev) {
+				if (ev.target.value) { input.value = (input.value ? input.value.replace(/\s+$/, '') + '\n' : '') + ev.target.value; ev.target.value = ''; }
+			});
+			input.addEventListener('keydown', function(ev) {
+				if ((ev.ctrlKey || ev.metaKey) && ev.key == 'Enter') { ev.preventDefault(); addPaths(input.value); }
+			});
+			renderChips();
+			return E('div', { 'class': 'myupdate-path-editor' }, [
+				E('div', { 'class': 'myupdate-path-entry-row' }, [ input, addButton ]),
+				E('div', { 'class': 'myupdate-path-picker-row' }, [ rootSelect,
+					E('span', {}, _('快捷入口包含根目录 /、/etc 和 /root；选择根目录后可在输入框补全文件名，例如 /.uuplugin_uuid。根目录本身不能作为保留项添加。')) ]),
+				message, chips
+			]);
+		};
+
+		var statusText = E('div', { id: 'myupdate-status', 'class': 'myupdate-status-message' });
+		var progressFill = E('div', { 'class': 'myupdate-progress-fill' });
+		var progressLabel = E('div', { 'class': 'myupdate-progress-label' }, '0%');
+		var progressPanel = E('div', { 'class': 'myupdate-progress', style: 'display:none' }, [
+			E('div', { 'class': 'myupdate-progress-track' }, [ progressFill ]),
+			progressLabel
+		]);
+		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
+			E('div', { 'class': 'myupdate-status-heading' }, [
+				E('h3', _('检测状态')),
+				E('span', { 'class': 'myupdate-status-caption' }, _('固件检查、下载与验证进度'))
+			]),
+			statusText,
+			progressPanel,
+			E('div', { 'class': 'myupdate-status-note' }, _('自动升级会按设定时间检查更新；发现新版本后可下载并验证签名、设备兼容性和 SHA256。验证通过后，需手动确认才会执行 sysupgrade 并重启。升级使用 LEDE 默认配置备份与恢复机制。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
+			E('div', { 'class': 'myupdate-actions' }, [
+				E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
+					return reportTaskStart(callCheck(), _('检查任务启动失败'));
+				} }, _('检查更新')),
+				E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
+					return reportTaskStart(callDownload(), _('下载并验证任务启动失败'));
+				} }, _('下载并验证')),
+				E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
+					if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
+					return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'));
+				} }, _('执行升级'))
+			])
+		]);
+		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
+
+		poll.add(function() {
+			return callStatus().then(function(st) { showStatus(statusText, st || {}, progressFill, progressLabel, progressPanel); });
+		}, 3);
+
+			var originalPubkeyRender = pubkey.renderWidget;
+			pubkey.renderWidget = function(section_id, option_index, cfgvalue) {
+				var inputWidget = originalPubkeyRender.apply(this, arguments);
+				return E('div', { 'class': 'myupdate-key-input-row' }, [
+					E('div', { 'class': 'myupdate-key-input' }, [ inputWidget ]),
+					E('div', { 'class': 'myupdate-key-convert' }, [ convertKey ])
+				]);
+			};
+		return m.render().then(function(mapNode) {
+			var style = E('style', {}, `
+				.myupdate-status-panel{border:1px solid #c8d4df;border-left:4px solid #64748b;border-radius:8px;background:var(--background-color-high,#fff);padding:18px 20px;margin:12px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.045)}
+				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+				.myupdate-status-heading h3{margin:0;font-size:1.2rem}
+				.myupdate-status-caption{font-size:.9em;color:var(--gray-color-medium,#777)}
+				.myupdate-status-message{padding:12px 14px;border-radius:6px;background:#f1f5f9;color:#334155;font-weight:600;line-height:1.65}
+				.myupdate-status-message.state-checked,.myupdate-status-message.state-downloaded,.myupdate-status-message.state-current{background:#ecfdf3;color:#166534;border-left:4px solid #16a34a}
+				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running,.myupdate-status-message.state-verifying{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
+				.myupdate-status-message.state-error{background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626}
+				.myupdate-status-message.state-upgrading{background:#fff7ed;color:#c2410c;border-left:4px solid #f97316}
+				.myupdate-status-note{margin:12px 0;color:var(--gray-color-medium,#666);font-size:.92em;line-height:1.7}
+				.myupdate-actions{display:flex;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--border-color-medium,#ddd)}
+				.myupdate-progress{margin-top:14px}
+				.myupdate-progress-track{height:13px;border-radius:10px;background:#e2e8f0;overflow:hidden}
+				.myupdate-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#2563eb,#16a34a);border-radius:10px;transition:width .35s ease}
+				.myupdate-progress-label{margin-top:6px;text-align:right;font-size:.9em;color:var(--gray-color-medium,#555);font-variant-numeric:tabular-nums}
+				#myupdate-status{min-width:0}
+				#myupdate-status + div{margin-top:8px}
+				.myupdate-key-input-row{display:flex;align-items:stretch;gap:10px;width:100%}
+				.myupdate-key-input{flex:1;min-width:0}
+				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important}
+				.myupdate-key-convert{display:flex;align-items:center;flex:0 0 auto}
+				.myupdate-path-editor{width:100%}
+				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:10px}
+				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;resize:vertical}
+				.myupdate-path-entry-row .btn{align-self:stretch;min-width:76px}
+				.myupdate-path-picker-row{display:flex;align-items:center;gap:10px;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
+				.myupdate-path-root-select{max-width:260px}
+				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
+				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+				.myupdate-path-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:7px 10px;border-radius:4px;background:var(--background-color-high,#f1f1f1);border:1px solid var(--border-color-medium,#ddd)}
+				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
+				.myupdate-path-chip-remove{border:0;background:transparent;color:var(--gray-color-high,#555);font-size:1.25em;line-height:1;cursor:pointer;padding:0 1px}
+				.myupdate-path-chip-remove:hover{color:#dc2626}
+				@media(max-width:767px){.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:column}.myupdate-key-convert .btn{width:100%}.myupdate-path-picker-row{align-items:flex-start;flex-direction:column}}
+				@media(max-width:767px){.myupdate-status-heading{align-items:flex-start;flex-direction:column}.myupdate-actions .btn{flex:1}.myupdate-status-panel{padding:14px}}
+			`);
+			return E('div', { 'class': 'cbi-map myupdate-page' }, [
+				style,
+				E('h2', _('固件在线升级')),
+				statusPanel,
+				mapNode
+			]);
+		});
+	}
+});
