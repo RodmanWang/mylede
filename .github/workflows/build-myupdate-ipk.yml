@@ -1,4 +1,4 @@
-name: Build MyUpdate IPK
+name: 编译 MyUpdate IPK
 
 on:
   workflow_dispatch:
@@ -12,17 +12,17 @@ concurrency:
 
 jobs:
   build:
-    name: Compile luci-app-myupdate only
+    name: 仅编译 luci-app-myupdate 软件包
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
-      - name: Checkout MyLEDE repository
+      - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           path: mylede
 
-      - name: Install OpenWrt build dependencies
+      - name: 安装 OpenWrt 编译依赖
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -35,13 +35,13 @@ jobs:
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
 
-      - name: Checkout LEDE source
+      - name: 检出 LEDE 源码
         shell: bash
         run: |
           set -Eeuo pipefail
           git clone --depth 1 https://github.com/coolsnowwolf/lede.git lede
 
-      - name: Prepare feeds and local packages
+      - name: 准备软件源与本地软件包
         shell: bash
         working-directory: lede
         run: |
@@ -55,7 +55,7 @@ jobs:
           test -f package/lean/minisign/Makefile
           test -f feeds/luci/luci.mk
 
-      - name: Compile MyUpdate package
+      - name: 编译 MyUpdate 软件包
         shell: bash
         env:
           TOPDIR: ${{ github.workspace }}/lede
@@ -64,7 +64,7 @@ jobs:
           set -Eeuo pipefail
           bash mylede/scripts/build-myupdate-package.sh
 
-      - name: Verify IPK output
+      - name: 检查 IPK 编译产物
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -77,10 +77,10 @@ jobs:
           ls -lh myupdate-ipk/
           sha256sum myupdate-ipk/*.ipk
 
-      - name: Upload installable IPK files
+      - name: 上传可安装的 IPK 文件
         uses: actions/upload-artifact@v7
         with:
-          name: luci-app-myupdate-ipk
+          name: MyUpdate 安装包
           path: myupdate-ipk/*.ipk
           if-no-files-found: error
           retention-days: 14
