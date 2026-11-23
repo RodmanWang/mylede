@@ -70,7 +70,25 @@ for entry in \
 done
 
 echo "分区配置检查通过：Kernel=${KERNEL_PARTSIZE} MB，Rootfs=${ROOTFS_PARTSIZE} MB。"
-echo '========== 配置检查通过，开始完整固件编译 =========='
+
+# CMake packages use LEDE's staged host Ninja. A restored toolchain cache can
+# contain stale Ninja build stamps while the actual host binary is missing.
+# Rebuild and install Ninja before package compilation when either copy is absent.
+NINJA_BIN="$TOPDIR/staging_dir/host/bin/ninja"
+NINJA_BUILD_BIN="$(find "$TOPDIR/build_dir/host" -mindepth 2 -maxdepth 2 -type f -name ninja -perm /111 -print -quit 2>/dev/null || true)"
+if [[ ! -x "$NINJA_BIN" || -z "$NINJA_BUILD_BIN" ]]; then
+    echo '检测到 LEDE 主机 Ninja 工具缓存不完整，正在清理并重新构建。'
+    make tools/ninja/clean
+    make tools/ninja/install V=s
+fi
+
+if [[ ! -x "$NINJA_BIN" ]]; then
+    echo "::error::LEDE 主机 Ninja 工具安装失败：$NINJA_BIN 不存在或不可执行。"
+    exit 1
+fi
+echo "LEDE 主机 Ninja 版本：$("$NINJA_BIN" --version)"
+
+echo '========== 配置及主机工具检查通过，开始完整固件编译 =========='
 make V=s -j"$(nproc)"
 
 echo '========== 固件编译完成 =========='
