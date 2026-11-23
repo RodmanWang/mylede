@@ -4,7 +4,9 @@ set -Eeuo pipefail
 ROOT="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 BASE_DIR=/home/ubuntu
 
-for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate; do
+# minisign is a first-party package in this repository and is consumed by
+# 01-check-env.sh from the prepared /home/ubuntu workspace.
+for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate minisign; do
   if [[ ! -e "$ROOT/$item" ]]; then
     echo "::error::Required repository item is missing: $item"
     exit 1
@@ -14,7 +16,7 @@ done
 sudo mkdir -p "$BASE_DIR"
 sudo chown "$USER":"$USER" "$BASE_DIR"
 
-for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate; do
+for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate minisign; do
   rm -rf "$BASE_DIR/$item"
   cp -a "$ROOT/$item" "$BASE_DIR/$item"
 done
