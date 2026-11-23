@@ -21,16 +21,16 @@ on:
         required: true
         type: choice
         options:
-          - "no"
-          - "yes"
-        default: "no"
+          - "否"
+          - "是"
+        default: "否"
       archive_closed_prs:
         description: "是否同时归档所有已关闭/已合并的历史 PR（普通访客将看到 404）？"
         required: true
         type: choice
         options:
-          - "no"
-          - "yes"
+          - "否"
+          - "是"
         default: "no"
 
 permissions:
@@ -136,7 +136,7 @@ jobs:
 
   archive-closed-prs:
     name: 归档已关闭的历史拉取请求
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == 'yes' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -251,12 +251,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Explain that no changes will be made
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != 'yes' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != '是' }}
         run: |
-          echo "已选择 no。本次运行不会修改任何分支或提交历史。"
+          echo "已选择“否”。本次运行不会修改任何分支或提交历史。"
 
       - name: 验证是否从 main 分支手动触发
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -266,7 +266,7 @@ jobs:
           fi
 
       - name: Checkout the exact dispatched main revision
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -274,7 +274,7 @@ jobs:
           persist-credentials: true
 
       - name: 将每个分支的历史替换为单个根提交
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         shell: bash
         env:
           EXPECTED_MAIN_SHA: ${{ github.sha }}
@@ -306,7 +306,7 @@ jobs:
             orphan_branch="history-reset-${GITHUB_RUN_ID}-${index}"
             git checkout --orphan "$orphan_branch"
             git add --all
-            git commit --allow-empty -m "Reset $branch history to current repository snapshot"
+            git commit --allow-empty -m "将分支 $branch 的历史重置为当前文件快照"
             git push --force-with-lease="$ref_name:$expected_sha" origin "HEAD:$ref_name"
             echo "分支 $branch 已完成历史重置。"
             git checkout --detach "$expected_sha"
