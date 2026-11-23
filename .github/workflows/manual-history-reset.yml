@@ -1,4 +1,4 @@
-name: 仓库历史与保留策略维护
+name: 仓库记录清理
 
 on:
   schedule:
