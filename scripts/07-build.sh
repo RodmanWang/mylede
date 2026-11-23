@@ -62,7 +62,7 @@ minimal_unset = '# ' + minimal_key + ' is not set'
 if minimal_pattern.search(data):
     data = minimal_pattern.sub(minimal_unset, data, count=1)
 else:
-    data += '\\n' + minimal_unset + '\\n'
+    data += '\n' + minimal_unset + '\n'
 
 config.write_text(data, encoding='utf-8')
 print(f'已设置内核分区：{kernel} MB')
@@ -73,8 +73,8 @@ PY
 # 让 Kconfig 规范化配置，再检查固定值及 libsodium API 配置是否被接受。
 make defconfig
 
-for entry in \\
-    "CONFIG_TARGET_KERNEL_PARTSIZE=$KERNEL_PARTSIZE" \\
+for entry in \
+    "CONFIG_TARGET_KERNEL_PARTSIZE=$KERNEL_PARTSIZE" \
     "CONFIG_TARGET_ROOTFS_PARTSIZE=$ROOTFS_PARTSIZE"; do
     grep -Fxq "$entry" .config || {
         echo "错误：当前 LEDE 配置未接受固定配置：$entry" >&2
