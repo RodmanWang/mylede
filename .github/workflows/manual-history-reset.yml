@@ -24,10 +24,6 @@ on:
           - "no"
           - "yes"
         default: "no"
-      confirmation_text:
-        description: '只有选择 yes 时，才输入：DELETE ALL BRANCH COMMITS'
-        required: false
-        type: string
       archive_closed_prs:
         description: "是否同时归档所有已关闭/已合并的历史 PR（普通访客将看到 404）？"
         required: true
@@ -36,10 +32,6 @@ on:
           - "no"
           - "yes"
         default: "no"
-      archive_confirmation:
-        description: '只有选择 yes 时，才输入：ARCHIVE CLOSED PULL REQUESTS'
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -63,7 +55,22 @@ jobs:
       INPUT_KEEP_COUNT: ${{ inputs.keep_count }}
       CURRENT_RUN_ID: ${{ github.run_id }}
     steps:
-      - name: Clean old Releases and all workflow runs
+      - name: Clean all failed Actions runs first
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Purge failed runs repository-wide before applying age/count retention.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion == "failure") | .id' > "$RUNNER_TEMP/failed-run-ids.txt"
+          FAILED_RUN_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            FAILED_RUN_DELETED=$((FAILED_RUN_DELETED + 1))
+          done < "$RUNNER_TEMP/failed-run-ids.txt"
+          echo "已优先删除全仓库所有 workflows 的失败运行记录：$FAILED_RUN_DELETED 条。"
+          echo "- 首轮清理失败 Actions runs：$FAILED_RUN_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply retention to Releases and remaining workflow runs
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -138,18 +145,12 @@ jobs:
       # Configure PERSON_TOKEN as a repository Actions secret (fine-grained PAT).
       GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
     steps:
-      - name: Validate archive confirmation
+      - name: Validate manual run from main
         shell: bash
-        env:
-          ARCHIVE_CONFIRMATION: ${{ inputs.archive_confirmation }}
         run: |
           set -euo pipefail
-          if [[ "$ARCHIVE_CONFIRMATION" != "ARCHIVE CLOSED PULL REQUESTS" ]]; then
-            echo "::error::PR 归档二次确认不匹配。必须准确输入 ARCHIVE CLOSED PULL REQUESTS。"
-            exit 1
-          fi
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::请从 main 分支手动运行此 workflow；定时触发不会执行 PR 归档。"
+            echo "::error::请从 main 分支手动运行此 workflow；PR 归档仅允许在 main 上手动触发。"
             exit 1
           fi
 
@@ -249,28 +250,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Explain that no changes will be made
-        if: ${{ inputs.confirm_reset != 'yes' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != 'yes' }}
         run: |
           echo "已选择 no。本次运行不会修改任何分支或提交历史。"
 
-      - name: Validate destructive confirmation
-        if: ${{ inputs.confirm_reset == 'yes' }}
+      - name: Validate manual run from main
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
         shell: bash
-        env:
-          CONFIRMATION_TEXT: ${{ inputs.confirmation_text }}
         run: |
           set -euo pipefail
-          if [[ "$CONFIRMATION_TEXT" != "DELETE ALL BRANCH COMMITS" ]]; then
-            echo "::error::二次确认不匹配。必须准确输入 DELETE ALL BRANCH COMMITS。"
-            exit 1
-          fi
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::请从 main 分支手动运行此 workflow；定时触发不会执行分支历史重置。"
+            echo "::error::请从 main 分支手动运行此 workflow；分支历史重置仅允许在 main 上手动触发。"
             exit 1
           fi
 
       - name: Checkout the exact dispatched main revision
-        if: ${{ inputs.confirm_reset == 'yes' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -278,7 +273,7 @@ jobs:
           persist-credentials: true
 
       - name: Replace history of every branch with one root commit
-        if: ${{ inputs.confirm_reset == 'yes' && github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
         shell: bash
         env:
           EXPECTED_MAIN_SHA: ${{ github.sha }}
