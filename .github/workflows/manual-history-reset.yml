@@ -31,7 +31,7 @@ on:
         options:
           - "否"
           - "是"
-        default: "no"
+        default: "否"
 
 permissions:
   contents: write
@@ -250,7 +250,7 @@ jobs:
     name: 重置全部分支的提交历史
     runs-on: ubuntu-latest
     steps:
-      - name: Explain that no changes will be made
+      - name: 说明本次不会执行历史修改
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != '是' }}
         run: |
           echo "已选择“否”。本次运行不会修改任何分支或提交历史。"
@@ -265,7 +265,7 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout the exact dispatched main revision
+      - name: 检出本次手动触发时的 main 分支版本
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         uses: actions/checkout@v4
         with:
