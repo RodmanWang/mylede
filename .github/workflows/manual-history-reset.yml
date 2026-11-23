@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       keep_days:
-        description: '历史保留天数（适用于全部 workflow runs 和正式 Releases）'
+        description: '历史保留天数（适用于全部工作流运行记录和正式版本发布）'
         required: true
         default: '7'
         type: string
       keep_count:
-        description: '至少保留的最新记录数量（适用于全部 workflow runs 和正式 Releases）'
+        description: '至少保留的最新记录数量（适用于全部工作流运行记录和正式版本发布）'
         required: true
         default: '30'
         type: string
@@ -25,7 +25,7 @@ on:
           - "是"
         default: "否"
       archive_closed_prs:
-        description: "是否同时归档所有已关闭/已合并的历史 PR（普通访客将看到 404）？"
+        description: "是否同时归档所有已关闭或已合并的历史拉取请求（普通访客将看到 404）？"
         required: true
         type: choice
         options:
@@ -184,10 +184,10 @@ jobs:
           count="$(wc -l < "$candidates" | tr -d ' ')"
           echo "发现 $count 个尚未归档的已关闭或已合并拉取请求；未关闭的拉取请求不会被处理。"
           {
-            echo "## PR 归档清单"
+            echo "## 历史拉取请求归档清单"
             echo ""
             if [[ "$count" == "0" ]]; then
-              echo "没有需要归档的历史 PR。"
+              echo "没有需要归档的历史拉取请求。"
             else
               while IFS= read -r pr; do
                 number="$(jq -r '.number' <<< "$pr")"
@@ -230,7 +230,7 @@ jobs:
           done < "$candidates"
 
           {
-            echo "## PR 归档执行结果"
+            echo "## 历史拉取请求归档结果"
             echo "- 成功：$succeeded"
             echo "- 失败：$failed"
             if [[ "$failed" -gt 0 ]]; then
@@ -244,7 +244,7 @@ jobs:
             exit 1
           fi
 
-          echo "已完成历史 PR 归档；这些 PR 对无仓库访问权限的访客将返回 404。"
+          echo "已完成历史拉取请求归档；无仓库访问权限的访客访问这些页面时将看到 404。"
 
   reset-main-history:
     name: 重置全部分支的提交历史
