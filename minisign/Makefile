@@ -28,11 +28,11 @@ define Package/minisign/description
  Minisign is a simple tool to sign files and verify Ed25519 signatures.
 endef
 
-# OpenWrt performs target-binary stripping during package installation. Avoid
-# CMake's upstream POST_BUILD strip hook: the cross toolchain may expose
-# CMAKE_STRIP as the relative no-op command ':', which Ninja resolves under
-# the build directory and then tries to execute as a file.
-CMAKE_OPTIONS += -DBUILD_STATIC_EXECUTABLES=OFF -DCMAKE_STRIP=/bin/true
+# OpenWrt performs target-binary stripping during package installation.
+# Disable upstream CMake's POST_BUILD strip hook entirely: invoking the
+# cross-strip tool on the host-side build target can fail before package
+# installation. An empty CMAKE_STRIP disables that upstream custom command.
+CMAKE_OPTIONS += -DBUILD_STATIC_EXECUTABLES=OFF -DCMAKE_STRIP=
 
 define Package/minisign/install
 	$(INSTALL_DIR) $(1)/usr/bin
