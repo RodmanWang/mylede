@@ -8,7 +8,7 @@ sudo mkdir -p "$BASE_DIR"
 sudo chown "$USER":"$USER" "$BASE_DIR"
 
 if [[ ! "$LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "::error::Invalid LEDE commit: $LEDE_COMMIT"
+  echo "::error::LEDE 提交版本无效：$LEDE_COMMIT"
   exit 1
 fi
 
@@ -33,5 +33,5 @@ fi
 git clone --bare --depth 1 "file://$TOPDIR" "$BASE_DIR/lede-pinned-origin.git"
 git remote set-url origin "file://$BASE_DIR/lede-pinned-origin.git"
 
-echo "Pinned LEDE source: $(git rev-parse HEAD)"
-echo "Toolchain source history: $(git log --pretty=tformat:%h -n1 tools toolchain)"
+echo "已锁定 LEDE 源码版本：$(git rev-parse HEAD)"
+echo "工具链源码历史版本：$(git log --pretty=tformat:%h -n1 tools toolchain)"
