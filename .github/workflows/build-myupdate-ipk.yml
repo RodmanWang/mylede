@@ -1,4 +1,4 @@
-name: 编译 MyUpdate IPK
+name: 编译在线升级插件
 
 on:
   workflow_dispatch:
