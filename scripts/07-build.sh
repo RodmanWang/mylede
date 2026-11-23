@@ -54,40 +54,16 @@ for key, value in updates.items():
 
 # minisign 0.11 uses libsodium's legacy scrypt API. The packages feed
 # defaults LIBSODIUM_MINIMAL to y, which hides that API from sodium.h.
-minimal_key = 'CONFIG_LIBSODIUM_MINIMAL'
-minimal_pattern = re.compile(
-    r'^(?:# )?' + re.escape(minimal_key) + r'(?:=.*| is not set)
-echo "分区配置检查通过：Kernel=${KERNEL_PARTSIZE} MB，Rootfs=${ROOTFS_PARTSIZE} MB。"
-
-# CMake packages use LEDE's staged host Ninja. A restored toolchain cache can
-# contain stale Ninja build stamps while the actual host binary is missing.
-# Rebuild and install Ninja before package compilation when either copy is absent.
-NINJA_BIN="$TOPDIR/staging_dir/host/bin/ninja"
-NINJA_BUILD_BIN="$(find "$TOPDIR/build_dir/host" -mindepth 2 -maxdepth 2 -type f -name ninja -perm /111 -print -quit 2>/dev/null || true)"
-if [[ ! -x "$NINJA_BIN" || -z "$NINJA_BUILD_BIN" ]]; then
-    echo '检测到 LEDE 主机 Ninja 工具缓存不完整，正在清理并重新构建。'
-    make tools/ninja/clean
-    make tools/ninja/install V=s
-fi
-
-if [[ ! -x "$NINJA_BIN" ]]; then
-    echo "::error::LEDE 主机 Ninja 工具安装失败：$NINJA_BIN 不存在或不可执行。"
-    exit 1
-fi
-echo "LEDE 主机 Ninja 版本：$("$NINJA_BIN" --version)"
-
-echo '========== 配置及主机工具检查通过，开始完整固件编译 =========='
-make V=s -j"$(nproc)"
-
-echo '========== 固件编译完成 =========='
-echo "固件输出目录：$TOPDIR/bin/targets/x86/64"
-, re.M
-)
-minimal_unset = '# ' + minimal_key + ' is not set'
-if minimal_pattern.search(data):
-    data = minimal_pattern.sub(minimal_unset, data, count=1)
+minimal_enabled = 'CONFIG_LIBSODIUM_MINIMAL=y'
+minimal_disabled = '# CONFIG_LIBSODIUM_MINIMAL is not set'
+config_lines = data.splitlines()
+for index, line in enumerate(config_lines):
+    if line.startswith('CONFIG_LIBSODIUM_MINIMAL=') or line == minimal_disabled:
+        config_lines[index] = minimal_disabled
+        break
 else:
-    data += '\n' + minimal_unset + '\n'
+    config_lines.append(minimal_disabled)
+data = '\n'.join(config_lines) + '\n'
 
 config.write_text(data, encoding='utf-8')
 print(f'已设置内核分区：{kernel} MB')
