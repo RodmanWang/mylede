@@ -54,7 +54,6 @@ for key, value in updates.items():
 
 # minisign 0.11 uses libsodium's legacy scrypt API. The packages feed
 # defaults LIBSODIUM_MINIMAL to y, which hides that API from sodium.h.
-minimal_enabled = 'CONFIG_LIBSODIUM_MINIMAL=y'
 minimal_disabled = '# CONFIG_LIBSODIUM_MINIMAL is not set'
 config_lines = data.splitlines()
 for index, line in enumerate(config_lines):
