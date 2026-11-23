@@ -52,12 +52,25 @@ for key, value in updates.items():
     else:
         data += f'\n{replacement}\n'
 
+# minisign 0.11 uses libsodium's legacy scrypt API. The packages feed
+# defaults LIBSODIUM_MINIMAL to y, which hides that API from sodium.h.
+minimal_disabled = '# CONFIG_LIBSODIUM_MINIMAL is not set'
+config_lines = data.splitlines()
+for index, line in enumerate(config_lines):
+    if line.startswith('CONFIG_LIBSODIUM_MINIMAL=') or line == minimal_disabled:
+        config_lines[index] = minimal_disabled
+        break
+else:
+    config_lines.append(minimal_disabled)
+data = '\n'.join(config_lines) + '\n'
+
 config.write_text(data, encoding='utf-8')
 print(f'已设置内核分区：{kernel} MB')
 print(f'已设置根文件系统分区：{rootfs} MB')
+print('已关闭 libsodium 最小化构建，以保留 minisign 所需的 scrypt API。')
 PY
 
-# 让 Kconfig 规范化配置，再检查固定值是否被接受。
+# 让 Kconfig 规范化配置，再检查固定值及 libsodium API 配置是否被接受。
 make defconfig
 
 for entry in \
@@ -68,6 +81,11 @@ for entry in \
         exit 1
     }
 done
+
+if ! grep -Fxq '# CONFIG_LIBSODIUM_MINIMAL is not set' .config; then
+    echo '::error::libsodium 最小化构建仍处于启用状态，minisign 所需的 scrypt API 不可用。'
+    exit 1
+fi
 
 echo "分区配置检查通过：Kernel=${KERNEL_PARTSIZE} MB，Rootfs=${ROOTFS_PARTSIZE} MB。"
 
