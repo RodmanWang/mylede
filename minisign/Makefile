@@ -14,6 +14,10 @@ PKG_BUILD_DEPENDS:=libsodium
 PKG_INSTALL:=1
 
 include $(INCLUDE_DIR)/package.mk
+
+# The CI runner's host Ninja installation is not reliable; use CMake's
+# Unix Makefiles generator for this small package instead.
+PKG_USE_NINJA:=0
 include $(INCLUDE_DIR)/cmake.mk
 
 define Package/minisign
@@ -28,11 +32,9 @@ define Package/minisign/description
  Minisign is a simple tool to sign files and verify Ed25519 signatures.
 endef
 
-# OpenWrt performs target-binary stripping during package installation.
-# Disable upstream CMake's POST_BUILD strip hook entirely: invoking the
-# cross-strip tool on the host-side build target can fail before package
-# installation. An empty CMAKE_STRIP disables that upstream custom command.
-CMAKE_OPTIONS += -DBUILD_STATIC_EXECUTABLES=OFF -DCMAKE_STRIP=
+# OpenWrt's cmake.mk sets CMAKE_STRIP=:, preventing upstream's POST_BUILD
+# strip command from invoking the cross-strip tool on the host build target.
+CMAKE_OPTIONS += -DBUILD_STATIC_EXECUTABLES=OFF
 
 define Package/minisign/install
 	$(INSTALL_DIR) $(1)/usr/bin
