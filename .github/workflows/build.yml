@@ -1,4 +1,4 @@
-name: MyLEDE Configurable Staged Build and Release
+name: MyLEDE 固件配置、分阶段编译与发布
 
 on:
   workflow_dispatch:
@@ -53,7 +53,7 @@ concurrency:
 
 jobs:
   source_check:
-    name: Preflight - pin all source revisions
+    name: 预检：锁定全部源码版本
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -64,12 +64,12 @@ jobs:
       fingerprint: ${{ steps.detect.outputs.fingerprint }}
       skip_build: ${{ steps.decision.outputs.skip_build }}
     steps:
-      - name: Checkout MyLEDE repository
+      - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Run OTA version contract tests
+      - name: 运行 OTA 版本契约测试
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -77,7 +77,7 @@ jobs:
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/task.sh
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh
 
-      - name: Detect LEDE, feeds and custom package revisions
+      - name: 检测 LEDE、软件源及自定义软件包版本
         id: detect
         env:
           BUILD_TARGET: x86_64
@@ -116,7 +116,7 @@ jobs:
           LEDE_REF='refs/heads/master'
           LEDE_COMMIT="$(git ls-remote "$LEDE_URL" "$LEDE_REF" | awk -v ref="$LEDE_REF" '$2 == ref {print $1; exit}')"
           if [[ ! "$LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo '::error::Cannot resolve coolsnowwolf/lede master.'
+            echo '::error::无法获取 coolsnowwolf/lede 的 master 分支版本。'
             exit 1
           fi
 
@@ -124,7 +124,7 @@ jobs:
           curl --fail --location --retry 3 --retry-delay 2 \
             "https://raw.githubusercontent.com/coolsnowwolf/lede/${LEDE_COMMIT}/feeds.conf.default" \
             --output "$FEEDS_FILE"
-          [[ -s "$FEEDS_FILE" ]] || { echo '::error::feeds.conf.default is empty.'; exit 1; }
+          [[ -s "$FEEDS_FILE" ]] || { echo '::error::feeds.conf.default 文件为空。'; exit 1; }
           FEEDS_SHA256="$(sha256sum "$FEEDS_FILE" | awk '{print $1}')"
 
           python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" <<'PY'
@@ -164,11 +164,11 @@ jobs:
           : > "$RUNNER_TEMP/source-revisions.tsv"
           while IFS=$'\t' read -r repo_name repo_url repo_ref; do
             [[ -n "$repo_name" && -n "$repo_url" && -n "$repo_ref" ]] || continue
-            echo "Checking $repo_name ($repo_url, $repo_ref)"
+            echo "正在检查源码：$repo_name（$repo_url，$repo_ref）"
             remote_output="$(git ls-remote "$repo_url" "$repo_ref")"
             repo_commit="$(printf '%s\n' "$remote_output" | awk -v ref="$repo_ref" '$2 == ref {print $1; exit}')"
             if [[ ! "$repo_commit" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::Cannot resolve $repo_ref for $repo_name ($repo_url)"
+              echo "::error::无法解析 $repo_name（$repo_url）的版本引用 $repo_ref。"
               exit 1
             fi
             printf '%s\t%s\t%s\t%s\n' "$repo_name" "$repo_url" "$repo_ref" "$repo_commit" \
@@ -189,32 +189,32 @@ jobs:
           } > "$RUNNER_TEMP/source-fingerprint-input.txt"
 
           FINGERPRINT="$(sha256sum "$RUNNER_TEMP/source-fingerprint-input.txt" | awk '{print $1}')"
-          echo "Pinned LEDE: $LEDE_COMMIT"
-          echo "Source fingerprint: $FINGERPRINT"
+          echo "已锁定 LEDE 源码版本：$LEDE_COMMIT"
+          echo "源码指纹：$FINGERPRINT"
           echo "lede_commit=$LEDE_COMMIT" >> "$GITHUB_OUTPUT"
 
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
-      - name: Upload immutable source revision lock
+      - name: 上传不可变源码版本锁定清单
         uses: actions/upload-artifact@v7
         with:
-          name: mylede-source-revisions
+          name: 源码版本锁定清单
           path: ${{ runner.temp }}/source-revisions.tsv
           if-no-files-found: error
           retention-days: 1
 
-      - name: Prepare successful-build cache directory
+      - name: 准备成功编译标记缓存目录
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/lede-build-state"
 
-      - name: Restore successful build marker
+      - name: 恢复成功编译标记
         id: successful_build
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/lede-build-state
           key: lede-success-${{ steps.detect.outputs.fingerprint }}-${{ github.sha }}
 
-      - name: Decide whether a rebuild is required
+      - name: 判断是否需要重新编译
         id: decision
         env:
           FORCE_REBUILD: ${{ inputs.force_rebuild }}
@@ -225,17 +225,17 @@ jobs:
           set -Eeuo pipefail
           if [[ "$FORCE_REBUILD" == 'true' || "$REBUILD_TOOLCHAIN" == 'true' ]]; then
             echo 'skip_build=false' >> "$GITHUB_OUTPUT"
-            echo 'Manual rebuild requested.'
+            echo '已请求手动强制重新编译。'
           elif [[ "$CACHE_HIT" == 'true' ]]; then
             echo 'skip_build=true' >> "$GITHUB_OUTPUT"
-            echo 'This exact source fingerprint has already been built and published.'
+            echo '当前源码指纹对应的版本已成功编译并发布。'
           else
             echo 'skip_build=false' >> "$GITHUB_OUTPUT"
-            echo 'A source revision changed or no successful build marker exists.'
+            echo '源码版本已变化，或不存在成功编译标记，需要开始编译。'
           fi
 
   toolchain:
-    name: Runner 1 - Restore or build LEDE host tools and toolchain
+    name: 构建任务一：恢复或编译 LEDE 主机工具与交叉编译工具链
     needs: source_check
     if: needs.source_check.outputs.skip_build != 'true'
     runs-on: ubuntu-24.04
@@ -244,13 +244,13 @@ jobs:
       contents: write
       actions: write
     steps:
-      - name: Checkout MyLEDE repository
+      - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Free unused runner disk space
+      - name: 清理运行器磁盘空间
         uses: endersonmenezes/free-disk-space@v4
         with:
           remove_android: true
@@ -264,30 +264,30 @@ jobs:
           rm_cmd: rm
           testing: false
 
-      - name: Check disk after cleanup
+      - name: 检查清理后的磁盘空间
         shell: bash
         run: |
           set -Eeuo pipefail
           df -hT /
           df -i /
 
-      - name: Clone the exact LEDE revision
+      - name: 克隆指定版本的 LEDE 源码
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
 
-      - name: Download and install immutable source revision lock
+      - name: 下载并安装不可变源码版本锁定清单
         uses: actions/download-artifact@v7
         with:
-          name: mylede-source-revisions
+          name: 源码版本锁定清单
           path: ${{ runner.temp }}/source-lock
-      - name: Install source revision lock
+      - name: 安装源码版本锁定清单
         shell: bash
         run: |
           set -Eeuo pipefail
           install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
 
-      - name: Calculate stable toolchain cache namespace
+      - name: 计算稳定的工具链缓存标识
         id: toolchain_key
         env:
           REBUILD_TOOLCHAIN: ${{ inputs.rebuild_toolchain }}
@@ -302,7 +302,7 @@ jobs:
           echo "config_hash=$CONFIG_HASH" >> "$GITHUB_OUTPUT"
           echo "mixkey=$MIXKEY" >> "$GITHUB_OUTPUT"
 
-      - name: Restore host tools and cross toolchain cache
+      - name: 恢复主机工具与交叉编译工具链缓存
         id: toolchain_cache
         uses: stupidloud/cachewrtbuild@main
         with:
@@ -313,7 +313,7 @@ jobs:
           prefix: /home/ubuntu/lede
           mixkey: ${{ steps.toolchain_key.outputs.mixkey }}
 
-      - name: Restore toolchain from Release fallback
+      - name: 从 Release 备用缓存恢复工具链
         id: toolchain_release_fallback
         if: steps.toolchain_cache.outputs.hit != '1'
         env:
@@ -328,28 +328,28 @@ jobs:
           fi
           TOOLCHAIN_HASH="$(git -C /home/ubuntu/lede log --pretty=tformat:%h -n1 tools toolchain)"
           ASSET_NAME="toolchain-${TOOLCHAIN_MIXKEY}-${TOOLCHAIN_HASH}.tar.zst"
-          echo "Looking for $ASSET_NAME"
+          echo "正在查找工具链缓存文件：$ASSET_NAME"
           if gh release download toolchain-cache --repo "$GITHUB_REPOSITORY" \
               --pattern "$ASSET_NAME" --dir "$RUNNER_TEMP"; then
             tar --zstd -xf "$RUNNER_TEMP/$ASSET_NAME" -C /home/ubuntu/lede
             sed -i 's/ $(tool.*\/stamp-compile)//;' /home/ubuntu/lede/Makefile
             sed -i 's/ $(tool.*\/stamp-install)//;' /home/ubuntu/lede/Makefile
             echo 'hit=1' >> "$GITHUB_OUTPUT"
-            echo 'Restored toolchain from Release fallback.'
+            echo '已从 Release 备用缓存恢复工具链。'
           else
             echo 'hit=0' >> "$GITHUB_OUTPUT"
-            echo 'No matching Release fallback found.'
+            echo '未找到匹配的 Release 备用缓存。'
           fi
 
-      - name: Install shared Ubuntu 24.04 build dependencies on a cold toolchain build
+      - name: 首次编译工具链时安装 Ubuntu 24.04 公共编译依赖
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         run: bash .github/ci/install-build-deps.sh
 
-      - name: Prepare original MyLEDE workspace on a cold toolchain build
+      - name: 首次编译工具链时准备 MyLEDE 工作目录
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         run: bash .github/ci/prepare-workspace.sh
 
-      - name: Restore LEDE download cache for a cold toolchain build
+      - name: 首次编译工具链时恢复 LEDE 下载缓存
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         id: toolchain_dl_cache
         uses: actions/cache/restore@v6
@@ -359,7 +359,7 @@ jobs:
           restore-keys: |
             lede-dl-${{ runner.os }}-
 
-      - name: Run preparation scripts 01 through 04 on a cold toolchain build
+      - name: 首次编译工具链时运行 01 至 04 号准备脚本
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         env:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
@@ -371,11 +371,11 @@ jobs:
           set -Eeuo pipefail
           cd /home/ubuntu
           for script in 01-check-env.sh 02-update-source.sh 03-update-feeds.sh 04-configure.sh; do
-            echo "========== Running $script =========="
+            echo "========== 正在执行脚本：$script =========="
             bash "/home/ubuntu/scripts/$script"
           done
 
-      - name: Build tools and toolchain only when both caches miss
+      - name: 仅在两种缓存均未命中时编译主机工具与工具链
         id: toolchain_build
         if: steps.toolchain_cache.outputs.hit != '1' && steps.toolchain_release_fallback.outputs.hit != '1'
         env:
@@ -392,7 +392,7 @@ jobs:
             _ "$BUILD_LOG" &
           BUILD_PID=$!
           BUILD_PGID="$(ps -o pgid= -p "$BUILD_PID" | tr -d ' ')"
-          [[ -n "$BUILD_PGID" ]] || { echo '::error::Cannot identify toolchain process group.'; exit 1; }
+          [[ -n "$BUILD_PGID" ]] || { echo '::error::无法识别工具链编译进程组。'; exit 1; }
 
           (
             while kill -0 "$BUILD_PID" 2>/dev/null; do
@@ -400,9 +400,9 @@ jobs:
               kill -0 "$BUILD_PID" 2>/dev/null || exit 0
               AVAILABLE_KB="$(df -Pk / | awk 'NR == 2 {print $4}')"
               AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
-              echo "Toolchain disk watchdog: ${AVAILABLE_GB}GiB available."
+              echo "工具链磁盘监控：剩余 ${AVAILABLE_GB} GiB。"
               if (( AVAILABLE_KB < 5 * 1024 * 1024 )); then
-                echo "::error::Toolchain build stopped: only ${AVAILABLE_GB}GiB disk space remains."
+                echo "::error::工具链编译已停止：磁盘仅剩 ${AVAILABLE_GB} GiB。"
                 kill -TERM -- "-$BUILD_PGID" 2>/dev/null || true
                 sleep 20
                 kill -KILL -- "-$BUILD_PGID" 2>/dev/null || true
@@ -421,16 +421,16 @@ jobs:
           df -hT /
           exit "$BUILD_STATUS"
 
-      - name: Upload toolchain log on failure
+      - name: 编译失败时上传工具链日志
         if: always() && steps.toolchain_build.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
-          name: lede-toolchain-log-${{ github.run_number }}
+          name: 工具链编译日志-${{ github.run_number }}
           path: ${{ runner.temp }}/lede-toolchain-build.log
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Save toolchain-stage download cache
+      - name: 保存工具链阶段的下载缓存
         if: success() && steps.toolchain_build.outcome == 'success'
         uses: actions/cache/save@v6
         continue-on-error: true
@@ -438,7 +438,7 @@ jobs:
           path: /home/ubuntu/dl
           key: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-toolchain
 
-      - name: Publish or refresh the toolchain Release fallback
+      - name: 发布或更新工具链 Release 备用缓存
         if: success()
         continue-on-error: true
         env:
@@ -453,7 +453,7 @@ jobs:
 
           if gh release view toolchain-cache --repo "$GITHUB_REPOSITORY" \
               --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$ASSET_NAME"; then
-            echo "Matching Release fallback already exists: $ASSET_NAME"
+            echo "匹配的 Release 备用缓存已存在：$ASSET_NAME"
             exit 0
           fi
 
@@ -464,16 +464,16 @@ jobs:
           shopt -s nullglob
           CACHE_PATHS=(staging_dir/host* staging_dir/tool*)
           if (( ${#CACHE_PATHS[@]} == 0 )); then
-            echo '::warning::No host/toolchain staging directories found; skipping Release fallback.'
+            echo '::warning::未找到主机工具或工具链暂存目录，跳过 Release 备用缓存发布。'
             exit 0
           fi
 
           ARCHIVE="$RUNNER_TEMP/$ASSET_NAME"
           tar --zstd -cf "$ARCHIVE" "${CACHE_PATHS[@]}"
           ARCHIVE_SIZE="$(stat -c '%s' "$ARCHIVE")"
-          echo "Toolchain fallback size: $ARCHIVE_SIZE bytes"
+          echo "工具链备用缓存大小：$ARCHIVE_SIZE 字节"
           if (( ARCHIVE_SIZE >= 1900000000 )); then
-            echo '::warning::Fallback exceeds the conservative 1.9GB asset limit; Actions cache remains the primary store.'
+            echo '::warning::备用缓存超过 1.9 GB 的安全限制，仍以 Actions 缓存作为主要存储。'
             rm -f "$ARCHIVE"
             exit 0
           fi
@@ -495,7 +495,7 @@ jobs:
             gh release delete-asset toolchain-cache "$old_asset" --repo "$GITHUB_REPOSITORY" --yes || true
           done < "$RUNNER_TEMP/toolchain-assets.txt"
 
-      - name: Prune obsolete toolchain Actions caches before post-save
+      - name: 保存后清理过期的工具链 Actions 缓存
         if: success()
         continue-on-error: true
         env:
@@ -520,7 +520,7 @@ jobs:
             gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
           done < "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
   firmware:
-    name: Runner 2 - Build feeds, packages, kernel and firmware
+    name: 构建任务二：编译软件源、软件包、内核与固件
     needs: [source_check, toolchain]
     if: needs.source_check.outputs.skip_build != 'true'
     runs-on: ubuntu-24.04
@@ -535,13 +535,13 @@ jobs:
       version: ${{ steps.build_version.outputs.version }}
       tag: ${{ steps.build_version.outputs.tag }}
     steps:
-      - name: Checkout MyLEDE repository
+      - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Free unused runner disk space
+      - name: 清理运行器磁盘空间
         uses: endersonmenezes/free-disk-space@v4
         with:
           remove_android: true
@@ -555,42 +555,42 @@ jobs:
           rm_cmd: rm
           testing: false
 
-      - name: Check disk after cleanup
+      - name: 检查清理后的磁盘空间
         shell: bash
         run: |
           set -Eeuo pipefail
           df -hT /
           df -i /
 
-      - name: Install shared Ubuntu 24.04 build dependencies
+      - name: 安装 Ubuntu 24.04 公共编译依赖
         run: bash .github/ci/install-build-deps.sh
 
-      - name: Install Node.js 22 for SmartDNS WebUI
+      - name: 安装 SmartDNS WebUI 所需的 Node.js 22
         uses: actions/setup-node@v7
         with:
           node-version: '22'
           package-manager-cache: false
 
-      - name: Prepare original MyLEDE workspace
+      - name: 准备 MyLEDE 工作目录
         run: bash .github/ci/prepare-workspace.sh
 
-      - name: Clone the exact LEDE revision
+      - name: 克隆指定版本的 LEDE 源码
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
 
-      - name: Download and install immutable source revision lock
+      - name: 下载并安装不可变源码版本锁定清单
         uses: actions/download-artifact@v7
         with:
-          name: mylede-source-revisions
+          name: 源码版本锁定清单
           path: ${{ runner.temp }}/source-lock
-      - name: Install source revision lock
+      - name: 安装源码版本锁定清单
         shell: bash
         run: |
           set -Eeuo pipefail
           install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
 
-      - name: Restore LEDE download cache from toolchain stage
+      - name: 恢复工具链阶段的 LEDE 下载缓存
         id: firmware_dl_cache
         uses: actions/cache/restore@v6
         with:
@@ -599,7 +599,7 @@ jobs:
           restore-keys: |
             lede-dl-${{ runner.os }}-
 
-      - name: Embed MyUpdate firmware version
+      - name: 写入 MyUpdate 固件版本信息
         id: build_version
         shell: bash
         run: |
@@ -614,9 +614,9 @@ jobs:
           chmod 0644 /home/ubuntu/files/etc/myupdate/build-version
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Embedded MyUpdate version: $VERSION ($TAG)"
+          echo "已写入 MyUpdate 版本信息：$VERSION（$TAG）"
 
-      - name: Run preparation scripts 01 through 04 and cleanup script 06
+      - name: 运行 01 至 04 号准备脚本及 06 号清理脚本
         env:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
@@ -632,12 +632,12 @@ jobs:
             03-update-feeds.sh \
             04-configure.sh \
             06-clean-build.sh; do
-            echo "========== Running $script =========="
+            echo "========== 正在执行脚本：$script =========="
             bash "/home/ubuntu/scripts/$script"
             df -hT /
           done
 
-      - name: Read and display partition defaults from pinned LEDE source
+      - name: 读取并显示已锁定 LEDE 源码中的分区默认值
         env:
           KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
           ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
@@ -645,20 +645,20 @@ jobs:
         run: |
           set -Eeuo pipefail
           LEDE_DIR=/home/ubuntu/lede
-          [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::Pinned LEDE Makefile is missing: $LEDE_DIR"; exit 1; }
+          [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::找不到已锁定版本的 LEDE Makefile：$LEDE_DIR"; exit 1; }
           cd "$LEDE_DIR"
-          echo '========== Pinned LEDE source partition defaults =========='
+          echo '========== 已锁定 LEDE 源码中的分区默认值 =========='
           # Ask the pinned LEDE build system to resolve its own defaults for comparison.
           if ! make -s printvars VARS='KERNEL_PARTSIZE ROOTFS_PARTSIZE' 2>&1; then
-            echo '::warning::LEDE printvars could not resolve partition defaults; showing source definitions instead.'
+            echo '::warning::LEDE printvars 无法解析分区默认值，改为显示源码定义。'
             grep -RInE '(^|[[:space:]])(KERNEL_PARTSIZE|ROOTFS_PARTSIZE)[[:space:]]*[:?+]?=' \
               target/linux/x86 include/target.mk target/Makefile 2>/dev/null | head -80 || true
           fi
-          echo '========== Requested MyLEDE partition layout =========='
-          echo "Kernel partition: ${KERNEL_PARTSIZE} MB"
-          echo "Root filesystem partition: ${ROOTFS_PARTSIZE} MB"
+          echo '========== MyLEDE 请求的固件分区布局 =========='
+          echo "内核分区：${KERNEL_PARTSIZE} MB"
+          echo "根文件系统分区：${ROOTFS_PARTSIZE} MB"
 
-      - name: Calculate stable toolchain cache namespace
+      - name: 计算稳定的工具链缓存标识
         id: firmware_toolchain_key
         env:
           REBUILD_TOOLCHAIN: ${{ inputs.rebuild_toolchain }}
@@ -673,7 +673,7 @@ jobs:
           echo "config_hash=$CONFIG_HASH" >> "$GITHUB_OUTPUT"
           echo "mixkey=$MIXKEY" >> "$GITHUB_OUTPUT"
 
-      - name: Restore host tools and cross toolchain cache
+      - name: 恢复主机工具与交叉编译工具链缓存
         id: firmware_toolchain_cache
         uses: stupidloud/cachewrtbuild@main
         with:
@@ -684,7 +684,7 @@ jobs:
           prefix: /home/ubuntu/lede
           mixkey: ${{ steps.firmware_toolchain_key.outputs.mixkey }}
 
-      - name: Restore toolchain from Release fallback
+      - name: 从 Release 备用缓存恢复工具链
         id: firmware_release_fallback
         if: steps.firmware_toolchain_cache.outputs.hit != '1'
         env:
@@ -701,13 +701,13 @@ jobs:
             sed -i 's/ $(tool.*\/stamp-compile)//;' /home/ubuntu/lede/Makefile
             sed -i 's/ $(tool.*\/stamp-install)//;' /home/ubuntu/lede/Makefile
             echo 'hit=1' >> "$GITHUB_OUTPUT"
-            echo 'Toolchain restored from Release fallback.'
+            echo '已从 Release 备用缓存恢复工具链。'
           else
             echo 'hit=0' >> "$GITHUB_OUTPUT"
-            echo 'Toolchain Release fallback was not found.'
+            echo '未找到工具链 Release 备用缓存。'
           fi
 
-      - name: Verify toolchain cache is available
+      - name: 验证工具链缓存是否可用
         shell: bash
         env:
           ACTIONS_CACHE_HIT: ${{ steps.firmware_toolchain_cache.outputs.hit }}
@@ -715,14 +715,14 @@ jobs:
         run: |
           set -Eeuo pipefail
           if [[ "$ACTIONS_CACHE_HIT" != '1' && "$RELEASE_CACHE_HIT" != '1' ]]; then
-            echo '::error::Toolchain cache is missing in the firmware runner. The separate toolchain runner should have produced it; stopping before a second multi-hour cold build.'
+            echo '::error::固件编译任务中缺少工具链缓存。独立的工具链任务本应生成该缓存；为避免再次进行数小时的冷编译，现停止执行。'
             exit 1
           fi
-          echo 'Toolchain cache is ready.'
+          echo '工具链缓存已就绪。'
           du -sh /home/ubuntu/lede/staging_dir/host* /home/ubuntu/lede/staging_dir/tool* 2>/dev/null || true
           df -hT /
 
-      - name: Run tools/install and build script 07 with disk watchdog
+      - name: 运行 tools/install 和 07 号编译脚本并监控磁盘空间
         id: firmware_build
         env:
           KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
@@ -733,7 +733,7 @@ jobs:
           cd /home/ubuntu
 
           if ! grep -q 'make V=s -j' scripts/07-build.sh; then
-            echo '::error::Expected make V=s command was not found in scripts/07-build.sh.'
+            echo '::error::在 scripts/07-build.sh 中未找到预期的 make V=s 命令。'
             exit 1
           fi
           # Modify only this disposable Runner copy: lower log verbosity for CI; keep the committed script unchanged.
@@ -750,14 +750,14 @@ jobs:
           cd /home/ubuntu
           bash /home/ubuntu/scripts/07-build.sh
           grep -Fxq "CONFIG_TARGET_KERNEL_PARTSIZE=${KERNEL_PARTSIZE}" /home/ubuntu/lede/.config || {
-            echo "::error::Final .config does not contain the requested ${KERNEL_PARTSIZE} MB kernel partition."
+            echo "::error::最终 .config 未包含所要求的 ${KERNEL_PARTSIZE} MB 内核分区。"
             exit 1
           }
           grep -Fxq "CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_PARTSIZE}" /home/ubuntu/lede/.config || {
-            echo "::error::Final .config does not contain the requested ${ROOTFS_PARTSIZE} MB rootfs partition."
+            echo "::error::最终 .config 未包含所要求的 ${ROOTFS_PARTSIZE} MB 根文件系统分区。"
             exit 1
           }
-          echo "Verified requested partition layout: kernel=${KERNEL_PARTSIZE} MB, rootfs=${ROOTFS_PARTSIZE} MB."
+          echo "已验证分区布局：内核=${KERNEL_PARTSIZE} MB，根文件系统=${ROOTFS_PARTSIZE} MB。"
           BUILD_SCRIPT
           chmod +x "$RUNNER_TEMP/run-firmware-build.sh"
 
@@ -767,7 +767,7 @@ jobs:
             _ "$RUNNER_TEMP/run-firmware-build.sh" "$BUILD_LOG" &
           BUILD_PID=$!
           BUILD_PGID="$(ps -o pgid= -p "$BUILD_PID" | tr -d ' ')"
-          [[ -n "$BUILD_PGID" ]] || { echo '::error::Cannot identify firmware process group.'; exit 1; }
+          [[ -n "$BUILD_PGID" ]] || { echo '::error::无法识别固件编译进程组。'; exit 1; }
 
           (
             while kill -0 "$BUILD_PID" 2>/dev/null; do
@@ -775,9 +775,9 @@ jobs:
               kill -0 "$BUILD_PID" 2>/dev/null || exit 0
               AVAILABLE_KB="$(df -Pk / | awk 'NR == 2 {print $4}')"
               AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
-              echo "Firmware disk watchdog: ${AVAILABLE_GB}GiB available."
+              echo "固件编译磁盘监控：剩余 ${AVAILABLE_GB} GiB。"
               if (( AVAILABLE_KB < 5 * 1024 * 1024 )); then
-                echo "::error::Firmware build stopped before disk exhaustion; only ${AVAILABLE_GB}GiB remains."
+                echo "::error::磁盘空间不足，固件编译已提前停止；当前仅剩 ${AVAILABLE_GB} GiB。"
                 kill -TERM -- "-$BUILD_PGID" 2>/dev/null || true
                 sleep 20
                 kill -KILL -- "-$BUILD_PGID" 2>/dev/null || true
@@ -793,20 +793,20 @@ jobs:
           set -e
           kill "$WATCHDOG_PID" 2>/dev/null || true
           wait "$WATCHDOG_PID" 2>/dev/null || true
-          echo '========== Disk after firmware build =========='
+          echo '========== 固件编译后的磁盘空间 =========='
           df -hT /
           exit "$BUILD_STATUS"
 
-      - name: Upload firmware build log on failure
+      - name: 编译失败时上传固件编译日志
         if: always() && steps.firmware_build.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
-          name: lede-firmware-build-log-${{ github.run_number }}
+          name: 固件编译日志-${{ github.run_number }}
           path: ${{ runner.temp }}/lede-firmware-build.log
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Capture exact source revisions used by this build
+      - name: 记录本次编译使用的精确源码版本
         id: plugin_source_revisions
         if: success()
         shell: bash
@@ -888,7 +888,7 @@ jobs:
               for name, value in outputs.items():
                   stream.write(f"{name}={value}\n")
           PY
-      - name: Select UEFI image and prepare release input
+      - name: 选择 UEFI 镜像并准备发布文件
         if: success()
         shell: bash
         env:
@@ -906,12 +906,12 @@ jobs:
           TARGET_DIR=/home/ubuntu/lede/bin/targets/x86/64
           RELEASE_INPUT="$GITHUB_WORKSPACE/release-input"
           mkdir -p "$RELEASE_INPUT"
-          [[ -d "$TARGET_DIR" ]] || { echo "::error::Missing target directory: $TARGET_DIR"; exit 1; }
+          [[ -d "$TARGET_DIR" ]] || { echo "::error::找不到目标输出目录：$TARGET_DIR"; exit 1; }
 
           mapfile -t IMAGES < <(find "$TARGET_DIR" -maxdepth 1 -type f \
             -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print | sort)
           if (( ${#IMAGES[@]} != 1 )); then
-            echo "::error::Expected exactly one combined EFI image, found ${#IMAGES[@]}."
+            echo "::error::预期应生成一个 EFI 合并镜像，实际找到 ${#IMAGES[@]} 个。"
             find "$TARGET_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n' | sort || true
             exit 1
           fi
@@ -951,20 +951,20 @@ jobs:
               f.write('\n')
           PY
 
-          echo 'Release input files:'
+          echo '待发布文件：'
           find "$RELEASE_INPUT" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
 
-      - name: Upload firmware for the separate release runner
+      - name: 上传固件供独立发布任务使用
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: lede-release-input
+          name: 固件发布文件
           path: release-input/
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
 
-      - name: Prune stale LEDE download caches before saving the new snapshot
+      - name: 保存新快照前清理过期的 LEDE 下载缓存
         if: success()
         continue-on-error: true
         env:
@@ -991,7 +991,7 @@ jobs:
             gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
           done < "$RUNNER_TEMP/delete-dl-cache-ids.txt"
 
-      - name: Save updated LEDE download cache
+      - name: 保存更新后的 LEDE 下载缓存
         if: success()
         id: save_dl_cache
         uses: actions/cache/save@v6
@@ -1000,7 +1000,7 @@ jobs:
           path: /home/ubuntu/dl
           key: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-full
 
-      - name: Prune old LEDE download cache snapshots after successful save
+      - name: 成功保存后清理旧版 LEDE 下载缓存快照
         if: success() && steps.save_dl_cache.outcome == 'success'
         continue-on-error: true
         env:
@@ -1024,7 +1024,7 @@ jobs:
             gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY" || true
           done < "$RUNNER_TEMP/delete-dl-cache-ids-after-save.txt"
 
-      - name: Prune obsolete toolchain cache keys
+      - name: 清理过期的工具链缓存键
         if: success()
         continue-on-error: true
         env:
@@ -1050,7 +1050,7 @@ jobs:
           done < "$RUNNER_TEMP/delete-toolchain-cache-ids.txt"
 
   publish:
-    name: Runner 3 - Sign manifest and publish GitHub Release
+    name: 构建任务三：签名清单并发布 GitHub 固件
     needs: [source_check, firmware]
     if: needs.source_check.outputs.skip_build != 'true'
     runs-on: ubuntu-24.04
@@ -1059,20 +1059,20 @@ jobs:
       contents: write
       actions: write
     steps:
-      - name: Checkout repository for retention defaults
+      - name: 检出仓库以读取保留策略默认值
         uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Download firmware release input
+      - name: 下载待发布的固件文件
         uses: actions/download-artifact@v7
         with:
-          name: lede-release-input
+          name: 固件发布文件
           path: release-input
 
-      - name: Install minisign
+      - name: 安装 minisign 签名工具
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -1081,7 +1081,7 @@ jobs:
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
 
-      - name: Generate release manifest and SHA256
+      - name: 生成发布清单与 SHA256 校验值
         id: release_meta
         shell: bash
         run: |
@@ -1195,14 +1195,14 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Sign release manifest with minisign
+      - name: 使用 minisign 对发布清单进行签名
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         shell: bash
         run: |
           set -Eeuo pipefail
           if [[ -z "${MINISIGN_SECRET_KEY:-}" ]]; then
-            echo '::error::Repository secret MINISIGN_SECRET_KEY is not configured.'
+            echo '::error::仓库尚未配置 MINISIGN_SECRET_KEY 密钥。'
             exit 1
           fi
           KEY_FILE="$RUNNER_TEMP/minisign.key"
@@ -1214,15 +1214,15 @@ jobs:
             -t 'MyLEDE firmware release'
           rm -f "$KEY_FILE"
 
-      - name: Validate signed OTA release payload
+      - name: 验证已签名的 OTA 发布文件
         shell: bash
         run: |
           set -Eeuo pipefail
           IMAGE="$(find release-input -maxdepth 1 -type f -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print -quit)"
-          [[ -n "$IMAGE" ]] || { echo '::error::OTA test image missing.'; exit 1; }
+          [[ -n "$IMAGE" ]] || { echo '::error::缺少 OTA 测试镜像。'; exit 1; }
           python3 tests/ota/validate_release.py release-input/manifest.json "$IMAGE"
 
-      - name: Publish firmware release
+      - name: 发布固件版本
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
@@ -1231,7 +1231,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           IMAGE="$(find release-input -maxdepth 1 -type f -name 'openwrt-x86-64-generic-squashfs-combined-efi.img.gz' -print -quit)"
-          [[ -n "$IMAGE" ]] || { echo '::error::Firmware image missing from release input.'; exit 1; }
+          [[ -n "$IMAGE" ]] || { echo '::error::发布文件中缺少固件镜像。'; exit 1; }
           META="$(cat release-input/build-meta.json)"
           LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
           SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
@@ -1240,14 +1240,14 @@ jobs:
           OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
 
           cat > release-input/release-notes.md <<EOF
-          Automated MyLEDE x86-64 firmware build.
+          MyLEDE x86-64 固件自动编译发布。
 
-          - Version: ${RELEASE_VERSION}
-          - Firmware: $(basename "$IMAGE")
-          - Manifest: manifest.json
-          - Signature: manifest.minisig
+          - 固件版本：${RELEASE_VERSION}
+          - 固件文件：$(basename "$IMAGE")
+          - 发布清单：manifest.json
+          - 清单签名：manifest.minisig
 
-          ### Source commits used for this build
+          ### 本次编译使用的源码版本
 
           - LEDE: [${LEDE_COMMIT}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
           - SmartDNS: [${SMARTDNS_COMMIT}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
@@ -1264,7 +1264,7 @@ jobs:
             --notes-file release-input/release-notes.md \
             --target "$GITHUB_SHA" \
             --latest
-      - name: Prepare successful source fingerprint marker
+      - name: 准备成功编译的源码指纹标记
         env:
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
         shell: bash
@@ -1273,7 +1273,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/lede-build-state"
           printf '%s\n' "$SOURCE_FINGERPRINT" > "$RUNNER_TEMP/lede-build-state/successful-source-fingerprint.txt"
 
-      - name: Save successful source fingerprint
+      - name: 保存成功编译的源码指纹
         uses: actions/cache/save@v6
         continue-on-error: true
         with:

@@ -63,7 +63,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "
 sudo apt-get clean
 sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
 
-echo '========== Installed host dependencies =========='
+echo '========== 主机编译依赖安装完成 =========='
 git --version
 python3 --version
 zstd --version | head -n 1

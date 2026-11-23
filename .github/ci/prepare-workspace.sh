@@ -8,7 +8,7 @@ BASE_DIR=/home/ubuntu
 # 01-check-env.sh from the prepared /home/ubuntu workspace.
 for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate minisign; do
   if [[ ! -e "$ROOT/$item" ]]; then
-    echo "::error::Required repository item is missing: $item"
+    echo "::error::仓库中缺少必需文件或目录：$item"
     exit 1
   fi
 done
@@ -33,5 +33,5 @@ fi
 
 chmod +x "$BASE_DIR/bd.sh" "$BASE_DIR/scripts/"*.sh
 
-echo "Prepared custom build files under $BASE_DIR"
+echo "已在 $BASE_DIR 下准备好自定义编译文件。"
 du -sh "$BASE_DIR"/* 2>/dev/null | sort -h || true

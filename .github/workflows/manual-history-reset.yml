@@ -1,4 +1,4 @@
-name: Repository History and Retention Maintenance
+name: 仓库历史与保留策略维护
 
 on:
   schedule:
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       keep_days:
-        description: '历史保留天数（适用于全部 workflow runs 和正式 Releases）'
+        description: '历史保留天数（适用于全部工作流运行记录和正式版本发布）'
         required: true
         default: '7'
         type: string
       keep_count:
-        description: '至少保留的最新记录数量（适用于全部 workflow runs 和正式 Releases）'
+        description: '至少保留的最新记录数量（适用于全部工作流运行记录和正式版本发布）'
         required: true
         default: '30'
         type: string
@@ -21,17 +21,17 @@ on:
         required: true
         type: choice
         options:
-          - "no"
-          - "yes"
-        default: "no"
+          - "否"
+          - "是"
+        default: "否"
       archive_closed_prs:
-        description: "是否同时归档所有已关闭/已合并的历史 PR（普通访客将看到 404）？"
+        description: "是否同时归档所有已关闭或已合并的历史拉取请求（普通访客将看到 404）？"
         required: true
         type: choice
         options:
-          - "no"
-          - "yes"
-        default: "no"
+          - "否"
+          - "是"
+        default: "否"
 
 permissions:
   contents: write
@@ -44,7 +44,7 @@ concurrency:
 
 jobs:
   cleanup-retention:
-    name: Clean all workflow runs and Releases
+    name: 清理全部工作流运行记录与正式版本发布
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -55,7 +55,7 @@ jobs:
       INPUT_KEEP_COUNT: ${{ inputs.keep_count }}
       CURRENT_RUN_ID: ${{ github.run_id }}
     steps:
-      - name: Clean all failed Actions runs first
+      - name: 优先清理全部失败的工作流运行记录
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -67,10 +67,10 @@ jobs:
             gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
             FAILED_RUN_DELETED=$((FAILED_RUN_DELETED + 1))
           done < "$RUNNER_TEMP/failed-run-ids.txt"
-          echo "已优先删除全仓库所有 workflows 的失败运行记录：$FAILED_RUN_DELETED 条。"
-          echo "- 首轮清理失败 Actions runs：$FAILED_RUN_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
+          echo "已优先删除仓库全部工作流中的失败运行记录：$FAILED_RUN_DELETED 条。"
+          echo "- 第一阶段清理失败的 Actions 运行记录：$FAILED_RUN_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Apply retention to Releases and remaining workflow runs
+      - name: 按保留策略清理版本发布与剩余工作流记录
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -129,14 +129,14 @@ jobs:
             echo '## 全仓库历史清理结果'
             echo "- 保留天数：$KEEP_DAYS 天"
             echo "- 最少保留数量：$KEEP_COUNT 条"
-            echo "- 删除正式 Releases：$RELEASE_DELETED 个"
-            echo "- 删除所有 workflows 的已完成运行记录：$RUN_DELETED 条"
-            echo '- 保留 toolchain-cache、预发布 Releases、当前清理运行及未完成的 Actions runs。'
+            echo "- 删除正式版本发布：$RELEASE_DELETED 个"
+            echo "- 删除全部工作流的已完成运行记录：$RUN_DELETED 条"
+            echo '- 保留工具链缓存版本、预发布版本、当前清理任务及尚未完成的工作流运行记录。'
           } >> "$GITHUB_STEP_SUMMARY"
 
   archive-closed-prs:
-    name: Archive closed historical pull requests
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == 'yes' }}
+    name: 归档已关闭的历史拉取请求
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -145,16 +145,16 @@ jobs:
       # Configure PERSON_TOKEN as a repository Actions secret (fine-grained PAT).
       GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
     steps:
-      - name: Validate manual run from main
+      - name: 验证是否从 main 分支手动触发
         shell: bash
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::请从 main 分支手动运行此 workflow；PR 归档仅允许在 main 上手动触发。"
+            echo "::error::请在 main 分支手动运行此工作流；历史拉取请求归档仅支持从 main 分支手动触发。"
             exit 1
           fi
 
-      - name: Archive closed historical pull requests
+      - name: 归档已关闭的历史拉取请求
         shell: bash
         run: |
           set -euo pipefail
@@ -178,16 +178,16 @@ jobs:
             has_next="$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' <<< "$page")"
             cursor="$(jq -r '.data.repository.pullRequests.pageInfo.endCursor // empty' <<< "$page")"
             [[ "$has_next" == "true" ]] || break
-            [[ -n "$cursor" ]] || { echo "::error::GraphQL 分页游标缺失。"; exit 1; }
+            [[ -n "$cursor" ]] || { echo "::error::缺少 GraphQL 分页游标。"; exit 1; }
           done
 
           count="$(wc -l < "$candidates" | tr -d ' ')"
-          echo "发现 $count 个尚未归档的已关闭/已合并 PR；Open PR 不会被处理。"
+          echo "发现 $count 个尚未归档的已关闭或已合并拉取请求；未关闭的拉取请求不会被处理。"
           {
-            echo "## PR 归档清单"
+            echo "## 历史拉取请求归档清单"
             echo ""
             if [[ "$count" == "0" ]]; then
-              echo "没有需要归档的历史 PR。"
+              echo "没有需要归档的历史拉取请求。"
             else
               while IFS= read -r pr; do
                 number="$(jq -r '.number' <<< "$pr")"
@@ -215,22 +215,22 @@ jobs:
             if mutation_result="$(gh api graphql -f query="$mutation" -f pullRequestId="$pr_id")"; then
               returned_number="$(jq -r '.data.archivePullRequest.pullRequest.number // empty' <<< "$mutation_result")"
               if [[ "$returned_number" == "$number" ]]; then
-                echo "已归档 PR #$number：$title"
+                echo "已归档拉取请求 #$number：$title"
                 succeeded=$((succeeded + 1))
               else
-                echo "::error::PR #$number 的归档 mutation 未返回预期 PR 编号：$title"
+                echo "::error::拉取请求 #$number 的归档操作未返回预期编号：$title"
                 printf 'PR #%s — %s（mutation 返回异常）\n' "$number" "$title" >> "$failures"
                 failed=$((failed + 1))
               fi
             else
-              echo "::error::PR #$number 归档请求失败：$title"
+              echo "::error::拉取请求 #$number 归档请求失败：$title"
               printf 'PR #%s — %s（归档请求失败）\n' "$number" "$title" >> "$failures"
               failed=$((failed + 1))
             fi
           done < "$candidates"
 
           {
-            echo "## PR 归档执行结果"
+            echo "## 历史拉取请求归档结果"
             echo "- 成功：$succeeded"
             echo "- 失败：$failed"
             if [[ "$failed" -gt 0 ]]; then
@@ -240,40 +240,41 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "$failed" -gt 0 ]]; then
-            echo "::error::$failed 个 PR 的归档 mutation 实际失败；其他 PR 已继续处理，请查看上方清单。"
+            echo "::error::有 $failed 个拉取请求归档失败；其他项目已继续处理，请查看上方清单。"
             exit 1
           fi
 
-          echo "已完成历史 PR 归档；这些 PR 对无仓库访问权限的访客将返回 404。"
+          echo "已完成历史拉取请求归档；无仓库访问权限的访客访问这些页面时将看到 404。"
 
   reset-main-history:
+    name: 重置全部分支的提交历史
     runs-on: ubuntu-latest
     steps:
-      - name: Explain that no changes will be made
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != 'yes' }}
+      - name: 说明本次不会执行历史修改
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != '是' }}
         run: |
-          echo "已选择 no。本次运行不会修改任何分支或提交历史。"
+          echo "已选择“否”。本次运行不会修改任何分支或提交历史。"
 
-      - name: Validate manual run from main
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
+      - name: 验证是否从 main 分支手动触发
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::请从 main 分支手动运行此 workflow；分支历史重置仅允许在 main 上手动触发。"
+            echo "::error::请在 main 分支手动运行此工作流；分支历史重置仅支持从 main 分支手动触发。"
             exit 1
           fi
 
-      - name: Checkout the exact dispatched main revision
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
+      - name: 检出本次手动触发时的 main 分支版本
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Replace history of every branch with one root commit
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == 'yes' }}
+      - name: 将每个分支的历史替换为单个根提交
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
         shell: bash
         env:
           EXPECTED_MAIN_SHA: ${{ github.sha }}
@@ -284,7 +285,7 @@ jobs:
           git ls-remote --heads origin > "$RUNNER_TEMP/branch-inventory.txt"
           current_main_sha="$(awk '$2 == "refs/heads/main" {print $1}' "$RUNNER_TEMP/branch-inventory.txt")"
           if [[ -z "$current_main_sha" || "$current_main_sha" != "$EXPECTED_MAIN_SHA" ]]; then
-            echo "::error::main 分支已变化，或触发时 SHA 不匹配；未开始重置。"
+            echo "::error::main 分支已发生变化，或触发时的提交版本不匹配；尚未开始重置。"
             exit 1
           fi
           branch_count="$(wc -l < "$RUNNER_TEMP/branch-inventory.txt" | tr -d ' ')"
@@ -295,20 +296,20 @@ jobs:
             [[ -n "$expected_sha" && -n "$ref_name" ]] || continue
             branch="${ref_name#refs/heads/}"
             index=$((index + 1))
-            echo "[$index/$branch_count] 重置分支 $branch（原 SHA：$expected_sha）"
+            echo "[$index/$branch_count] 正在重置分支 $branch（原提交版本：$expected_sha）"
             current_sha="$(git ls-remote origin "$ref_name" | awk 'NR == 1 {print $1}')"
             if [[ "$current_sha" != "$expected_sha" ]]; then
-              echo "::error::分支 $branch 在清单生成后发生变化；停止以避免覆盖新提交。"
+              echo "::error::分支 $branch 在生成清单后发生变化；为避免覆盖新提交，已停止操作。"
               exit 1
             fi
             git checkout --detach "$expected_sha"
             orphan_branch="history-reset-${GITHUB_RUN_ID}-${index}"
             git checkout --orphan "$orphan_branch"
             git add --all
-            git commit --allow-empty -m "Reset $branch history to current repository snapshot"
+            git commit --allow-empty -m "将分支 $branch 的历史重置为当前文件快照"
             git push --force-with-lease="$ref_name:$expected_sha" origin "HEAD:$ref_name"
-            echo "分支 $branch 已重置。"
+            echo "分支 $branch 已完成历史重置。"
             git checkout --detach "$expected_sha"
           done < "$RUNNER_TEMP/branch-inventory.txt"
           echo "已处理清单中的全部远程分支。"
-          echo "::notice::此操作重写 refs/heads/* 的分支历史；不会删除非 Release 标签、fork、缓存、GitHub 内部保留数据或 PR 引用。受保护分支可能拒绝强制推送并导致流程中止。"
+          echo "::notice::此操作会重写 refs/heads/* 中所有分支的提交历史；不会删除非正式版本标签、派生仓库、缓存、GitHub 内部保留数据或拉取请求引用。受保护分支可能拒绝强制推送，导致流程中止。"
