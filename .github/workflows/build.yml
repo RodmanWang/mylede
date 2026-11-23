@@ -1240,14 +1240,14 @@ jobs:
           OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
 
           cat > release-input/release-notes.md <<EOF
-          Automated MyLEDE x86-64 firmware build.
+          MyLEDE x86-64 固件自动编译发布。
 
-          - Version: ${RELEASE_VERSION}
-          - Firmware: $(basename "$IMAGE")
-          - Manifest: manifest.json
-          - Signature: manifest.minisig
+          - 固件版本：${RELEASE_VERSION}
+          - 固件文件：$(basename "$IMAGE")
+          - 发布清单：manifest.json
+          - 清单签名：manifest.minisig
 
-          ### Source commits used for this build
+          ### 本次编译使用的源码版本
 
           - LEDE: [${LEDE_COMMIT}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
           - SmartDNS: [${SMARTDNS_COMMIT}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
