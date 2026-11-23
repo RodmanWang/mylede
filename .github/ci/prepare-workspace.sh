@@ -14,7 +14,7 @@ done
 sudo mkdir -p "$BASE_DIR"
 sudo chown "$USER":"$USER" "$BASE_DIR"
 
-for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate; do
+for item in bd.sh scripts smartdns luci-app-smartdns luci-app-myupdate minisign; do
   rm -rf "$BASE_DIR/$item"
   cp -a "$ROOT/$item" "$BASE_DIR/$item"
 done
