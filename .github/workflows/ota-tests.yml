@@ -1,4 +1,4 @@
-name: MyUpdate OTA contract tests
+name: 源码修改语句测试
 
 on:
   push:
