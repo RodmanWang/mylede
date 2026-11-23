@@ -1,4 +1,4 @@
-name: MyLEDE 固件配置、分阶段编译与发布
+name: 编译并发布 MyLEDE 固件
 
 on:
   workflow_dispatch:
