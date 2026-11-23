@@ -1,4 +1,4 @@
-name: 清理仓库历史与记录
+name: 4、清理仓库历史与记录
 
 on:
   schedule:
