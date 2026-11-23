@@ -198,7 +198,7 @@ jobs:
       - name: 上传不可变源码版本锁定清单
         uses: actions/upload-artifact@v7
         with:
-          name: mylede-source-revisions
+          name: 源码版本锁定清单
           path: ${{ runner.temp }}/source-revisions.tsv
           if-no-files-found: error
           retention-days: 1
@@ -279,7 +279,7 @@ jobs:
       - name: 下载并安装不可变源码版本锁定清单
         uses: actions/download-artifact@v7
         with:
-          name: mylede-source-revisions
+          name: 源码版本锁定清单
           path: ${{ runner.temp }}/source-lock
       - name: 安装源码版本锁定清单
         shell: bash
@@ -425,7 +425,7 @@ jobs:
         if: always() && steps.toolchain_build.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
-          name: lede-toolchain-log-${{ github.run_number }}
+          name: 工具链编译日志-${{ github.run_number }}
           path: ${{ runner.temp }}/lede-toolchain-build.log
           if-no-files-found: ignore
           retention-days: 7
@@ -582,7 +582,7 @@ jobs:
       - name: 下载并安装不可变源码版本锁定清单
         uses: actions/download-artifact@v7
         with:
-          name: mylede-source-revisions
+          name: 源码版本锁定清单
           path: ${{ runner.temp }}/source-lock
       - name: 安装源码版本锁定清单
         shell: bash
@@ -801,7 +801,7 @@ jobs:
         if: always() && steps.firmware_build.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
-          name: lede-firmware-build-log-${{ github.run_number }}
+          name: 固件编译日志-${{ github.run_number }}
           path: ${{ runner.temp }}/lede-firmware-build.log
           if-no-files-found: ignore
           retention-days: 7
@@ -958,7 +958,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: lede-release-input
+          name: 固件发布文件
           path: release-input/
           if-no-files-found: error
           compression-level: 0
@@ -1069,7 +1069,7 @@ jobs:
       - name: 下载待发布的固件文件
         uses: actions/download-artifact@v7
         with:
-          name: lede-release-input
+          name: 固件发布文件
           path: release-input
 
       - name: 安装 minisign 签名工具
