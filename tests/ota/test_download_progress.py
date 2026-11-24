@@ -138,5 +138,38 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn(".dropdown-menu{z-index:10001}", view)
 
 
+    def test_allow_downgrade_defaults_to_disabled_in_shipped_uci_and_rpc(self):
+        config = (ROOT / "luci-app-myupdate/root/etc/config/myupdate").read_text(encoding="utf-8")
+        rpc = RPC.read_text(encoding="utf-8")
+        self.assertIn("option allow_downgrade '0'", config)
+        self.assertIn("out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';", rpc)
+
+    def test_partition_layout_is_checked_before_download_and_again_before_upgrade(self):
+        task = TASK.read_text(encoding="utf-8")
+        verifier = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh").read_text(encoding="utf-8")
+        checker = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/check-partition-layout.sh").read_text(encoding="utf-8")
+        self.assertIn("KERNEL_PARTSIZE=\"$(sed -n '6p' \"$R/verified-manifest.txt\")\"", task)
+        self.assertGreaterEqual(task.count('check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE"'), 2)
+        self.assertIn("get '@.partition_layout.kernel_partsize_mib'", verifier)
+        self.assertIn("get '@.partition_layout.rootfs_partsize_mib'", verifier)
+        self.assertIn("get '@.partition_layout.uses_boot_part'", verifier)
+        self.assertIn('[ "$KERNEL_SECTORS" -ge "$KERNEL_REQUIRED_SECTORS" ]', checker)
+        self.assertIn('[ "$ROOTFS_SECTORS" -ge "$ROOTFS_REQUIRED_SECTORS" ]', checker)
+        self.assertIn('awk \'$2 == "/rom"', checker)
+
+    def test_build_records_upstream_defaults_and_effective_partition_sizes_with_source_commits(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        validator = (ROOT / "tests/ota/validate_release.py").read_text(encoding="utf-8")
+        self.assertIn("上游 x86 默认 64 MiB", workflow)
+        self.assertIn("上游 x86 默认 448 MiB", workflow)
+        self.assertIn("id: partition_defaults", workflow)
+        self.assertIn('"boot-part" in features.group(1).split()', workflow)
+        self.assertIn("'partition_layout': {", workflow)
+        self.assertIn("'partition_layout': meta['partition_layout']", workflow)
+        self.assertIn("'schema_version': 2", workflow)
+        self.assertIn('manifest.get("schema_version") != 2', validator)
+        self.assertIn('"uses_boot_part") is not True', validator)
+
+
 if __name__ == "__main__":
     unittest.main()
