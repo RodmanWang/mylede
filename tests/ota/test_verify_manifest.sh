@@ -46,6 +46,8 @@ for key in expr.lstrip("@").strip(".").split("."):
         value = value[key]
 if isinstance(value, (dict, list)):
     print(json.dumps(value, separators=(",", ":")))
+elif isinstance(value, bool):
+    print(str(value).lower())
 elif value is not None:
     print(value)
 JSONFILTER
