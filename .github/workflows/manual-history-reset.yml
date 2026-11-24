@@ -45,6 +45,8 @@ concurrency:
 jobs:
   preflight:
     name: 检查其他工作流并优先清理失败记录
+    outputs:
+      proceed: ${{ steps.check-active-runs.outputs.proceed }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -53,6 +55,7 @@ jobs:
       CURRENT_RUN_ID: ${{ github.run_id }}
     steps:
       - name: 检查仓库是否存在其他正在运行的工作流
+        id: check-active-runs
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -62,11 +65,12 @@ jobs:
             "$RUNNER_TEMP/workflow-runs.tsv" > "$RUNNER_TEMP/active-workflow-runs.tsv"
 
           if [[ -s "$RUNNER_TEMP/active-workflow-runs.tsv" ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
             echo "::warning::检测到其他正在运行或排队中的工作流，本次仓库清理将立即取消。"
             {
               echo "## 清理任务已取消"
               echo "检测到以下其他工作流尚未完成；为避免清理过程影响正在执行的任务，本次不会删除任何记录或修改仓库："
-              awk -F '\t' '{ printf "- Run %s：%s（状态：%s） %s\\n", $1, $3, $2, $4 }' "$RUNNER_TEMP/active-workflow-runs.tsv"
+              awk -F '\t' '{ printf "- Run %s：%s（状态：%s） %s\n", $1, $3, $2, $4 }' "$RUNNER_TEMP/active-workflow-runs.tsv"
             } >> "$GITHUB_STEP_SUMMARY"
 
             # Cancel this workflow run itself. All maintenance jobs depend on
@@ -76,9 +80,11 @@ jobs:
             exit 0
           fi
 
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
           echo "未发现其他正在运行或排队中的工作流，可以开始清理。"
 
       - name: 优先清理全部失败和已取消的工作流运行记录
+        if: steps.check-active-runs.outputs.proceed == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -96,6 +102,7 @@ jobs:
 
   cleanup-retention:
     needs: preflight
+    if: ${{ needs.preflight.outputs.proceed == 'true' }}
     name: 清理全部工作流运行记录与正式版本发布
     runs-on: ubuntu-latest
     permissions:
@@ -172,8 +179,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   archive-closed-prs:
+    needs: preflight
     name: 归档已关闭的历史拉取请求
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
+    if: ${{ needs.preflight.outputs.proceed == 'true' && github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -284,6 +292,8 @@ jobs:
           echo "已完成历史拉取请求归档；无仓库访问权限的访客访问这些页面时将看到 404。"
 
   reset-main-history:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.proceed == 'true' }}
     name: 重置全部分支的提交历史
     runs-on: ubuntu-latest
     steps:
