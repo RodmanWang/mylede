@@ -633,6 +633,9 @@ jobs:
           set -Eeuo pipefail
           install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
 
+      - name: 应用预检锁定的 minisign 正式版本
+        run: python3 .github/ci/apply-minisign-release-lock.py
+
       - name: 恢复工具链阶段的 LEDE 下载缓存
         id: firmware_dl_cache
         uses: actions/cache/restore@v6
