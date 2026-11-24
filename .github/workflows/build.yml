@@ -871,7 +871,6 @@ jobs:
           python3 - <<'PY'
           import os
           import re
-          import subprocess
           from pathlib import Path
 
           lock_file = Path("/home/ubuntu/source-revisions.tsv")
@@ -1176,27 +1175,27 @@ jobs:
               'channel': 'stable',
               'sources': {
                   'coolsnowwolf/lede': {
-                      'ref': 'master',
+                      'ref': 'master (preflight-locked)',
                       'commit': meta['lede_commit'],
                       'short_commit': meta['lede_commit'][:7]
                   },
                   'pymumu/smartdns': {
-                      'ref': 'downloaded source archive',
+                      'ref': 'HEAD (preflight-locked)',
                       'commit': meta['sources']['smartdns'],
                       'short_commit': meta['sources']['smartdns'][:7]
                   },
                   'pymumu/smartdns-webui': {
-                      'ref': 'downloaded source archive',
+                      'ref': 'HEAD (preflight-locked)',
                       'commit': meta['sources']['smartdns_webui'],
                       'short_commit': meta['sources']['smartdns_webui'][:7]
                   },
                   'pymumu/luci-app-smartdns': {
-                      'ref': 'downloaded source archive',
+                      'ref': 'HEAD (preflight-locked)',
                       'commit': meta['sources']['luci_app_smartdns'],
                       'short_commit': meta['sources']['luci_app_smartdns'][:7]
                   },
                   'vernesong/OpenClash': {
-                      'ref': 'dev',
+                      'ref': 'dev (preflight-locked)',
                       'commit': meta['sources']['openclash'],
                       'short_commit': meta['sources']['openclash'][:7]
                   }
