@@ -1020,7 +1020,7 @@ jobs:
               raise SystemExit('最终 LEDE .config 不存在，不能记录固件分区布局')
           config_values = {}
           for line in final_config.read_text(encoding='utf-8').splitlines():
-              match = re.fullmatch(r'CONFIG_TARGET_(KERNEL|ROOTFS)_PARTSIZE=(\\d+)', line)
+              match = re.fullmatch(r'CONFIG_TARGET_(KERNEL|ROOTFS)_PARTSIZE=(\d+)', line)
               if match:
                   config_values[match.group(1)] = int(match.group(2))
           if set(config_values) != {'KERNEL', 'ROOTFS'}:
