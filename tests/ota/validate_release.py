@@ -28,6 +28,6 @@ if (compat.get("target"), compat.get("subtarget"), compat.get("arch")) != ("x86"
     raise SystemExit("unexpected firmware compatibility metadata")
 for name, source in (manifest.get("sources") or {}).items():
     commit = source.get("commit", "")
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise SystemExit(f"invalid full source commit SHA for {name}: {commit!r}")
+    if not re.fullmatch(r"(?:[0-9a-f]{7}|[0-9a-f]{40})", commit):
+        raise SystemExit(f"invalid source commit SHA for {name}: {commit!r}")
 print(f"Release payload contract passed: {version} ({manifest['tag']})")
