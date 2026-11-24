@@ -86,7 +86,7 @@ class DownloadProgressContractTests(unittest.TestCase):
         rpc = RPC.read_text(encoding="utf-8")
         view = VIEW.read_text(encoding="utf-8")
         self.assertIn("args.allow_downgrade != '0' && args.allow_downgrade != '1'", rpc)
-        self.assertIn("method: 'save_config', params: [ 'allow_downgrade' ]", view)
+        self.assertIn("method: 'set_allow_downgrade'", view)
         self.assertIn("'type': 'checkbox'", view)
         self.assertIn("downgradeLabel", view)
         self.assertNotIn("form.ListValue, 'allow_downgrade'", view)
@@ -116,7 +116,7 @@ class DownloadProgressContractTests(unittest.TestCase):
 
     def test_luci_compacts_key_and_keep_path_controls_without_inserting_newlines(self):
         view = VIEW.read_text(encoding="utf-8")
-        self.assertIn("replace(/(?:\\\\r?\\\\n)+$/, '')", view)
+        self.assertIn("replace(/(?:\\r?\\n)+$/, '')", view)
         self.assertIn("max-width:560px", view)
         self.assertIn("overflow-wrap:anywhere", view)
         self.assertIn("max-width:760px", view)
