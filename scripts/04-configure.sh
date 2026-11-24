@@ -166,6 +166,7 @@ else:
 packages = [
     "luci-app-smartdns", "luci-app-myupdate", "luci-app-openclash",
     "luci-proto-wireguard", "luci-app-uugamebooster", "luci-app-samba4",
+    "minisign",
     "open-vm-tools", "ddns-scripts-cloudflare", "iptables-mod-conntrack-extra",
     "iptables-mod-hashlimit", "iptables-mod-iprange", "iptables-mod-filter",
     "iptables-mod-ipopt", "iptables-mod-nflog", "iptables-mod-nfqueue",
@@ -316,7 +317,7 @@ if missing:
         f"新增 Makefile 行数：{added_line_count} 行"
     )
 else:
-    print("33 个指定软件包已经全部存在，不重复添加")
+    print(f"{len(packages)} 个指定软件包已经全部存在，不重复添加")
 
 # 正确计算最终 DEFAULT_PACKAGES 区块的结束位置。
 final_end = end + added_line_count
