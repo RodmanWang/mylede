@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Contract tests for live MyUpdate firmware download progress."""
+import json
 from pathlib import Path
 import unittest
 
