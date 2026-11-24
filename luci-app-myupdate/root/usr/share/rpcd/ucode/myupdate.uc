@@ -69,11 +69,46 @@ function parse_keep_paths(value) {
 		for (let prefix in [ '/proc', '/sys', '/dev', '/tmp', '/rom', '/overlay' ])
 			if (path == prefix || substr(path, 0, length(prefix) + 1) == prefix + '/')
 				return null;
+		let info = fs.lstat(path), resolved = fs.realpath(path);
+		if (info == null || (info.type != 'file' && info.type != 'directory') || resolved != path) return null;
 		if (seen[path]) return null;
 		seen[path] = true;
 		paths[length(paths)] = path;
 	}
 	return paths;
+}
+function blocked_keep_path(path) {
+	for (let prefix in [ '/proc', '/sys', '/dev', '/tmp', '/rom', '/overlay' ])
+		if (path == prefix || substr(path, 0, length(prefix) + 1) == prefix + '/') return true;
+	return false;
+}
+function valid_browser_directory(path) {
+	if (type(path) != 'string' || length(path) > 512 || !match(path, /^\\/(?:[^\\/]+(?:\\/[^\\/]+)*)?$/) ||
+	    index(path, '\\n') >= 0 || index(path, '\\r') >= 0 || index(path, '\\\\') >= 0 ||
+	    match(path, /(^|\\/)\\.\\.?($|\\/)/)) return false;
+	let resolved = fs.realpath(path), info = fs.lstat(path);
+	return resolved == path && info != null && info.type == 'directory';
+}
+function list_keep_paths(path) {
+	if (!valid_browser_directory(path)) return { ok: false, error: '目录不存在、不可访问或包含不允许的路径组件' };
+	let names = fs.lsdir(path);
+	if (names == null) return { ok: false, error: '无法读取目录：' + (fs.error() || '权限不足或目录不可访问') };
+	let entries = [], truncated = length(names) > 300;
+	for (let name in names) {
+		if (length(entries) >= 300) break;
+		if (name == '.' || name == '..' || index(name, '/') >= 0 || index(name, '\\n') >= 0 || index(name, '\\r') >= 0)
+			continue;
+		let child = path == '/' ? '/' + name : path + '/' + name;
+		let info = fs.lstat(child);
+		if (info == null || (info.type != 'directory' && info.type != 'file')) continue;
+		let canonical = fs.realpath(child) == child, blocked = blocked_keep_path(child);
+		entries[length(entries)] = {
+			name: name, path: child, type: info.type,
+			can_open: info.type == 'directory' && canonical && !blocked,
+			can_add: canonical && !blocked && match(child, /^\\/[A-Za-z0-9._/@+-]+$/)
+		};
+	}
+	return { ok: true, path: path, entries: entries, truncated: truncated };
 }
 function save_config(args) {
 	let allowed = { repo_url: 200, repo_owner: 100, repo_name: 100, repo_visibility: 10, release_channel: 10,
@@ -85,6 +120,8 @@ function save_config(args) {
 		if (!valid_string(value, max)) return { ok: false, error: '配置字段格式错误：' + key };
 		c.set(CONFIG, 'main', key, value);
 	}
+	if ('allow_downgrade' in args && args.allow_downgrade != '0' && args.allow_downgrade != '1')
+		return { ok: false, error: '允许降级设置无效，只能为 0 或 1' };
 	if ('repo_url' in args && args.repo_url != '' &&
 	    !match(args.repo_url, /^https:\/\/github[.]com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+([.]git)?\/?$/))
 		return { ok: false, error: 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' };
@@ -174,6 +211,7 @@ function start_task(action) {
 return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
+	list_keep_paths: { args: { path: 'String' }, call: function(request) { return list_keep_paths(request.args.path); } },
 	save_config: { args: { repo_url: 'String', repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
 		upgrade_mode: 'String', check_interval: 'String', auto_upgrade_time: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
 		custom_keep_paths: 'String' },
