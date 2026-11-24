@@ -78,7 +78,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 - build-config/last-successful-partition-layout.json <<'PY'
-          import json, re, sys
+          import json, os, sys
           from pathlib import Path
           path = Path(sys.argv[1])
           data = json.loads(path.read_text(encoding="utf-8"))
@@ -91,7 +91,7 @@ jobs:
           for name, value in values.items():
               if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                   raise SystemExit(f"持久化分区配置无效：{name}={value!r}")
-          with open("$GITHUB_OUTPUT", "a", encoding="utf-8") as stream:
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in values.items():
                   stream.write(f"{name}={value}\\n")
           print("上次成功固件分区：Kernel={} MiB，Rootfs={} MiB".format(
@@ -874,8 +874,8 @@ jobs:
       - name: 运行 tools/install 和 07 号编译脚本并监控磁盘空间
         id: firmware_build
         env:
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || needs.source_check.outputs.last_kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || needs.source_check.outputs.last_rootfs_partsize || '4096' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -1464,17 +1464,25 @@ jobs:
               "manifest_version": manifest.get("version"),
               "manifest_schema_version": manifest.get("schema_version"),
           }
-          state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+          state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
           workflow = workflow_path.read_text(encoding="utf-8")
-          replacements = [
-              (r"(      kernel_partsize:\\n        description: ).*(\\n        type: string\\n        required: false\\n        default: ')[^']+(')",
-               rf"\\g<1>内核分区大小（MiB）；上游源码默认为 {fields['upstream_kernel']} MiB（上次成功 Manifest 记录）\\g<2>{fields['kernel_partsize_mib']}\\g<3>"),
-              (r"(      rootfs_partsize:\\n        description: ).*(\\n        type: string\\n        required: false\\n        default: ')[^']+(')",
-               rf"\\g<1>根文件系统分区大小（MiB）；上游源码默认为 {fields['upstream_rootfs']} MiB（上次成功 Manifest 记录）\\g<2>{fields['rootfs_partsize_mib']}\\g<3>"),
+          field_updates = [
+              (
+                  r"(^      kernel_partsize:\n        description: )[^\n]*(\n        type: string\n        required: false\n        default: ')[^']+(')",
+                  f"内核分区大小（MiB）；上游源码默认为 {fields['upstream_kernel']} MiB（上次成功 Manifest 记录）",
+                  str(fields["kernel_partsize_mib"]),
+              ),
+              (
+                  r"(^      rootfs_partsize:\n        description: )[^\n]*(\n        type: string\n        required: false\n        default: ')[^']+(')",
+                  f"根文件系统分区大小（MiB）；上游源码默认为 {fields['upstream_rootfs']} MiB（上次成功 Manifest 记录）",
+                  str(fields["rootfs_partsize_mib"]),
+              ),
           ]
-          for pattern, replacement in replacements:
-              workflow, count = re.subn(pattern, replacement, workflow, count=1)
+          for pattern, description, default_value in field_updates:
+              def replace_field(match):
+                  return match.group(1) + description + match.group(2) + default_value + match.group(3)
+              workflow, count = re.subn(pattern, replace_field, workflow, count=1, flags=re.MULTILINE)
               if count != 1:
                   raise SystemExit(f"无法唯一更新 workflow_dispatch 表单字段：{pattern}")
           workflow_path.write_text(workflow, encoding="utf-8")
