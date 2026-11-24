@@ -44,7 +44,7 @@ printf '%s\n' "$KEEP_PATHS" | tr ' ' '\n' | while IFS= read -r path; do
 	elif [ -f "$path" ] || [ -d "$path" ]; then
 		RESOLVED="$(readlink -f "$path" 2>/dev/null || true)"
 		[ "$RESOLVED" = "$path" ] || { echo "Refusing non-canonical custom sysupgrade path: $path" >&2; exit 1; }
-		printf '%s\\n' "$path" >> "$TMP"
+		printf '%s\n' "$path" >> "$TMP"
 	elif [ -e "$path" ]; then
 		echo "Refusing special custom sysupgrade path: $path" >&2
 		exit 1
