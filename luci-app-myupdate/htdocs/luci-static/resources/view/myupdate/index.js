@@ -7,6 +7,7 @@
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
 var callListKeepPaths = rpc.declare({ object: 'myupdate', method: 'list_keep_paths', params: [ 'path' ] });
+var callSaveKeepPaths = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'custom_keep_paths' ] });
 var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'allow_downgrade' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
@@ -183,13 +184,20 @@ return view.extend({
 		keepPaths.rmempty = true;
 		keepPaths.cfgvalue = function() { return keepPathValues.slice(); };
 		keepPaths.formvalue = function() { return keepPathValues.slice(); };
+		keepPaths.write = function(section_id, values) {
+			var paths = Array.isArray(values) ? values : keepPathValues;
+			return callSaveKeepPaths(paths.join('\n')).then(function(result) {
+				if (!result || !result.ok)
+					throw new Error(result && result.error ? result.error : _('自定义保留路径保存失败。'));
+			});
+		};
 		keepPaths.validate = function(section_id, values) {
 			var paths = Array.isArray(values) ? values : keepPathValues;
 			for (var i = 0; i < paths.length; i++) {
 				var path = String(paths[i] || '').trim();
-				if (!/^\\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\\/)\\.\\.?($|\\/)/.test(path))
+				if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path))
 					return _('路径格式无效：请填写已存在的绝对文件或目录路径。');
-				if (/^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path))
+				if (/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path))
 					return _('不能保留系统虚拟目录或临时目录中的路径。');
 			}
 			return true;
@@ -217,12 +225,12 @@ return view.extend({
 				});
 			}
 			function allowedPath(path) {
-				return /^\\/[A-Za-z0-9._/@+-]+$/.test(path) && path != '/' &&
-					!/(^|\\/)\\.\\.?($|\\/)/.test(path) &&
-					!/^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path);
+				return /^\/[A-Za-z0-9._/@+-]+$/.test(path) && path != '/' &&
+					!/(^|\/)\.\.?($|\/)/.test(path) &&
+					!/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path);
 			}
 			function addPaths(raw) {
-				var items = String(raw || '').split(/[\\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
+				var items = String(raw || '').split(/[\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
 				var added = 0, invalid = [];
 				items.forEach(function(path) {
 					if (!allowedPath(path)) { invalid.push(path); return; }
