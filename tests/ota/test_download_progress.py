@@ -61,6 +61,42 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify)", source)
         self.assertNotIn("ui.addNotification", source)
 
+    def test_filesystem_browser_is_server_side_and_filters_symlinks_and_virtual_paths(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        self.assertIn("list_keep_paths: { args: { path: 'String' }", rpc)
+        self.assertIn("fs.lsdir(path)", rpc)
+        self.assertIn("fs.lstat(child)", rpc)
+        self.assertIn("fs.realpath(child) == child", rpc)
+        self.assertIn("blocked_keep_path(child)", rpc)
+        self.assertIn("info.type != 'directory' && info.type != 'file'", rpc)
+
+    def test_keep_paths_must_exist_and_must_not_resolve_through_symlinks(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        backup = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/prepare-sysupgrade-backup.sh").read_text(encoding="utf-8")
+        self.assertIn("info.type != 'file' && info.type != 'directory'", rpc)
+        self.assertIn("resolved != path", rpc)
+        self.assertIn('[ -L "$path" ]', backup)
+        self.assertIn('readlink -f "$path"', backup)
+        self.assertIn('Refusing special custom sysupgrade path', backup)
+
+    def test_downgrade_is_a_persisted_checkbox_next_to_upgrade_action(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("args.allow_downgrade != '0' && args.allow_downgrade != '1'", rpc)
+        self.assertIn("method: 'save_config', params: [ 'allow_downgrade' ]", view)
+        self.assertIn("'type': 'checkbox'", view)
+        self.assertIn("downgradeLabel", view)
+        self.assertNotIn("form.ListValue, 'allow_downgrade'", view)
+
+    def test_keep_path_input_is_two_rows_and_uses_filesystem_browser(self):
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("'rows': '2'", view)
+        self.assertIn("callListKeepPaths('/')", view)
+        self.assertIn("myupdate-browser-entry", view)
+        self.assertIn("myupdate-browser-add", view)
+        self.assertNotIn("从常用固件目录中选择", view)
+        self.assertNotIn("/.uuplugin_uuid", view)
+
 
 if __name__ == "__main__":
     unittest.main()
