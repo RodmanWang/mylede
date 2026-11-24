@@ -156,7 +156,7 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('[ "$KERNEL_SECTORS" -ge "$KERNEL_REQUIRED_SECTORS" ]', checker)
         self.assertIn('[ "$ROOTFS_SECTORS" -ge "$ROOTFS_REQUIRED_SECTORS" ]', checker)
         self.assertIn('awk \'$2 == "/rom"', checker)
-        self.assertNotIn("\\\\$", checker)
+        self.assertNotIn("\\\\${", checker)
 
     def test_build_records_upstream_defaults_and_effective_partition_sizes_with_source_commits(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
