@@ -32,9 +32,11 @@ define Package/minisign/description
  Minisign is a simple tool to sign files and verify Ed25519 signatures.
 endef
 
-# OpenWrt's cmake.mk sets CMAKE_STRIP=:, preventing upstream's POST_BUILD
-# strip command from invoking the cross-strip tool on the host build target.
-CMAKE_OPTIONS += -DBUILD_STATIC_EXECUTABLES=OFF
+# LEDE's cmake.mk passes CMAKE_STRIP=:, but CMake treats ":" as an executable
+# in POST_BUILD commands and generates an invalid ./:: invocation. An empty
+# value disables upstream's optional POST_BUILD strip step; package stripping
+# remains handled by the normal LEDE package pipeline.
+CMAKE_OPTIONS += -DBUILD_STATIC_EXECUTABLES=OFF -DCMAKE_STRIP=
 
 define Package/minisign/install
 	$(INSTALL_DIR) $(1)/usr/bin
