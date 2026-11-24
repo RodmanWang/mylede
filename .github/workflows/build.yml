@@ -62,11 +62,43 @@ jobs:
       lede_commit: ${{ steps.detect.outputs.lede_commit }}
       fingerprint: ${{ steps.detect.outputs.fingerprint }}
       skip_build: ${{ steps.decision.outputs.skip_build }}
+      last_kernel_partsize: ${{ steps.last_partition_defaults.outputs.kernel_partsize }}
+      last_rootfs_partsize: ${{ steps.last_partition_defaults.outputs.rootfs_partsize }}
+      last_upstream_kernel_partsize: ${{ steps.last_partition_defaults.outputs.upstream_kernel_partsize }}
+      last_upstream_rootfs_partsize: ${{ steps.last_partition_defaults.outputs.upstream_rootfs_partsize }}
     steps:
       - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: 读取上次成功发布 Manifest 的分区默认值
+        id: last_partition_defaults
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - build-config/last-successful-partition-layout.json <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          data = json.loads(path.read_text(encoding="utf-8"))
+          values = {
+              "kernel_partsize": data.get("kernel_partsize_mib"),
+              "rootfs_partsize": data.get("rootfs_partsize_mib"),
+              "upstream_kernel_partsize": (data.get("upstream_defaults_mib") or {}).get("kernel_partsize"),
+              "upstream_rootfs_partsize": (data.get("upstream_defaults_mib") or {}).get("rootfs_partsize"),
+          }
+          for name, value in values.items():
+              if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                  raise SystemExit(f"持久化分区配置无效：{name}={value!r}")
+          with open("$GITHUB_OUTPUT", "a", encoding="utf-8") as stream:
+              for name, value in values.items():
+                  stream.write(f"{name}={value}\\n")
+          print("上次成功固件分区：Kernel={} MiB，Rootfs={} MiB".format(
+              values["kernel_partsize"], values["rootfs_partsize"]))
+          print("Manifest 上游默认值：Kernel={} MiB，Rootfs={} MiB".format(
+              values["upstream_kernel_partsize"], values["upstream_rootfs_partsize"]))
+          PY
 
       - name: 运行 OTA 版本契约测试
         shell: bash
@@ -83,8 +115,8 @@ jobs:
         env:
           BUILD_TARGET: x86_64
           KERNEL_VERSION: ${{ inputs.kernel_version }}
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || steps.last_partition_defaults.outputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || steps.last_partition_defaults.outputs.rootfs_partsize || '4096' }}
           CHANGE_LAN_IP: ${{ inputs.change_lan_ip }}
           LAN_IP: ${{ inputs.lan_ip || '192.168.1.1' }}
         shell: bash
@@ -685,8 +717,8 @@ jobs:
       - name: 读取并显示已锁定 LEDE 源码中的分区默认值
         id: partition_defaults
         env:
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || needs.source_check.outputs.last_kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || needs.source_check.outputs.last_rootfs_partsize || '4096' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -1393,6 +1425,74 @@ jobs:
             --title "MyLEDE ${RELEASE_VERSION}" \
             --notes-file release-input/release-notes.md \
             --latest
+
+      - name: 保存本次成功固件分区值，更新下次编译默认值和表单提示
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "::error::成功固件只允许从 main 分支发布，拒绝将分区默认值写入其他分支。"
+            exit 1
+          }
+          python3 - release-input/manifest.json build-config/last-successful-partition-layout.json .github/workflows/build.yml <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          manifest_path, state_path, workflow_path = map(Path, sys.argv[1:])
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          layout = manifest.get("partition_layout") or {}
+          upstream = layout.get("upstream_defaults_mib") or {}
+          fields = {
+              "kernel_partsize_mib": layout.get("kernel_partsize_mib"),
+              "rootfs_partsize_mib": layout.get("rootfs_partsize_mib"),
+              "upstream_kernel": upstream.get("kernel_partsize"),
+              "upstream_rootfs": upstream.get("rootfs_partsize"),
+          }
+          for name, value in fields.items():
+              if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                  raise SystemExit(f"Manifest 分区字段无效，不能更新下次编译默认值：{name}={value!r}")
+          if layout.get("uses_boot_part") is not True:
+              raise SystemExit("Manifest 未声明 x86 boot-part，拒绝更新分区默认值")
+          state = {
+              "schema_version": 1,
+              "kernel_partsize_mib": fields["kernel_partsize_mib"],
+              "rootfs_partsize_mib": fields["rootfs_partsize_mib"],
+              "upstream_defaults_mib": {
+                  "kernel_partsize": fields["upstream_kernel"],
+                  "rootfs_partsize": fields["upstream_rootfs"],
+              },
+              "manifest_tag": manifest.get("tag"),
+              "manifest_version": manifest.get("version"),
+              "manifest_schema_version": manifest.get("schema_version"),
+          }
+          state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+
+          workflow = workflow_path.read_text(encoding="utf-8")
+          replacements = [
+              (r"(      kernel_partsize:\\n        description: ).*(\\n        type: string\\n        required: false\\n        default: ')[^']+(')",
+               rf"\\g<1>内核分区大小（MiB）；上游源码默认为 {fields['upstream_kernel']} MiB（上次成功 Manifest 记录）\\g<2>{fields['kernel_partsize_mib']}\\g<3>"),
+              (r"(      rootfs_partsize:\\n        description: ).*(\\n        type: string\\n        required: false\\n        default: ')[^']+(')",
+               rf"\\g<1>根文件系统分区大小（MiB）；上游源码默认为 {fields['upstream_rootfs']} MiB（上次成功 Manifest 记录）\\g<2>{fields['rootfs_partsize_mib']}\\g<3>"),
+          ]
+          for pattern, replacement in replacements:
+              workflow, count = re.subn(pattern, replacement, workflow, count=1)
+              if count != 1:
+                  raise SystemExit(f"无法唯一更新 workflow_dispatch 表单字段：{pattern}")
+          workflow_path.write_text(workflow, encoding="utf-8")
+          print("已保存下次默认分区：Kernel={} MiB，Rootfs={} MiB".format(
+              fields["kernel_partsize_mib"], fields["rootfs_partsize_mib"]))
+          print("已更新 Actions 表单上游默认提示：Kernel={} MiB，Rootfs={} MiB".format(
+              fields["upstream_kernel"], fields["upstream_rootfs"]))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build-config/last-successful-partition-layout.json .github/workflows/build.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "ci(build): remember last successful firmware partition layout"
+            git push origin "HEAD:${GITHUB_REF}"
+          else
+            echo "本次分区值与持久化默认值相同，无需提交更新。"
+          fi
+
       - name: 准备成功编译的源码指纹标记
         env:
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
