@@ -67,11 +67,13 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: 检查原始固件与构建元数据
+        env:
+          SOURCE_HEAD_SHA: ${{ steps.source_run.outputs.head_sha }}
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
-          import json, re
+          import json, os, re
           from pathlib import Path
           meta = json.loads(Path('release-input/build-meta.json').read_text(encoding='utf-8'))
           version, tag = meta.get('version', ''), meta.get('tag', '')
@@ -80,6 +82,8 @@ jobs:
           for key in ('lede_commit', 'mylede_commit'):
               if not re.fullmatch(r'[0-9a-f]{40}', meta.get(key, '')):
                   raise SystemExit(f'Invalid {key} in build metadata.')
+          if meta['mylede_commit'] != os.environ['SOURCE_HEAD_SHA']:
+              raise SystemExit('Artifact build metadata does not match the selected workflow run commit.')
           for key in ('smartdns', 'smartdns_webui', 'luci_app_smartdns', 'openclash'):
               if not re.fullmatch(r'[0-9a-f]{7}', (meta.get('sources') or {}).get(key, '')):
                   raise SystemExit(f'Invalid source SHA: {key}')
