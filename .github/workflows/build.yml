@@ -871,12 +871,12 @@ jobs:
           # by each unchanged package Makefile.
           # Match the complete package filename, not a shared prefix:
           # "smartdns-" also prefixes "smartdns-webui-".
-          # Capture the commit suffix after the final hyphen, then publish only its first 7 characters.
+          # Capture and retain the complete 40-character source commit from the archive filename.
           # Keep package names exact: smartdns must not match smartdns-webui.
           archive_patterns = {
-              "smartdns": re.compile(r"^smartdns-(?!webui-).+-([0-9a-fA-F]{7,40})\.tar\.(?:gz|xz|bz2)$"),
-              "smartdns_webui": re.compile(r"^smartdns-webui-.+-([0-9a-fA-F]{7,40})\.tar\.(?:gz|xz|bz2)$"),
-              "luci_app_smartdns": re.compile(r"^luci-app-smartdns-.+-([0-9a-fA-F]{7,40})\.tar\.(?:gz|xz|bz2)$"),
+              "smartdns": re.compile(r"^smartdns-(?!webui-).+-([0-9a-fA-F]{40})\.tar\.(?:gz|xz|bz2)$"),
+              "smartdns_webui": re.compile(r"^smartdns-webui-.+-([0-9a-fA-F]{40})\.tar\.(?:gz|xz|bz2)$"),
+              "luci_app_smartdns": re.compile(r"^luci-app-smartdns-.+-([0-9a-fA-F]{40})\.tar\.(?:gz|xz|bz2)$"),
           }
 
           outputs = {}
@@ -887,7 +887,7 @@ jobs:
                       continue
                   match = filename_pattern.fullmatch(path.name)
                   if match:
-                      matches.append((path, match.group(1)[:7].lower()))
+                      matches.append((path, match.group(1).lower()))
               if len(matches) != 1:
                   package_prefix = {
                       "smartdns": "smartdns-",
@@ -902,9 +902,9 @@ jobs:
                       f"expected exactly one current {name} source archive, found {len(matches)}; "
                       f"matching files={candidates!r}"
                   )
-              path, short_sha = matches[0]
-              outputs[name] = short_sha
-              print(f"{name}: {short_sha} (from {path.name})")
+              path, full_sha = matches[0]
+              outputs[name] = full_sha
+              print(f"{name}: {full_sha} (from {path.name})")
 
           repositories = {
               "lede_commit": (Path("/home/ubuntu/lede"), None),
@@ -921,10 +921,10 @@ jobs:
                   if expected_remote.lower() not in remote.lower():
                       raise SystemExit(f"unexpected {output_name} origin: {remote}")
               sha = subprocess.check_output(
-                  ["git", "-C", str(repo), "rev-parse", "--short=7", "HEAD"], text=True
+                  ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
               ).strip()
-              if not re.fullmatch(r"[0-9a-f]{7}", sha):
-                  raise SystemExit(f"invalid {output_name}: {sha!r}")
+              if not re.fullmatch(r"[0-9a-f]{40}", sha):
+                  raise SystemExit(f"invalid full commit SHA for {output_name}: {sha!r}")
               outputs[output_name] = sha
               print(f"{output_name}: {sha} (actual checkout)")
 
@@ -963,7 +963,7 @@ jobs:
           cp -f "${IMAGES[0]}" "$RELEASE_INPUT/"
           cp -f "$TARGET_DIR/version.buildinfo" "$RELEASE_INPUT/version.buildinfo"
           python3 - "$RELEASE_INPUT/build-meta.json" "$BUILD_VERSION" "$BUILD_TAG" "$SOURCE_FINGERPRINT" "$LEDE_COMMIT" "$GITHUB_SHA" <<'PY'
-          import json, os, sys
+          import json, os, re, sys
           output, version, tag, fingerprint, lede_commit, mylede_commit = sys.argv[1:]
           sources = {
               'smartdns': os.environ['SMARTDNS_COMMIT'],
@@ -972,8 +972,10 @@ jobs:
               'openclash': os.environ['OPENCLASH_COMMIT'],
           }
           for name, commit in sources.items():
-              if len(commit) != 7 or any(c not in '0123456789abcdef' for c in commit):
-                  raise SystemExit(f'Invalid seven-character source SHA for {name}: {commit!r}')
+              if not re.fullmatch(r'[0-9a-f]{40}', commit):
+                  raise SystemExit(f'Invalid full source commit SHA for {name}: {commit!r}')
+          if not re.fullmatch(r'[0-9a-f]{40}', lede_commit):
+              raise SystemExit(f'Invalid full LEDE commit SHA: {lede_commit!r}')
           with open(output, 'w', encoding='utf-8') as f:
               json.dump({
                   'version': version,
@@ -1293,11 +1295,11 @@ jobs:
 
           ### 本次编译使用的源码版本
 
-          - LEDE: [${LEDE_COMMIT}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
-          - SmartDNS: [${SMARTDNS_COMMIT}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
-          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
-          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
-          - OpenClash: [${OPENCLASH_COMMIT}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          - LEDE: [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash: [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
           EOF
           gh release create "$RELEASE_TAG" \
             "$IMAGE" \
