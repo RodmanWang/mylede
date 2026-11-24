@@ -75,7 +75,7 @@ jobs:
           from pathlib import Path
           meta = json.loads(Path('release-input/build-meta.json').read_text(encoding='utf-8'))
           version, tag = meta.get('version', ''), meta.get('tag', '')
-          if not re.fullmatch(r'\\d{14}', version) or tag != f'mylede-v{version}':
+          if not re.fullmatch(r'[0-9]{14}', version) or tag != f'mylede-v{version}':
               raise SystemExit('Invalid firmware version/tag in build metadata.')
           for key in ('lede_commit', 'mylede_commit'):
               if not re.fullmatch(r'[0-9a-f]{40}', meta.get(key, '')):
@@ -94,7 +94,7 @@ jobs:
           print(f'Original firmware verified: {images[0].name} ({images[0].stat().st_size} bytes)')
           print(f'Firmware version: {version}; Release tag: {tag}')
           with open(Path('release-input/release-values.env'), 'w', encoding='utf-8') as stream:
-              stream.write(f'VERSION={version}\\nTAG={tag}\\n')
+              stream.write(f'VERSION={version}' + chr(10) + f'TAG={tag}' + chr(10))
           PY
           cat release-input/release-values.env >> "$GITHUB_ENV"
 
@@ -133,7 +133,7 @@ jobs:
               'compatibility': {'target': 'x86', 'subtarget': '64', 'arch': 'x86_64', 'device_policy': 'target', 'devices': []},
               'image': {'asset': image.name, 'sha256': digest.hexdigest(), 'size': image.stat().st_size}
           }
-          Path('release-input/manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\\n', encoding='utf-8')
+          Path('release-input/manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + chr(10), encoding='utf-8')
           print(f"Original image SHA256: {digest.hexdigest()}")
           PY
 
