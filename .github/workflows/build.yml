@@ -9,12 +9,12 @@ on:
         required: false
         default: ''
       kernel_partsize:
-        description: 内核分区大小（MB），将写入固件实际分区配置
+        description: 内核分区大小（MiB）；当前上游 x86 默认 64 MiB（运行时以锁定源码检查结果为准）
         type: string
         required: false
         default: '256'
       rootfs_partsize:
-        description: 根文件系统分区大小（MB），将写入固件实际分区配置
+        description: 根文件系统分区大小（MiB）；当前上游 x86 默认 448 MiB（运行时以锁定源码检查结果为准）
         type: string
         required: false
         default: '4096'
@@ -681,6 +681,7 @@ jobs:
           done
 
       - name: 读取并显示已锁定 LEDE 源码中的分区默认值
+        id: partition_defaults
         env:
           KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
           ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
@@ -741,10 +742,36 @@ jobs:
               scope = "TARGET_x86" if condition else "通用默认值"
               print(f"{label}：{value} MiB（{scope}，{source}:{line_number}）")
               print(f"  源码定义：{definition}")
+              if symbol == "TARGET_KERNEL_PARTSIZE":
+                  kernel_default = value
+              else:
+                  rootfs_default = value
+
+          import re
+          target_makefile = Path("target/linux/x86/Makefile")
+          if not target_makefile.is_file():
+              raise SystemExit(f"找不到 x86 target 定义文件：{target_makefile}")
+          features = re.search(r"(?m)^FEATURES\\s*[:+?]?=\\s*(.*)$", target_makefile.read_text(encoding="utf-8"))
+          if not features:
+              raise SystemExit("无法从 target/linux/x86/Makefile 读取 FEATURES")
+          uses_boot_part = "boot-part" in features.group(1).split()
+          if not uses_boot_part:
+              raise SystemExit("当前 x86 target 未启用 boot-part，无法安全生成 EFI 分区元数据")
+          print(f"USES_BOOT_PART：{'启用' if uses_boot_part else '未启用'}（x86 FEATURES）")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              stream.write(f"kernel_partsize={kernel_default}\\n")
+              stream.write(f"rootfs_partsize={rootfs_default}\\n")
+              stream.write(f"uses_boot_part={'true' if uses_boot_part else 'false'}\\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write("### x86 分区参数（本次锁定的 LEDE 源码）\\n")
+              stream.write(f"- 上游内核分区默认值：**{kernel_default} MiB**\\n")
+              stream.write(f"- 上游根文件系统分区默认值：**{rootfs_default} MiB**\\n")
+              stream.write(f"- USES_BOOT_PART：**{'启用' if uses_boot_part else '未启用'}**\\n")
+              stream.write(f"- 本次固件实际配置：内核 **{os.environ['KERNEL_PARTSIZE']} MiB**，根文件系统 **{os.environ['ROOTFS_PARTSIZE']} MiB**\\n")
           PY
           echo '========== MyLEDE 请求的固件分区布局 =========='
-          echo "内核分区：${KERNEL_PARTSIZE} MB"
-          echo "根文件系统分区：${ROOTFS_PARTSIZE} MB"
+          echo "内核分区：${KERNEL_PARTSIZE} MiB"
+          echo "根文件系统分区：${ROOTFS_PARTSIZE} MiB"
 
       - name: 计算稳定的工具链缓存标识
         id: firmware_toolchain_key
@@ -960,6 +987,11 @@ jobs:
           LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns }}
           OPENCLASH_COMMIT: ${{ steps.plugin_source_revisions.outputs.openclash_commit }}
           BUILD_TARGET: x86_64
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
+          UPSTREAM_KERNEL_PARTSIZE: ${{ steps.partition_defaults.outputs.kernel_partsize }}
+          UPSTREAM_ROOTFS_PARTSIZE: ${{ steps.partition_defaults.outputs.rootfs_partsize }}
+          USES_BOOT_PART: ${{ steps.partition_defaults.outputs.uses_boot_part }}
         run: |
           set -Eeuo pipefail
           TARGET_DIR=/home/ubuntu/lede/bin/targets/x86/64
@@ -999,6 +1031,15 @@ jobs:
                   'lede_commit': lede_commit,
                   'mylede_commit': mylede_commit,
                   'sources': sources,
+                  'partition_layout': {
+                      'kernel_partsize_mib': int(os.environ['KERNEL_PARTSIZE']),
+                      'rootfs_partsize_mib': int(os.environ['ROOTFS_PARTSIZE']),
+                      'uses_boot_part': os.environ['USES_BOOT_PART'].lower() == 'true',
+                      'upstream_defaults_mib': {
+                          'kernel_partsize': int(os.environ['UPSTREAM_KERNEL_PARTSIZE']),
+                          'rootfs_partsize': int(os.environ['UPSTREAM_ROOTFS_PARTSIZE'])
+                      }
+                  },
                   'build_target': os.environ.get('BUILD_TARGET', 'x86_64'),
                   # This workflow builds only the LEDE x86/64 target.
                   # Keep release compatibility metadata explicit instead of
@@ -1201,7 +1242,7 @@ jobs:
                   digest.update(chunk)
 
           manifest = {
-              'schema_version': 1,
+              'schema_version': 2,
               'version': meta['version'],
               'tag': meta['tag'],
               'channel': 'stable',
@@ -1232,6 +1273,7 @@ jobs:
                       'short_commit': meta['sources']['openclash'][:7]
                   }
               },
+              'partition_layout': meta['partition_layout'],
               'compatibility': {
                   'target': target,
                   'subtarget': subtarget,
