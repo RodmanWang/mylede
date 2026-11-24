@@ -1013,7 +1013,20 @@ jobs:
           cp -f "$TARGET_DIR/version.buildinfo" "$RELEASE_INPUT/version.buildinfo"
           python3 - "$RELEASE_INPUT/build-meta.json" "$BUILD_VERSION" "$BUILD_TAG" "$SOURCE_FINGERPRINT" "$LEDE_COMMIT" "$GITHUB_SHA" <<'PY'
           import json, os, re, sys
+          from pathlib import Path
           output, version, tag, fingerprint, lede_commit, mylede_commit = sys.argv[1:]
+          final_config = Path('/home/ubuntu/lede/.config')
+          if not final_config.is_file():
+              raise SystemExit('最终 LEDE .config 不存在，不能记录固件分区布局')
+          config_values = {}
+          for line in final_config.read_text(encoding='utf-8').splitlines():
+              match = re.fullmatch(r'CONFIG_TARGET_(KERNEL|ROOTFS)_PARTSIZE=(\\d+)', line)
+              if match:
+                  config_values[match.group(1)] = int(match.group(2))
+          if set(config_values) != {'KERNEL', 'ROOTFS'}:
+              raise SystemExit(f'最终 .config 缺少分区大小：{config_values!r}')
+          if config_values['KERNEL'] != int(os.environ['KERNEL_PARTSIZE']) or config_values['ROOTFS'] != int(os.environ['ROOTFS_PARTSIZE']):
+              raise SystemExit(f'最终 .config 分区大小与 Actions 输入不一致：{config_values!r}')
           sources = {
               'smartdns': os.environ['SMARTDNS_COMMIT'],
               'smartdns_webui': os.environ['SMARTDNS_WEBUI_COMMIT'],
@@ -1034,8 +1047,8 @@ jobs:
                   'mylede_commit': mylede_commit,
                   'sources': sources,
                   'partition_layout': {
-                      'kernel_partsize_mib': int(os.environ['KERNEL_PARTSIZE']),
-                      'rootfs_partsize_mib': int(os.environ['ROOTFS_PARTSIZE']),
+                      'kernel_partsize_mib': config_values['KERNEL'],
+                      'rootfs_partsize_mib': config_values['ROOTFS'],
                       'uses_boot_part': os.environ['USES_BOOT_PART'].lower() == 'true',
                       'upstream_defaults_mib': {
                           'kernel_partsize': int(os.environ['UPSTREAM_KERNEL_PARTSIZE']),
