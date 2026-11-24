@@ -240,10 +240,19 @@ jobs:
           print(tag)
           PY
           )"
-          MINISIGN_ARCHIVE_URL="https://github.com/jedisct1/minisign/archive/refs/tags/${MINISIGN_VERSION}.tar.gz"
+          # Download source from codeload directly. The github.com/archive URL
+          # returned HTTP 403 on GitHub-hosted runners before any build began.
+          MINISIGN_ARCHIVE_URL="https://codeload.github.com/jedisct1/minisign/tar.gz/refs/tags/${MINISIGN_VERSION}"
           MINISIGN_ARCHIVE="$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz"
+          echo "正在下载 minisign 源码归档：$MINISIGN_ARCHIVE_URL"
           curl --fail --location --retry 3 --retry-delay 2 \
+            --connect-timeout 15 --max-time 180 \
+            --header 'User-Agent: MyLEDE-GitHub-Actions' \
             "$MINISIGN_ARCHIVE_URL" --output "$MINISIGN_ARCHIVE"
+          [[ -s "$MINISIGN_ARCHIVE" ]] || {
+            echo '::error::minisign 源码归档下载完成但文件为空。'
+            exit 1
+          }
           MINISIGN_SHA256="$(sha256sum "$MINISIGN_ARCHIVE" | awk '{print $1}')"
           [[ "$MINISIGN_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
             echo '::error::无法计算 minisign 源码归档 SHA-256。'
