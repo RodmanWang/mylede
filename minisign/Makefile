@@ -1,12 +1,26 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=minisign
+# The Actions preflight locks the latest stable upstream Release in this file's
+# source-revisions.tsv. These defaults are retained for standalone/local builds.
+MINISIGN_LOCK_FILE ?= /home/ubuntu/source-revisions.tsv
+MINISIGN_LOCK_VERSION := $(shell awk -F '\\t' '$1 == "MINISIGN_RELEASE" { print $3; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
+MINISIGN_LOCK_HASH := $(shell awk -F '\\t' '$1 == "MINISIGN_RELEASE" { print $4; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
+
 PKG_VERSION:=0.11
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://github.com/jedisct1/minisign/archive/refs/tags/$(PKG_VERSION)
+# Fallback digest for local builds without an Actions source lock.
 PKG_HASH:=74c2c78a1cd51a43a6c98f46a4eabefbc8668074ca9aa14115544276b663fc55
+ifneq ($(strip $(MINISIGN_LOCK_VERSION)),)
+ifeq ($(strip $(MINISIGN_LOCK_HASH)),)
+$(error Minisign release lock has a version but no SHA-256 digest)
+endif
+PKG_VERSION:=$(MINISIGN_LOCK_VERSION)
+PKG_HASH:=$(MINISIGN_LOCK_HASH)
+endif
 
 PKG_LICENSE:=ISC
 PKG_LICENSE_FILES:=LICENSE
