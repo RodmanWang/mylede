@@ -4,8 +4,8 @@ PKG_NAME:=minisign
 # The Actions preflight locks the latest stable upstream Release in this file's
 # source-revisions.tsv. These defaults are retained for standalone/local builds.
 MINISIGN_LOCK_FILE ?= /home/ubuntu/source-revisions.tsv
-MINISIGN_LOCK_VERSION := $(shell awk -F '\\t' '$1 == "MINISIGN_RELEASE" { print $3; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
-MINISIGN_LOCK_HASH := $(shell awk -F '\\t' '$1 == "MINISIGN_RELEASE" { print $4; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
+MINISIGN_LOCK_VERSION := $(shell awk -F '\t' '$1 == "MINISIGN_RELEASE" { print $3; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
+MINISIGN_LOCK_HASH := $(shell awk -F '\t' '$1 == "MINISIGN_RELEASE" { print $4; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
 
 PKG_VERSION:=0.11
 PKG_RELEASE:=1
