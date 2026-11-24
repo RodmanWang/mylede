@@ -91,7 +91,7 @@ class DownloadProgressContractTests(unittest.TestCase):
     def test_keep_path_input_is_two_rows_and_uses_filesystem_browser(self):
         view = VIEW.read_text(encoding="utf-8")
         self.assertIn("'rows': '2'", view)
-        self.assertIn("callListKeepPaths('/')", view)
+        self.assertIn("loadDirectory('/')", view)
         self.assertIn("myupdate-browser-entry", view)
         self.assertIn("myupdate-browser-add", view)
         self.assertNotIn("从常用固件目录中选择", view)
