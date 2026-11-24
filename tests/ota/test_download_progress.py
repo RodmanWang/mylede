@@ -120,7 +120,7 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("keyInput.addEventListener('blur'", view)
         self.assertIn("max-width:560px", view)
         self.assertIn("overflow-wrap:anywhere", view)
-        self.assertIn("max-width:760px", view)
+        self.assertIn("max-width:680px", view)
         self.assertIn("function onOutsideBrowserClick(ev)", view)
         self.assertIn("document.addEventListener('click', onOutsideBrowserClick)", view)
         self.assertIn("document.removeEventListener('click', onOutsideBrowserClick)", view)
