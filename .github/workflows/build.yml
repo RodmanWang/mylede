@@ -154,10 +154,17 @@ jobs:
                   add(f'feed:{name}', url, ref)
 
 
+          # Resolve the exact plugin sources used by the custom package Makefiles.
+          # These are locked before either build job starts; do not infer commits
+          # later from shortened download archive filenames.
+          add('plugin:smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
+          add('plugin:smartdns_webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
+          add('plugin:luci_app_smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
+
           with output_file.open('w', encoding='utf-8') as stream:
               for (url, ref), name in sorted(repositories.items()):
                   stream.write(f'{name}\t{url}\t{ref}\n')
-          print(f'Found {len(repositories)} unique source references.')
+          print(f'Found {len(repositories)} unique source references, including the three custom plugin repositories.')
           PY
 
           : > "$RUNNER_TEMP/source-revisions.tsv"
@@ -173,6 +180,10 @@ jobs:
             printf '%s\t%s\t%s\t%s\n' "$repo_name" "$repo_url" "$repo_ref" "$repo_commit" \
               >> "$RUNNER_TEMP/source-revisions.tsv"
           done < "$RUNNER_TEMP/source-repositories.tsv"
+
+          # Record the exact pinned LEDE checkout in the same immutable lock file.
+          printf 'LEDE\t%s\t%s\t%s\n' "$LEDE_URL" "$LEDE_REF" "$LEDE_COMMIT" \
+            >> "$RUNNER_TEMP/source-revisions.tsv"
 
           {
             printf 'LEDE\t%s\n' "$LEDE_COMMIT"
@@ -862,75 +873,47 @@ jobs:
           import subprocess
           from pathlib import Path
 
-          dl = Path("/home/ubuntu/dl")
-          if not dl.is_dir():
-              raise SystemExit(f"download directory is missing: {dl}")
+          lock_file = Path("/home/ubuntu/source-revisions.tsv")
+          if not lock_file.is_file():
+              raise SystemExit(f"immutable source lock file is missing: {lock_file}")
 
-          # 06-clean-build.sh removes old SmartDNS archives before this build.
-          # The resulting archive names contain the source commit prefix selected
-          # by each unchanged package Makefile.
-          # Match the complete package filename, not a shared prefix:
-          # "smartdns-" also prefixes "smartdns-webui-".
-          # Capture and retain the complete 40-character source commit from the archive filename.
-          # Keep package names exact: smartdns must not match smartdns-webui.
-          archive_patterns = {
-              "smartdns": re.compile(r"^smartdns-(?!webui-).+-([0-9a-fA-F]{40})\.tar\.(?:gz|xz|bz2)$"),
-              "smartdns_webui": re.compile(r"^smartdns-webui-.+-([0-9a-fA-F]{40})\.tar\.(?:gz|xz|bz2)$"),
-              "luci_app_smartdns": re.compile(r"^luci-app-smartdns-.+-([0-9a-fA-F]{40})\.tar\.(?:gz|xz|bz2)$"),
+          # Read the same immutable commit locks that were resolved before the
+          # build and used by the package Makefiles. Never infer a full SHA from
+          # shortened archive names in dl/.
+          locked = {}
+          for line in lock_file.read_text(encoding="utf-8").splitlines():
+              fields = line.split("\\t")
+              if len(fields) != 4:
+                  raise SystemExit(f"invalid source lock row: {line!r}")
+              name, url, ref, commit = fields
+              if not re.fullmatch(r"[0-9a-f]{40}", commit):
+                  raise SystemExit(f"invalid full SHA in source lock for {name}: {commit!r}")
+              if name in locked:
+                  raise SystemExit(f"duplicate source lock entry: {name}")
+              locked[name] = (url, ref, commit)
+
+          expected = {
+              "lede_commit": ("LEDE", "https://github.com/coolsnowwolf/lede.git"),
+              "smartdns": ("plugin:smartdns", "https://github.com/pymumu/smartdns.git"),
+              "smartdns_webui": ("plugin:smartdns_webui", "https://github.com/pymumu/smartdns-webui.git"),
+              "luci_app_smartdns": ("plugin:luci_app_smartdns", "https://github.com/pymumu/luci-app-smartdns.git"),
+              "openclash_commit": ("feed:OpenClash", "https://github.com/vernesong/OpenClash.git"),
           }
-
           outputs = {}
-          for name, filename_pattern in archive_patterns.items():
-              matches = []
-              for path in dl.iterdir():
-                  if not path.is_file():
-                      continue
-                  match = filename_pattern.fullmatch(path.name)
-                  if match:
-                      matches.append((path, match.group(1).lower()))
-              if len(matches) != 1:
-                  package_prefix = {
-                      "smartdns": "smartdns-",
-                      "smartdns_webui": "smartdns-webui-",
-                      "luci_app_smartdns": "luci-app-smartdns-",
-                  }[name]
-                  candidates = [
-                      p.name for p in dl.iterdir()
-                      if p.is_file() and p.name.startswith(package_prefix)
-                  ]
-                  raise SystemExit(
-                      f"expected exactly one current {name} source archive, found {len(matches)}; "
-                      f"matching files={candidates!r}"
-                  )
-              path, full_sha = matches[0]
-              outputs[name] = full_sha
-              print(f"{name}: {full_sha} (from {path.name})")
-
-          repositories = {
-              "lede_commit": (Path("/home/ubuntu/lede"), None),
-              "openclash_commit": (Path("/home/ubuntu/lede/feeds/OpenClash"), "vernesong/OpenClash"),
-          }
-          for output_name, (repo, expected_remote) in repositories.items():
-              if subprocess.run(["git", "-C", str(repo), "rev-parse", "--is-inside-work-tree"],
-                                capture_output=True, text=True).returncode != 0:
-                  raise SystemExit(f"not a Git working tree: {repo}")
-              if expected_remote:
-                  remote = subprocess.check_output(
-                      ["git", "-C", str(repo), "remote", "get-url", "origin"], text=True
-                  ).strip()
-                  if expected_remote.lower() not in remote.lower():
-                      raise SystemExit(f"unexpected {output_name} origin: {remote}")
-              sha = subprocess.check_output(
-                  ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
-              ).strip()
-              if not re.fullmatch(r"[0-9a-f]{40}", sha):
-                  raise SystemExit(f"invalid full commit SHA for {output_name}: {sha!r}")
-              outputs[output_name] = sha
-              print(f"{output_name}: {sha} (actual checkout)")
+          for output_name, (lock_name, expected_url) in expected.items():
+              if lock_name not in locked:
+                  raise SystemExit(f"source lock is missing required entry: {lock_name}")
+              url, ref, commit = locked[lock_name]
+              normalized_url = url.removesuffix(".git").rstrip("/")
+              normalized_expected = expected_url.removesuffix(".git").rstrip("/")
+              if normalized_url.lower() != normalized_expected.lower():
+                  raise SystemExit(f"unexpected source URL for {lock_name}: {url}")
+              outputs[output_name] = commit
+              print(f"{output_name}: {commit} (locked ref: {ref})")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in outputs.items():
-                  stream.write(f"{name}={value}\n")
+                  stream.write(f"{name}={value}\\n")
           PY
       - name: 选择 UEFI 镜像并准备发布文件
         if: success()
