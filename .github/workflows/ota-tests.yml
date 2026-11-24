@@ -29,6 +29,13 @@ jobs:
       - name: Exercise signed OTA manifest verifier
         run: bash tests/ota/test_verify_manifest.sh
 
+      - name: Test x86 partition capacity guard
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sh -n luci-app-myupdate/root/usr/libexec/myupdate/check-partition-layout.sh
+          bash tests/ota/test_partition_layout.sh
+
       - name: Test MyUpdate scheduler task queue
         run: sh tests/ota/test_scheduler_queue.sh
 
