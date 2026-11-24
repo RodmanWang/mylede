@@ -165,14 +165,14 @@ else:
 # 4. x86 专用软件包统一写入 target/linux/x86/Makefile 的 DEFAULT_PACKAGES。
 packages = [
     "luci-app-smartdns", "luci-app-myupdate", "luci-app-openclash",
-    "luci-proto-wireguard", "luci-app-uugamebooster", "ipv6helper",
+    "luci-proto-wireguard", "luci-app-uugamebooster", "luci-app-samba4",
     "open-vm-tools", "ddns-scripts-cloudflare", "iptables-mod-conntrack-extra",
     "iptables-mod-hashlimit", "iptables-mod-iprange", "iptables-mod-filter",
     "iptables-mod-ipopt", "iptables-mod-nflog", "iptables-mod-nfqueue",
     "iptables-mod-trace", "kmod-nft-queue", "kmod-nft-tproxy", "kmod-nft-fib",
     "kmod-nft-socket", "kmod-nft-netdev", "kmod-nft-compat", "conntrack",
     "tcpdump", "nmap", "ncat", "nping", "socat", "mtr-nojson", "iperf3",
-    "tc-full", "ss", "nstat"
+    "tc-full", "ss", "nstat", "ipv6helper"
 ]
 
 if len(packages) != len(set(packages)):
