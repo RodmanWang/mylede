@@ -103,6 +103,12 @@ if [ "$ACTION" = check ]; then
 	exit 0
 fi
 [ "$UPDATE" = true ] || { write_status current '当前已经是最新版本，不需要重复刷写' false false false; exit 1; }
+KERNEL_PARTSIZE="$(sed -n '6p' "$R/verified-manifest.txt")"
+ROOTFS_PARTSIZE="$(sed -n '7p' "$R/verified-manifest.txt")"
+/usr/libexec/myupdate/check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE" || {
+	write_status error '当前设备的内核或根文件系统分区容量不足，已阻止下载和升级' true false false
+	exit 1
+}
 if [ "$ACTION" = download ]; then
 	write_status downloading "正在下载 $ASSET" true false false
 	# Avoid filling tmpfs; sysupgrade needs working space while validating and flashing.
@@ -130,6 +136,11 @@ if ! sysupgrade -T "$R/firmware.bin"; then
 	write_status error 'LEDE sysupgrade 镜像预检查失败，已取消刷写' true true true
 	exit 1
 fi
+# Re-read sysfs immediately before sysupgrade; never rely only on the earlier download check.
+/usr/libexec/myupdate/check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE" || {
+	write_status error '刷写前再次检查发现分区容量不足，已取消升级' true true true
+	exit 1
+}
 if ! /bin/sh /usr/libexec/myupdate/prepare-sysupgrade-backup.sh; then
 	write_status error '自定义文件保留路径准备失败，已取消刷写' true true true
 	exit 1
