@@ -40,7 +40,7 @@ on:
         default: false
   schedule:
     # Daily at 03:00 China Standard Time (19:00 UTC on the previous day).
-    - cron: '0 14 * * *'
+    - cron: '0 9 * * *'
 
 permissions:
   contents: read
