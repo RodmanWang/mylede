@@ -1,0 +1,207 @@
+name: 5、从历史构建产物发布 MyLEDE 固件
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 已成功生成固件的原工作流运行编号
+        type: string
+        required: true
+        default: '45317634549'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    name: 下载历史固件并发布 GitHub Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: 检出发布校验脚本
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: 验证原工作流及固件编译结果
+        id: source_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo '::error::运行编号必须是纯数字。'; exit 1; }
+          RUN_JSON="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          [[ "$(jq -r '.path' <<< "$RUN_JSON")" == '.github/workflows/build.yml' ]] || {
+            echo '::error::指定运行不是 MyLEDE 固件主构建工作流。'; exit 1;
+          }
+          [[ "$(jq -r '.status' <<< "$RUN_JSON")" == 'completed' ]] || {
+            echo '::error::指定工作流尚未完成。'; exit 1;
+          }
+          [[ "$(jq -r '.head_branch' <<< "$RUN_JSON")" == 'main' ]] || {
+            echo '::error::只允许从 main 分支的正式构建运行中取回固件。'; exit 1;
+          }
+          HEAD_SHA="$(jq -r '.head_sha' <<< "$RUN_JSON")"
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::原工作流提交 SHA 无效。'; exit 1; }
+          JOBS_JSON="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/jobs?per_page=100")"
+          jq -e '[.jobs[] | select(.name == "构建任务二：编译软件源、软件包、内核与固件" and .conclusion == "success")] | length == 1' \
+            <<< "$JOBS_JSON" >/dev/null || {
+              echo '::error::原工作流的固件编译任务未成功，拒绝发布。'; exit 1;
+            }
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "已确认原工作流 $SOURCE_RUN_ID 的固件编译任务成功，源码提交：$HEAD_SHA"
+
+      - name: 下载原工作流的固件发布文件
+        uses: actions/download-artifact@v7
+        with:
+          name: 固件发布文件
+          path: release-input
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: 检查原始固件与构建元数据
+        env:
+          SOURCE_HEAD_SHA: ${{ steps.source_run.outputs.head_sha }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          meta = json.loads(Path('release-input/build-meta.json').read_text(encoding='utf-8'))
+          version, tag = meta.get('version', ''), meta.get('tag', '')
+          if not re.fullmatch(r'[0-9]{14}', version) or tag != f'mylede-v{version}':
+              raise SystemExit('Invalid firmware version/tag in build metadata.')
+          for key in ('lede_commit', 'mylede_commit'):
+              if not re.fullmatch(r'[0-9a-f]{40}', meta.get(key, '')):
+                  raise SystemExit(f'Invalid {key} in build metadata.')
+          if meta['mylede_commit'] != os.environ['SOURCE_HEAD_SHA']:
+              raise SystemExit('Artifact build metadata does not match the selected workflow run commit.')
+          for key in ('smartdns', 'smartdns_webui', 'luci_app_smartdns', 'openclash'):
+              if not re.fullmatch(r'[0-9a-f]{7}', (meta.get('sources') or {}).get(key, '')):
+                  raise SystemExit(f'Invalid source SHA: {key}')
+          compat = meta.get('compatibility') or {}
+          if (compat.get('target'), compat.get('subtarget'), compat.get('arch')) != ('x86', '64', 'x86_64'):
+              raise SystemExit('Unexpected firmware compatibility metadata.')
+          if not Path('release-input/version.buildinfo').read_text(encoding='utf-8', errors='replace').strip():
+              raise SystemExit('version.buildinfo is empty.')
+          images = list(Path('release-input').glob('openwrt-x86-64-generic-squashfs-combined-efi.img.gz'))
+          if len(images) != 1 or images[0].stat().st_size == 0:
+              raise SystemExit('Expected exactly one non-empty original EFI firmware image.')
+          print(f'Original firmware verified: {images[0].name} ({images[0].stat().st_size} bytes)')
+          print(f'Firmware version: {version}; Release tag: {tag}')
+          with open(Path('release-input/release-values.env'), 'w', encoding='utf-8') as stream:
+              stream.write(f'VERSION={version}' + chr(10) + f'TAG={tag}' + chr(10))
+          PY
+          cat release-input/release-values.env >> "$GITHUB_ENV"
+
+      - name: 安装 minisign 签名工具
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y minisign
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: 根据原固件生成发布清单与 SHA256
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          meta = json.loads(Path('release-input/build-meta.json').read_text(encoding='utf-8'))
+          image = Path('release-input/openwrt-x86-64-generic-squashfs-combined-efi.img.gz')
+          digest = hashlib.sha256()
+          with image.open('rb') as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                  digest.update(chunk)
+          src = meta['sources']
+          manifest = {
+              'schema_version': 1, 'version': meta['version'], 'tag': meta['tag'], 'channel': 'stable',
+              'sources': {
+                  'coolsnowwolf/lede': {'ref': 'master', 'commit': meta['lede_commit'], 'short_commit': meta['lede_commit'][:7]},
+                  'pymumu/smartdns': {'ref': 'downloaded source archive', 'commit': src['smartdns'], 'short_commit': src['smartdns'][:7]},
+                  'pymumu/smartdns-webui': {'ref': 'downloaded source archive', 'commit': src['smartdns_webui'], 'short_commit': src['smartdns_webui'][:7]},
+                  'pymumu/luci-app-smartdns': {'ref': 'downloaded source archive', 'commit': src['luci_app_smartdns'], 'short_commit': src['luci_app_smartdns'][:7]},
+                  'vernesong/OpenClash': {'ref': 'dev', 'commit': src['openclash'], 'short_commit': src['openclash'][:7]}
+              },
+              'compatibility': {'target': 'x86', 'subtarget': '64', 'arch': 'x86_64', 'device_policy': 'target', 'devices': []},
+              'image': {'asset': image.name, 'sha256': digest.hexdigest(), 'size': image.stat().st_size}
+          }
+          Path('release-input/manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + chr(10), encoding='utf-8')
+          print(f"Original image SHA256: {digest.hexdigest()}")
+          PY
+
+      - name: 使用仓库签名密钥签署发布清单
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ -n "${MINISIGN_SECRET_KEY:-}" ]] || { echo '::error::仓库尚未配置 MINISIGN_SECRET_KEY。'; exit 1; }
+          KEY_FILE="$RUNNER_TEMP/minisign.key"
+          printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          minisign -S -W -s "$KEY_FILE" \
+            -m "$GITHUB_WORKSPACE/release-input/manifest.json" \
+            -x "$GITHUB_WORKSPACE/release-input/manifest.minisig" \
+            -t 'MyLEDE firmware release'
+          rm -f "$KEY_FILE"
+
+      - name: 验证发布清单与原固件一致
+        run: |
+          set -Eeuo pipefail
+          python3 tests/ota/validate_release.py \
+            release-input/manifest.json \
+            release-input/openwrt-x86-64-generic-squashfs-combined-efi.img.gz
+
+      - name: 发布原固件版本
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_HEAD_SHA: ${{ steps.source_run.outputs.head_sha }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $TAG 已存在。为避免覆盖现有版本，已停止发布。"
+            exit 1
+          fi
+          META="$(cat release-input/build-meta.json)"
+          LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
+          SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
+          SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
+          LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
+          OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
+          cat > release-input/release-notes.md <<EOF
+          MyLEDE x86-64 固件自动编译发布。
+
+          - 固件版本：${VERSION}
+          - 固件文件：openwrt-x86-64-generic-squashfs-combined-efi.img.gz
+          - 发布清单：manifest.json
+          - 清单签名：manifest.minisig
+          - 原始构建运行：${{ inputs.run_id }}
+
+          ### 本次编译使用的源码版本
+
+          - LEDE: [${LEDE_COMMIT}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash: [${OPENCLASH_COMMIT}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          EOF
+          gh release create "$TAG" \
+            release-input/openwrt-x86-64-generic-squashfs-combined-efi.img.gz \
+            release-input/manifest.json release-input/manifest.minisig \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "MyLEDE $VERSION" \
+            --notes-file release-input/release-notes.md \
+            --target "$SOURCE_HEAD_SHA" --latest
