@@ -483,12 +483,12 @@ return view.extend({
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;flex:0 0 auto}
-				.myupdate-path-editor{width:min(100%,760px);max-width:760px}
-				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:8px;max-width:760px}
+				.myupdate-path-editor{width:min(100%,680px);max-width:680px}
+				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:8px;max-width:680px}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
 				.myupdate-path-manual-add{align-self:flex-end;min-width:0;padding:5px 12px}
 				.myupdate-browser-toggle{margin-top:8px}
-				.myupdate-file-browser{width:100%;max-width:760px;box-sizing:border-box;margin-top:8px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:8px;padding:10px;background:var(--background-color,#fafbfc)}
+				.myupdate-file-browser{width:100%;max-width:680px;box-sizing:border-box;margin-top:8px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:8px;padding:10px;background:var(--background-color,#fafbfc)}
 				.myupdate-browser-toolbar{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color-low,#e6eaf0);font-size:.9em}
 				.myupdate-browser-path{min-width:0;overflow-wrap:anywhere;font-family:monospace;color:var(--text-color-high,#344054)}
 				.myupdate-browser-list{max-height:320px;overflow:auto}
