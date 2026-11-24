@@ -747,11 +747,11 @@ jobs:
               else:
                   rootfs_default = value
 
-          import re
+          import os, re
           target_makefile = Path("target/linux/x86/Makefile")
           if not target_makefile.is_file():
               raise SystemExit(f"找不到 x86 target 定义文件：{target_makefile}")
-          features = re.search(r"(?m)^FEATURES\\s*[:+?]?=\\s*(.*)$", target_makefile.read_text(encoding="utf-8"))
+          features = re.search(r"(?m)^FEATURES\s*[:+?]?=\s*(.*)$", target_makefile.read_text(encoding="utf-8"))
           if not features:
               raise SystemExit("无法从 target/linux/x86/Makefile 读取 FEATURES")
           uses_boot_part = "boot-part" in features.group(1).split()
@@ -759,15 +759,15 @@ jobs:
               raise SystemExit("当前 x86 target 未启用 boot-part，无法安全生成 EFI 分区元数据")
           print(f"USES_BOOT_PART：{'启用' if uses_boot_part else '未启用'}（x86 FEATURES）")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
-              stream.write(f"kernel_partsize={kernel_default}\\n")
-              stream.write(f"rootfs_partsize={rootfs_default}\\n")
-              stream.write(f"uses_boot_part={'true' if uses_boot_part else 'false'}\\n")
+              stream.write(f"kernel_partsize={kernel_default}\n")
+              stream.write(f"rootfs_partsize={rootfs_default}\n")
+              stream.write(f"uses_boot_part={'true' if uses_boot_part else 'false'}\n")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
-              stream.write("### x86 分区参数（本次锁定的 LEDE 源码）\\n")
-              stream.write(f"- 上游内核分区默认值：**{kernel_default} MiB**\\n")
-              stream.write(f"- 上游根文件系统分区默认值：**{rootfs_default} MiB**\\n")
-              stream.write(f"- USES_BOOT_PART：**{'启用' if uses_boot_part else '未启用'}**\\n")
-              stream.write(f"- 本次固件实际配置：内核 **{os.environ['KERNEL_PARTSIZE']} MiB**，根文件系统 **{os.environ['ROOTFS_PARTSIZE']} MiB**\\n")
+              stream.write("### x86 分区参数（本次锁定的 LEDE 源码）\n")
+              stream.write(f"- 上游内核分区默认值：**{kernel_default} MiB**\n")
+              stream.write(f"- 上游根文件系统分区默认值：**{rootfs_default} MiB**\n")
+              stream.write(f"- USES_BOOT_PART：**{'启用' if uses_boot_part else '未启用'}**\n")
+              stream.write(f"- 本次固件实际配置：内核 **{os.environ['KERNEL_PARTSIZE']} MiB**，根文件系统 **{os.environ['ROOTFS_PARTSIZE']} MiB**\n")
           PY
           echo '========== MyLEDE 请求的固件分区布局 =========='
           echo "内核分区：${KERNEL_PARTSIZE} MiB"
