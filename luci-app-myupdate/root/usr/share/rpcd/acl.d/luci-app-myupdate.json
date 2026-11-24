@@ -8,7 +8,7 @@
     },
     "write": {
       "ubus": {
-        "myupdate": [ "save_config", "set_token", "start_check", "start_download", "start_upgrade" ]
+        "myupdate": [ "save_config", "set_allow_downgrade", "set_token", "start_check", "start_download", "start_upgrade" ]
       }
     }
   }
