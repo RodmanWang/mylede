@@ -116,7 +116,7 @@ class DownloadProgressContractTests(unittest.TestCase):
 
     def test_luci_compacts_key_and_keep_path_controls_without_inserting_newlines(self):
         view = VIEW.read_text(encoding="utf-8")
-        self.assertIn("replace(/\\\\r?\\\\n$/, '')", view)
+        self.assertIn("replace(/\\r?\\n$/, '')", view)
         self.assertIn("keyInput.addEventListener('blur'", view)
         self.assertIn("max-width:560px", view)
         self.assertIn("overflow-wrap:anywhere", view)
