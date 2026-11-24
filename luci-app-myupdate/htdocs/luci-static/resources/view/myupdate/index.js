@@ -2,7 +2,6 @@
 'require view';
 'require form';
 'require rpc';
-'require ui';
 'require poll';
 
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
@@ -36,15 +35,30 @@ function showStatus(node, s, progressFill, progressLabel, progressPanel) {
 	}
 }
 
-function reportTaskStart(promise, fallback) {
+function createInlineNotifier(node) {
+	var timer = null;
+	return function(message, type) {
+		if (timer) clearTimeout(timer);
+		node.textContent = message;
+		node.className = 'myupdate-inline-notice notice-' + (type || 'info');
+		node.style.display = '';
+		timer = setTimeout(function() {
+			node.style.display = 'none';
+			node.textContent = '';
+			timer = null;
+		}, 3000);
+	};
+}
+
+function reportTaskStart(promise, fallback, notify) {
 	return promise.then(function(result) {
 		if (!result || !result.ok)
-			ui.addNotification(null, E('p', result && result.error ? result.error : fallback), 'error');
+			notify(result && result.error ? result.error : fallback, 'error');
 		else if (result.queued)
-			ui.addNotification(null, E('p', result.message || _('任务请求已排队，后台服务将在数秒内执行。')), 'info');
+			notify(result.message || _('任务请求已排队，后台服务将在数秒内执行。'), 'info');
 	}).catch(function(error) {
 		var message = error && error.message ? error.message : String(error || fallback);
-		ui.addNotification(null, E('p', message), 'error');
+		notify(message, 'error');
 	});
 }
 
@@ -57,6 +71,8 @@ return view.extend({
 		var m = new form.Map('myupdate');
 		var s = m.section(form.NamedSection, 'main', 'myupdate');
 		s.addremove = false;
+		var noticeNode = E('div', { 'class': 'myupdate-inline-notice', role: 'status', 'aria-live': 'polite', style: 'display:none' });
+		var notify = createInlineNotifier(noticeNode);
 
 		var repo = s.option(form.Value, 'repo_url', _('GitHub 仓库地址'));
 		repo.placeholder = 'https://github.com/OWNER/REPO';
@@ -137,25 +153,25 @@ return view.extend({
 			click: function() {
 				var widget = pubkey.getUIElement('main');
 				if (!widget) {
-					ui.addNotification(null, E('p', _('找不到公钥输入框，请刷新页面后重试。')), 'error');
+					notify(_('找不到公钥输入框，请刷新页面后重试。'), 'error');
 					return;
 				}
 				var raw = (widget.getValue() || '').trim();
 				var lines = raw.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
 				var candidates = lines.filter(function(line) { return /^RW/.test(line); });
 				if (lines.length == 1 && /^RW[A-Za-z0-9+/]{54}$/.test(lines[0])) {
-					ui.addNotification(null, E('p', _('当前公钥已经是正确的 Base64 格式，无需转换。')), 'info');
+					notify(_('当前公钥已经是正确的 Base64 格式，无需转换。'), 'info');
 					return;
 				}
 				if (candidates.length != 1 || !/^RW[A-Za-z0-9+/]{54}$/.test(candidates[0])) {
-					ui.addNotification(null, E('p', _('无法识别公钥格式。请粘贴 minisign.pub 的完整两行内容，或直接填写以 RW 开头的 56 位 Base64 公钥主体。')), 'error');
+					notify(_('无法识别公钥格式。请粘贴 minisign.pub 的完整两行内容，或直接填写以 RW 开头的 56 位 Base64 公钥主体。'), 'error');
 					return;
 				}
 				widget.setValue(candidates[0]);
 				var inputNode = widget.node || widget;
 				if (inputNode && inputNode.dispatchEvent)
 					inputNode.dispatchEvent(new Event('change', { bubbles: true }));
-				ui.addNotification(null, E('p', _('公钥已转换并自动填入。请检查内容后点击“保存并应用”。')), 'info');
+				notify(_('公钥已转换并自动填入。请检查内容后点击“保存并应用”。'), 'info');
 			}
 		}, _('识别并转换'));
 
@@ -257,19 +273,20 @@ return view.extend({
 				E('h3', _('检测状态')),
 				E('span', { 'class': 'myupdate-status-caption' }, _('固件检查、下载与验证进度'))
 			]),
+			noticeNode,
 			statusText,
 			progressPanel,
 			E('div', { 'class': 'myupdate-status-note' }, _('自动升级会按设定时间检查更新；发现新版本后可下载并验证签名、设备兼容性和 SHA256。验证通过后，需手动确认才会执行 sysupgrade 并重启。升级使用 LEDE 默认配置备份与恢复机制。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
 			E('div', { 'class': 'myupdate-actions' }, [
 				E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
-					return reportTaskStart(callCheck(), _('检查任务启动失败'));
+					return reportTaskStart(callCheck(), _('检查任务启动失败'), notify);
 				} }, _('检查更新')),
 				E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
-					return reportTaskStart(callDownload(), _('下载并验证任务启动失败'));
+					return reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify);
 				} }, _('下载并验证')),
 				E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
 					if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
-					return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'));
+					return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
 				} }, _('执行升级'))
 			])
 		]);
@@ -291,6 +308,9 @@ return view.extend({
 			var style = E('style', {}, `
 				.myupdate-status-panel{border:1px solid #c8d4df;border-left:4px solid #64748b;border-radius:8px;background:var(--background-color-high,#fff);padding:18px 20px;margin:12px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.045)}
 				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+				.myupdate-inline-notice{margin:0 0 12px;padding:10px 14px;border-radius:6px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
+				.myupdate-inline-notice.notice-info{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
+				.myupdate-inline-notice.notice-error{background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626}
 				.myupdate-status-heading h3{margin:0;font-size:1.2rem}
 				.myupdate-status-caption{font-size:.9em;color:var(--gray-color-medium,#777)}
 				.myupdate-status-message{padding:12px 14px;border-radius:6px;background:#f1f5f9;color:#334155;font-weight:600;line-height:1.65}
