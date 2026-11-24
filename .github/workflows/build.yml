@@ -66,6 +66,7 @@ jobs:
       - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
+          token: ${{ secrets.PERSON_TOKEN }}
           persist-credentials: false
 
       - name: 运行 OTA 版本契约测试
@@ -246,6 +247,7 @@ jobs:
       - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
+          token: ${{ secrets.PERSON_TOKEN }}
           ref: ${{ github.sha }}
           persist-credentials: false
 
@@ -316,7 +318,7 @@ jobs:
         id: toolchain_release_fallback
         if: steps.toolchain_cache.outputs.hit != '1'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           TOOLCHAIN_MIXKEY: ${{ steps.toolchain_key.outputs.mixkey }}
         shell: bash
         run: |
@@ -441,7 +443,7 @@ jobs:
         if: success()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           TOOLCHAIN_MIXKEY: ${{ steps.toolchain_key.outputs.mixkey }}
         shell: bash
         run: |
@@ -498,7 +500,7 @@ jobs:
         if: success()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           MIXKEY: ${{ steps.toolchain_key.outputs.mixkey }}
         shell: bash
         run: |
@@ -537,6 +539,7 @@ jobs:
       - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
+          token: ${{ secrets.PERSON_TOKEN }}
           ref: ${{ github.sha }}
           persist-credentials: false
 
@@ -732,7 +735,7 @@ jobs:
         id: firmware_release_fallback
         if: steps.firmware_toolchain_cache.outputs.hit != '1'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           TOOLCHAIN_MIXKEY: ${{ steps.firmware_toolchain_key.outputs.mixkey }}
         shell: bash
         run: |
@@ -1012,7 +1015,7 @@ jobs:
         if: success()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           KEEP_TOOLCHAIN_KEY: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-toolchain
         shell: bash
         run: |
@@ -1048,7 +1051,7 @@ jobs:
         if: success() && steps.save_dl_cache.outcome == 'success'
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           KEEP_KEY: lede-dl-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-full
         shell: bash
         run: |
@@ -1072,7 +1075,7 @@ jobs:
         if: success()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
           MIXKEY: ${{ steps.firmware_toolchain_key.outputs.mixkey }}
         shell: bash
         run: |
@@ -1106,9 +1109,10 @@ jobs:
       - name: 检出仓库以读取保留策略默认值
         uses: actions/checkout@v7
         with:
+          token: ${{ secrets.PERSON_TOKEN }}
           ref: ${{ github.ref }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: 下载待发布的固件文件
         uses: actions/download-artifact@v7
