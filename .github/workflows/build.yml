@@ -1,4 +1,4 @@
-name: 1、编译并发布 MyLEDE 固件
+name: 编译并发布 MyLEDE 固件
 
 on:
   workflow_dispatch:
