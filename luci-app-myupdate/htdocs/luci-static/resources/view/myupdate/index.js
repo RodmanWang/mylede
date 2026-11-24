@@ -255,13 +255,13 @@ return view.extend({
 							E('span', {}, entry.name)
 						]) :
 						E('span', { 'class': 'myupdate-browser-name' }, [
-							E('span', { 'class': 'myupdate-browser-icon', 'aria-hidden': 'true' }, entry.type == 'directory' ? '📁' : '📄'),
+							E('span', { 'class': 'myupdate-browser-icon', 'aria-hidden': 'true' }, entry.type == 'directory' ? '📁' : (entry.type == 'symlink' ? '🔗' : '📄')),
 							E('span', {}, entry.name)
 						]);
 					var add = entry.can_add ?
 						E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add myupdate-browser-add',
 							click: function() { addPaths(entry.path); } }, _('添加')) :
-						E('span', { 'class': 'myupdate-browser-restricted' }, _('不可添加'));
+						E('span', { 'class': 'myupdate-browser-restricted' }, entry.type == 'symlink' ? _('符号链接不可添加') : _('不可添加'));
 					browserList.appendChild(E('div', { 'class': 'myupdate-browser-entry' }, [ nameNode, add ]));
 				});
 				if (truncated) browserHint.textContent = _('目录项目较多，仅显示前 300 项；可进入子目录继续选择。');
