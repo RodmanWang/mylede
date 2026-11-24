@@ -43,8 +43,75 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  cleanup-failed-runs:
+    name: 1、优先清理失败和已取消的工作流记录
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 优先清理全部失败和已取消的工作流运行记录
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .id' | sort -u > "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
+
+          FAILED_OR_CANCELLED_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            FAILED_OR_CANCELLED_DELETED=$((FAILED_OR_CANCELLED_DELETED + 1))
+          done < "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
+
+          echo "已优先删除仓库全部工作流中的失败或已取消运行记录：$FAILED_OR_CANCELLED_DELETED 条。"
+          echo "- 第一阶段清理失败或已取消的 Actions 运行记录：$FAILED_OR_CANCELLED_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
+
+  preflight:
+    needs: cleanup-failed-runs
+    name: 3、检查其他工作流是否正在运行
+    outputs:
+      proceed: ${{ steps.check-active-runs.outputs.proceed }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CURRENT_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: 检查仓库是否存在其他正在运行的工作流
+        id: check-active-runs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id, .status, .name, .html_url] | @tsv' > "$RUNNER_TEMP/workflow-runs.tsv"
+
+          awk -F '\t' -v current="$CURRENT_RUN_ID" '$1 != current && $2 != "completed" { print }' \
+            "$RUNNER_TEMP/workflow-runs.tsv" > "$RUNNER_TEMP/active-workflow-runs.tsv"
+
+          if [[ -s "$RUNNER_TEMP/active-workflow-runs.tsv" ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::检测到其他正在运行或排队中的工作流，本次仓库清理将立即取消。"
+            {
+              echo "## 清理任务已取消"
+              echo "检测到以下其他工作流尚未完成；为避免清理过程影响正在执行的任务，本次将停止后续保留策略清理、PR 归档和分支历史重置："
+              awk -F '\t' '{ printf "- Run %s：%s（状态：%s） %s\n", $1, $3, $2, $4 }' "$RUNNER_TEMP/active-workflow-runs.tsv"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            # Cancel this workflow run itself. All maintenance jobs depend on
+            # this preflight job and cannot start after it is cancelled.
+            gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$CURRENT_RUN_ID/cancel"
+            echo "::notice::已请求取消本次历史清理工作流。"
+            exit 0
+          fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+          echo "未发现其他正在运行或排队中的工作流，可以开始清理。"
+
   cleanup-retention:
-    name: 清理全部工作流运行记录与正式版本发布
+    needs: preflight
+    if: ${{ needs.preflight.outputs.proceed == 'true' }}
+    name: 2、按保留策略清理旧记录与正式版本发布
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -55,21 +122,6 @@ jobs:
       INPUT_KEEP_COUNT: ${{ inputs.keep_count }}
       CURRENT_RUN_ID: ${{ github.run_id }}
     steps:
-      - name: 优先清理全部失败的工作流运行记录
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          # Purge failed runs repository-wide before applying age/count retention.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion == "failure") | .id' > "$RUNNER_TEMP/failed-run-ids.txt"
-          FAILED_RUN_DELETED=0
-          while IFS= read -r run_id; do
-            [[ -n "$run_id" ]] || continue
-            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
-            FAILED_RUN_DELETED=$((FAILED_RUN_DELETED + 1))
-          done < "$RUNNER_TEMP/failed-run-ids.txt"
-          echo "已优先删除仓库全部工作流中的失败运行记录：$FAILED_RUN_DELETED 条。"
-          echo "- 第一阶段清理失败的 Actions 运行记录：$FAILED_RUN_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
-
       - name: 按保留策略清理版本发布与剩余工作流记录
         shell: bash
         run: |
@@ -135,8 +187,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   archive-closed-prs:
-    name: 归档已关闭的历史拉取请求
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
+    needs: preflight
+    name: 4、按条件归档历史拉取请求
+    if: ${{ needs.preflight.outputs.proceed == 'true' && github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -247,7 +300,9 @@ jobs:
           echo "已完成历史拉取请求归档；无仓库访问权限的访客访问这些页面时将看到 404。"
 
   reset-main-history:
-    name: 重置全部分支的提交历史
+    needs: preflight
+    if: ${{ needs.preflight.outputs.proceed == 'true' }}
+    name: 4、按条件重置全部分支的提交历史
     runs-on: ubuntu-latest
     steps:
       - name: 说明本次不会执行历史修改
