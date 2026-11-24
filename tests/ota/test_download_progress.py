@@ -30,9 +30,75 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("status.download_percent = progress.percent", rpc)
         self.assertIn("progressFill.style.width = percent + '%'", view)
         self.assertIn("formatBytes(s.downloaded_bytes)", view)
-        self.assertIn("E('h3', _('检测状态'))", view)
+        self.assertIn("E('h3', _('更新状态'))", view)
+        self.assertIn("myupdate-status-overview", view)
+        self.assertIn("myupdate-settings-heading", view)
+        self.assertIn("myupdate-actions-final", view)
         self.assertIn("state-error", view)
         self.assertIn("识别并转换", view)
+
+
+    def test_check_pipeline_reports_stages_and_fetches_manifests_in_parallel(self):
+        source = TASK.read_text(encoding="utf-8")
+        self.assertIn("Release 已获取，正在并行下载 Manifest 和签名", source)
+        self.assertIn("正在验证签名和设备兼容性", source)
+        self.assertIn('"$R/manifest.json" &', source)
+        self.assertIn('"$R/manifest.minisig" &', source)
+        self.assertIn('wait "$MANIFEST_PID"', source)
+        self.assertIn('wait "$SIGNATURE_PID"', source)
+        self.assertIn("verify-manifest.sh", source)
+
+    def test_metadata_timeouts_are_bounded_without_shortening_firmware_download(self):
+        api = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/github-api.sh").read_text(encoding="utf-8")
+        downloader = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/github-download-asset.sh").read_text(encoding="utf-8")
+        self.assertIn("--connect-timeout 10 --max-time 35", api)
+        self.assertIn("--connect-timeout 10 --max-time 60", downloader)
+        self.assertIn("--connect-timeout 10 --max-time 1800", downloader)
+
+    def test_luci_uses_embedded_auto_dismissing_notices(self):
+        source = VIEW.read_text(encoding="utf-8")
+        self.assertIn("myupdate-inline-notice", source)
+        self.assertIn("}, 3000);", source)
+        self.assertIn("reportTaskStart(callCheck(), _('检查任务启动失败'), notify)", source)
+        self.assertIn("reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify)", source)
+        self.assertIn("reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify)", source)
+        self.assertNotIn("ui.addNotification", source)
+
+    def test_filesystem_browser_is_server_side_and_filters_symlinks_and_virtual_paths(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        self.assertIn("list_keep_paths: { args: { path: 'String' }", rpc)
+        self.assertIn("fs.lsdir(path)", rpc)
+        self.assertIn("fs.lstat(child)", rpc)
+        self.assertIn("fs.realpath(child) == child", rpc)
+        self.assertIn("blocked_keep_path(child)", rpc)
+        self.assertIn("info.type != 'directory' && info.type != 'file'", rpc)
+
+    def test_keep_paths_must_exist_and_must_not_resolve_through_symlinks(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        backup = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/prepare-sysupgrade-backup.sh").read_text(encoding="utf-8")
+        self.assertIn("info.type != 'file' && info.type != 'directory'", rpc)
+        self.assertIn("resolved != path", rpc)
+        self.assertIn('[ -L "$path" ]', backup)
+        self.assertIn('readlink -f "$path"', backup)
+        self.assertIn('Refusing special custom sysupgrade path', backup)
+
+    def test_downgrade_is_a_persisted_checkbox_next_to_upgrade_action(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("args.allow_downgrade != '0' && args.allow_downgrade != '1'", rpc)
+        self.assertIn("method: 'save_config', params: [ 'allow_downgrade' ]", view)
+        self.assertIn("'type': 'checkbox'", view)
+        self.assertIn("downgradeLabel", view)
+        self.assertNotIn("form.ListValue, 'allow_downgrade'", view)
+
+    def test_keep_path_input_is_two_rows_and_uses_filesystem_browser(self):
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("'rows': '2'", view)
+        self.assertIn("loadDirectory('/')", view)
+        self.assertIn("myupdate-browser-entry", view)
+        self.assertIn("myupdate-browser-add", view)
+        self.assertNotIn("从常用固件目录中选择", view)
+        self.assertNotIn("/.uuplugin_uuid", view)
 
 
 if __name__ == "__main__":

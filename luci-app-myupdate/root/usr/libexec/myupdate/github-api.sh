@@ -22,7 +22,7 @@ if [ "$VISIBILITY" = private ]; then
 	unset TOKEN
 fi
 chmod 600 "$CFG"
-CODE="$(curl --silent --show-error --connect-timeout 15 --max-time 60 --proto '=https' --tlsv1.2 --config "$CFG" -o "$TMP/release.json" -w '%{http_code}' "$URL")" || { fail 'GitHub API 请求失败'; exit 1; }
+CODE="$(curl --silent --show-error --connect-timeout 10 --max-time 35 --proto '=https' --tlsv1.2 --config "$CFG" -o "$TMP/release.json" -w '%{http_code}' "$URL")" || { fail 'GitHub API 请求失败'; exit 1; }
 [ "$CODE" = 200 ] || { fail "GitHub API 返回 HTTP $CODE"; exit 1; }
 [ -s "$TMP/release.json" ] || { fail 'Release 响应为空'; exit 1; }
 cp "$TMP/release.json" /tmp/myupdate/release.json

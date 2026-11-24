@@ -23,7 +23,7 @@ if [ "$VISIBILITY" = private ]; then
 fi
 chmod 600 "$CFG"
 URL="https://api.github.com/repos/$OWNER/$REPO/releases/assets/$ASSET_ID"
-CODE="$(curl -sS --connect-timeout 15 --max-time 180 --proto '=https' --tlsv1.2 --config "$CFG" -D "$T/headers" -o "$T/body" -w '%{http_code}' "$URL")" || fail '资产 API 请求失败'
+CODE="$(curl -sS --connect-timeout 10 --max-time 60 --proto '=https' --tlsv1.2 --config "$CFG" -D "$T/headers" -o "$T/body" -w '%{http_code}' "$URL")" || fail '资产 API 请求失败'
 case "$CODE" in
 200) mv "$T/body" "$T/file";;
 301|302|303|307|308)
@@ -31,7 +31,7 @@ case "$CODE" in
 	case "$LOC" in https://release-assets.githubusercontent.com/*|https://objects.githubusercontent.com/*|https://github.com/*) ;; *) fail '资产重定向地址不受信任';; esac
 	if [ "$EXPECTED_SIZE" -gt 0 ]; then
 		(
-			if HTTP_CODE="$(curl --fail -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" -w '%{http_code}' "$LOC")"; then
+			if HTTP_CODE="$(curl --fail -sS --connect-timeout 10 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" -w '%{http_code}' "$LOC")"; then
 				[ "$HTTP_CODE" = 200 ] && RESULT=0 || RESULT=1
 			else
 				RESULT=$?
@@ -56,7 +56,7 @@ case "$CODE" in
 		printf '{"percent":100,"downloaded_bytes":%s,"total_bytes":%s}\n' "$EXPECTED_SIZE" "$EXPECTED_SIZE" > /tmp/myupdate/progress.json
 		chmod 600 /tmp/myupdate/progress.json
 	else
-		R="$(curl -sS --connect-timeout 15 --max-time 1800 --proto '=https' --tlsv1.2 -o "$T/file" -w '%{http_code}' "$LOC")" || fail '资产下载失败'
+		R="$(curl -sS --connect-timeout 10 --max-time 60 --proto '=https' --tlsv1.2 -o "$T/file" -w '%{http_code}' "$LOC")" || fail '资产下载失败'
 		[ "$R" = 200 ] || fail "资产下载 HTTP $R"
 	fi;;
 *) fail "GitHub 资产 API HTTP $CODE";;

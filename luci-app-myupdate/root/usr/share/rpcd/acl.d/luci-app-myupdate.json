@@ -3,7 +3,7 @@
     "description": "MyUpdate firmware update manager",
     "read": {
       "ubus": {
-        "myupdate": [ "get_status", "get_config" ]
+        "myupdate": [ "get_status", "get_config", "list_keep_paths" ]
       }
     },
     "write": {

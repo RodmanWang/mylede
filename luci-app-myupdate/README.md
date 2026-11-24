@@ -69,13 +69,7 @@ opkg install /tmp/luci-i18n-myupdate-zh-cn_*.ipk
 
 ## 自定义文件保留
 
-首次安装本固件后，可以在 LuCI「系统 → 固件在线升级 → 自定义文件保留」中配置需要跨 OTA 升级保留的绝对路径。每项填写一个文件或目录，点击“添加”增加项目，例如：
-
-```text
-/etc/config/myservice
-/root/scripts
-/usr/share/my-custom-data
-```
+首次安装本固件后，可以在 LuCI「系统 → 固件在线升级」的自定义文件保留区域配置需要跨 OTA 升级保留的绝对路径。可以手动逐行输入，也可以展开设备文件浏览器，从根目录开始逐层浏览；每个普通文件或目录旁均提供独立的“添加”操作。符号链接、特殊文件及系统虚拟目录不会加入保留列表。
 
 保存后，MyUpdate 会在执行 OTA 前将这些路径写入 `/etc/sysupgrade.conf` 的独立管理区块。随后仍由 OpenWrt/LEDE 的 `sysupgrade` 生成配置备份，并在新固件刷写后按官方备份恢复流程还原；不备份整个根目录。配置保留路径本身保存在 `/etc/config/myupdate`，使配置持续生效。
 

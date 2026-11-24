@@ -22,7 +22,7 @@ fi
 # `uci get` joins UCI list values with spaces. Spaces are forbidden by the
 # path validator, so split both that representation and legacy newline text.
 KEEP_PATHS="$(uci -q get myupdate.main.custom_keep_paths 2>/dev/null || true)"
-printf '%s\n' "$KEEP_PATHS" | tr ' ' '\n' | while IFS= read -r path; do
+while IFS= read -r path; do
 	[ -n "$path" ] || continue
 	case "$path" in
 		/*) ;;
@@ -38,12 +38,22 @@ printf '%s\n' "$KEEP_PATHS" | tr ' ' '\n' | while IFS= read -r path; do
 			exit 1
 			;;
 	esac
-	if [ -e "$path" ] || [ -L "$path" ]; then
+	if [ -L "$path" ]; then
+		echo "Refusing symlinked custom sysupgrade path: $path" >&2
+		exit 1
+	elif [ -f "$path" ] || [ -d "$path" ]; then
+		RESOLVED="$(readlink -f "$path" 2>/dev/null || true)"
+		[ "$RESOLVED" = "$path" ] || { echo "Refusing non-canonical custom sysupgrade path: $path" >&2; exit 1; }
 		printf '%s\n' "$path" >> "$TMP"
+	elif [ -e "$path" ]; then
+		echo "Refusing special custom sysupgrade path: $path" >&2
+		exit 1
 	else
 		echo "Skipping missing custom sysupgrade path: $path" >&2
 	fi
-done
+done <<EOF
+$(printf '%s\n' "$KEEP_PATHS" | tr ' ' '\n')
+EOF
 
 printf '%s\n' "$END" >> "$TMP"
 chmod 600 "$TMP"

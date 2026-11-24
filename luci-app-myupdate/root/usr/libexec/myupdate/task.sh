@@ -64,8 +64,17 @@ while IFS= read -r name && IFS= read -r id <&3; do
 	[ "$name" = manifest.minisig ] && SIGNATURE_ID="$id"
 done < "$NAMES_FILE" 3< "$IDS_FILE"
 [ -n "$MANIFEST_ID" ] && [ -n "$SIGNATURE_ID" ] || { write_status error 'Release 缺少 manifest.json 或 manifest.minisig' "$UPDATE" false false; exit 1; }
-/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$MANIFEST_ID" "$R/manifest.json" || { write_status error 'Manifest 下载失败' "$UPDATE" false false; exit 1; }
-/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$SIGNATURE_ID" "$R/manifest.minisig" || { write_status error 'Manifest 签名下载失败' "$UPDATE" false false; exit 1; }
+write_status running 'Release 已获取，正在并行下载 Manifest 和签名' false false false
+/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$MANIFEST_ID" "$R/manifest.json" &
+MANIFEST_PID=$!
+/usr/libexec/myupdate/github-download-asset.sh "$OWNER" "$REPO" "$VIS" "$SIGNATURE_ID" "$R/manifest.minisig" &
+SIGNATURE_PID=$!
+MANIFEST_OK=0; SIGNATURE_OK=0
+if wait "$MANIFEST_PID"; then MANIFEST_OK=1; fi
+if wait "$SIGNATURE_PID"; then SIGNATURE_OK=1; fi
+[ "$MANIFEST_OK" -eq 1 ] || { write_status error 'Manifest 下载失败' "$UPDATE" false false; exit 1; }
+[ "$SIGNATURE_OK" -eq 1 ] || { write_status error 'Manifest 签名下载失败' "$UPDATE" false false; exit 1; }
+write_status running 'Manifest 与签名已下载，正在验证签名和设备兼容性' false false false
 /usr/libexec/myupdate/verify-manifest.sh "$R/manifest.json" "$R/manifest.minisig" "$TAG" "$CHANNEL" || { write_status error 'Manifest 验签或设备兼容性检查失败' "$UPDATE" false false; exit 1; }
 VERSION="$(sed -n '1p' "$R/verified-manifest.txt")"
 ASSET="$(sed -n '3p' "$R/verified-manifest.txt")"
