@@ -86,7 +86,7 @@ class DownloadProgressContractTests(unittest.TestCase):
         rpc = RPC.read_text(encoding="utf-8")
         view = VIEW.read_text(encoding="utf-8")
         self.assertIn("args.allow_downgrade != '0' && args.allow_downgrade != '1'", rpc)
-        self.assertIn("method: 'save_config', params: [ 'allow_downgrade' ]", view)
+        self.assertIn("method: 'set_allow_downgrade'", view)
         self.assertIn("'type': 'checkbox'", view)
         self.assertIn("downgradeLabel", view)
         self.assertNotIn("form.ListValue, 'allow_downgrade'", view)
@@ -99,6 +99,43 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("myupdate-browser-add", view)
         self.assertNotIn("从常用固件目录中选择", view)
         self.assertNotIn("/.uuplugin_uuid", view)
+
+
+    def test_downgrade_has_a_dedicated_persisted_rpc_and_safe_default(self):
+        rpc = RPC.read_text(encoding="utf-8")
+        view = VIEW.read_text(encoding="utf-8")
+        acl = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/acl.d/luci-app-myupdate.json").read_text(encoding="utf-8")
+        self.assertIn("out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';", rpc)
+        self.assertIn("function set_allow_downgrade(args)", rpc)
+        self.assertIn("c.commit(CONFIG) !== true", rpc)
+        self.assertIn("saved != value", rpc)
+        self.assertIn("method: 'set_allow_downgrade'", view)
+        self.assertIn('"set_allow_downgrade"', acl)
+        self.assertIn("'checked': (cfg.allow_downgrade || '0') == '1'", view)
+        self.assertIn("myupdate-downgrade-row", view)
+
+    def test_luci_compacts_key_and_keep_path_controls_without_inserting_newlines(self):
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("replace(/\\r?\\n$/, '')", view)
+        self.assertIn("keyInput.addEventListener('blur'", view)
+        self.assertIn("max-width:560px", view)
+        self.assertIn("overflow-wrap:anywhere", view)
+        self.assertIn("max-width:680px", view)
+        self.assertIn("function onOutsideBrowserClick(ev)", view)
+        self.assertIn("document.addEventListener('click', onOutsideBrowserClick)", view)
+        self.assertIn("document.removeEventListener('click', onOutsideBrowserClick)", view)
+
+    def test_upgrade_action_follows_download_and_verify_in_same_primary_row(self):
+        view = VIEW.read_text(encoding="utf-8")
+        row = view.split("myupdate-actions-primary", 1)[1].split("myupdate-downgrade-row", 1)[0]
+        self.assertLess(row.index("下载并验证"), row.index("执行升级"))
+
+
+    def test_luci_global_navigation_dropdowns_stay_above_myupdate_content(self):
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn(".myupdate-page{position:relative;z-index:0", view)
+        self.assertIn("#header,#mainmenu,.navbar,.mainmenu{position:relative;z-index:10000}", view)
+        self.assertIn(".dropdown-menu{z-index:10001}", view)
 
 
 if __name__ == "__main__":

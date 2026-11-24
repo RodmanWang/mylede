@@ -37,6 +37,7 @@ function get_config() {
 	for (let key in [ 'repo_url', 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
 		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
+	out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';
 
 	// Return UCI lists as an array for LuCI DynamicList. Convert the legacy
 	// newline-delimited scalar to the same shape so existing settings migrate
@@ -161,6 +162,19 @@ function save_config(args) {
 	}
 	return { ok: true };
 }
+function set_allow_downgrade(args) {
+	let value = args.allow_downgrade;
+	if (value != '0' && value != '1')
+		return { ok: false, error: '允许降级设置无效，只能为 0 或 1' };
+	let c = cursor();
+	c.set(CONFIG, 'main', 'allow_downgrade', value);
+	if (c.commit(CONFIG) !== true)
+		return { ok: false, error: '保存降级设置失败：' + (uci.error() || '未知 UCI 错误') };
+	let saved = c.get(CONFIG, 'main', 'allow_downgrade');
+	if (saved != value)
+		return { ok: false, error: '降级设置写入后回读不一致' };
+	return { ok: true, allow_downgrade: saved };
+}
 function set_token(args) {
 	let token = args.token;
 	if (!valid_string(token, 512) || !/^(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]+)$/.test(token))
@@ -221,6 +235,7 @@ function start_task(action) {
 return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
+	set_allow_downgrade: { args: { allow_downgrade: 'String' }, call: function(request) { return set_allow_downgrade(request.args); } },
 	list_keep_paths: { args: { path: 'String' }, call: function(request) { return list_keep_paths(request.args.path); } },
 	save_config: { args: { repo_url: 'String', repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
 		upgrade_mode: 'String', check_interval: 'String', auto_upgrade_time: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
