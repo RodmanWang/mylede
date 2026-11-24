@@ -92,6 +92,15 @@ opkg install /tmp/luci-i18n-myupdate-zh-cn_*.ipk
   "version": "2026.11.22.123.1",
   "tag": "v2026.11.22.123.1",
   "channel": "stable",
+  "partition_layout": {
+    "kernel_partsize_mib": 256,
+    "rootfs_partsize_mib": 4096,
+    "uses_boot_part": true,
+    "upstream_defaults_mib": {
+      "kernel_partsize": 64,
+      "rootfs_partsize": 448
+    }
+  },
   "compatibility": {
     "target": "x86",
     "subtarget": "64",
