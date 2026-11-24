@@ -166,14 +166,13 @@ else:
 packages = [
     "luci-app-smartdns", "luci-app-myupdate", "luci-app-openclash",
     "luci-proto-wireguard", "luci-app-uugamebooster", "luci-app-samba4",
-    "minisign",
     "open-vm-tools", "ddns-scripts-cloudflare", "iptables-mod-conntrack-extra",
     "iptables-mod-hashlimit", "iptables-mod-iprange", "iptables-mod-filter",
     "iptables-mod-ipopt", "iptables-mod-nflog", "iptables-mod-nfqueue",
     "iptables-mod-trace", "kmod-nft-queue", "kmod-nft-tproxy", "kmod-nft-fib",
     "kmod-nft-socket", "kmod-nft-netdev", "kmod-nft-compat", "conntrack",
     "tcpdump", "nmap", "ncat", "nping", "socat", "mtr-nojson", "iperf3",
-    "tc-full", "ss", "nstat", "ipv6helper"
+    "tc-full", "ss", "nstat", "ipv6helper", "minisign"
 ]
 
 if len(packages) != len(set(packages)):
