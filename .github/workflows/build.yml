@@ -70,6 +70,7 @@ jobs:
       - name: 检出 MyLEDE 仓库源码
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: 读取上次成功发布 Manifest 的分区默认值
@@ -252,10 +253,18 @@ jobs:
             "$MINISIGN_VERSION" "$MINISIGN_SHA256" >> "$RUNNER_TEMP/source-revisions.tsv"
           echo "已锁定 minisign 最新正式 Release：$MINISIGN_VERSION（SHA-256: $MINISIGN_SHA256）"
 
+          # The successful-build persistence commit only updates the remembered
+          # partition defaults and workflow_dispatch form hints. Walk through
+          # consecutive such commits so that this metadata-only commit does
+          # not force an otherwise identical scheduled build to rebuild.
+          MYLEDE_BUILD_COMMIT="$GITHUB_SHA"
+          while [[ "$(git log -1 --format=%s "$MYLEDE_BUILD_COMMIT")" == "ci(build): remember last successful firmware partition layout" ]]; do
+            MYLEDE_BUILD_COMMIT="$(git rev-parse "${MYLEDE_BUILD_COMMIT}^")"
+          done
           {
             printf 'LEDE\t%s\n' "$LEDE_COMMIT"
             printf 'FEEDS_CONF_SHA256\t%s\n' "$FEEDS_SHA256"
-            printf 'MYLEDE_COMMIT\t%s\n' "$GITHUB_SHA"
+            printf 'MYLEDE_COMMIT\t%s\n' "$MYLEDE_BUILD_COMMIT"
             printf 'BUILD_TARGET\t%s\n' "$BUILD_TARGET"
             printf 'KERNEL_VERSION\t%s\n' "$KERNEL_VERSION"
             printf 'KERNEL_PARTSIZE\t%s\n' "$KERNEL_PARTSIZE"
