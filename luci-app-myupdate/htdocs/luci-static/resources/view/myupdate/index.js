@@ -6,6 +6,8 @@
 
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
+var callListKeepPaths = rpc.declare({ object: 'myupdate', method: 'list_keep_paths', params: [ 'path' ] });
+var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'allow_downgrade' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
@@ -175,11 +177,6 @@ return view.extend({
 			}
 		}, _('识别并转换'));
 
-		var downgrade = s.option(form.ListValue, 'allow_downgrade', _('允许降级'));
-		downgrade.value('0', _('禁止'));
-		downgrade.value('1', _('允许'));
-		downgrade.default = '0';
-
 		var keepPathValues = (cfg.custom_keep_paths || []).slice();
 		var keepPaths = s.option(form.DynamicList, 'custom_keep_paths', _('自定义文件保留路径'));
 		keepPaths.optional = true;
@@ -190,34 +187,25 @@ return view.extend({
 			var paths = Array.isArray(values) ? values : keepPathValues;
 			for (var i = 0; i < paths.length; i++) {
 				var path = String(paths[i] || '').trim();
-				if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path))
-					return _('路径格式无效：请填写以 / 开头的文件或目录绝对路径。');
-				if (/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path))
-					return _('不能保留 /proc、/sys、/dev、/tmp、/rom 或 /overlay 下的路径。');
+				if (!/^\\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\\/)\\.\\.?($|\\/)/.test(path))
+					return _('路径格式无效：请填写已存在的绝对文件或目录路径。');
+				if (/^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path))
+					return _('不能保留系统虚拟目录或临时目录中的路径。');
 			}
 			return true;
 		};
-		keepPaths.description = _('支持批量输入：每行一条，或使用英文逗号分隔。添加后会拆分为独立项目；保存时仍按 UCI list 逐项写入。');
+		keepPaths.description = _('可手动输入绝对路径，也可展开设备文件浏览器逐层选择文件或目录。符号链接、特殊文件和系统虚拟目录不会加入保留列表。');
 		keepPaths.renderWidget = function(section_id) {
-			var input = E('textarea', {
-				'class': 'myupdate-path-batch-input',
-				'placeholder': _('例如：\n/.uuplugin_uuid\n/etc/config/network\n/etc/ssl/nas_ssl'),
-				'rows': '4'
-			});
+			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
 			var chips = E('div', { 'class': 'myupdate-path-chips' });
-			var message = E('div', { 'class': 'myupdate-path-hint' });
-			var rootSelect = E('select', { 'class': 'myupdate-path-root-select' }, [
-				E('option', { value: '' }, _('从常用固件目录中选择…')),
-				E('option', { value: '/' }, _('根目录 /（可填写根目录下的文件）')),
-				E('option', { value: '/etc' }, '/etc'),
-				E('option', { value: '/root' }, '/root'),
-				E('option', { value: '/usr' }, '/usr'),
-				E('option', { value: '/www' }, '/www'),
-				E('option', { value: '/mnt' }, '/mnt'),
-				E('option', { value: '/opt' }, '/opt'),
-				E('option', { value: '/var' }, '/var'),
-				E('option', { value: '/home' }, '/home')
-			]);
+			var message = E('div', { 'class': 'myupdate-path-hint', 'aria-live': 'polite' });
+			var browserToggle = E('button', { 'type': 'button', 'class': 'btn cbi-button myupdate-browser-toggle' }, _('浏览设备文件…'));
+			var browserPanel = E('div', { 'class': 'myupdate-file-browser', style: 'display:none' });
+			var browserPath = E('div', { 'class': 'myupdate-browser-path' }, '/');
+			var browserList = E('div', { 'class': 'myupdate-browser-list' });
+			var browserHint = E('div', { 'class': 'myupdate-browser-hint', 'aria-live': 'polite' });
+			var currentPath = '/', browserLoaded = false, browserBusy = false;
+
 			function renderChips() {
 				while (chips.firstChild) chips.removeChild(chips.firstChild);
 				keepPathValues.forEach(function(path, index) {
@@ -228,36 +216,88 @@ return view.extend({
 					]));
 				});
 			}
+			function allowedPath(path) {
+				return /^\\/[A-Za-z0-9._/@+-]+$/.test(path) && path != '/' &&
+					!/(^|\\/)\\.\\.?($|\\/)/.test(path) &&
+					!/^\\/(proc|sys|dev|tmp|rom|overlay)(\\/|$)/.test(path);
+			}
 			function addPaths(raw) {
-				var items = String(raw || '').split(/[\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
+				var items = String(raw || '').split(/[\\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
 				var added = 0, invalid = [];
 				items.forEach(function(path) {
-					if (!/^\/[A-Za-z0-9._/@+-]+$/.test(path) || path == '/' || /(^|\/)\.\.?($|\/)/.test(path) ||
-					    /^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path)) {
-						invalid.push(path);
-						return;
-					}
+					if (!allowedPath(path)) { invalid.push(path); return; }
 					if (keepPathValues.indexOf(path) < 0) { keepPathValues.push(path); added++; }
 				});
 				renderChips();
-				message.textContent = invalid.length ? _('以下路径格式无效或属于禁止保留目录：') + ' ' + invalid.join(', ') :
+				message.textContent = invalid.length ? _('以下路径格式无效或不允许保留：') + ' ' + invalid.join(', ') :
 					(added ? _('已添加 ') + added + _(' 个路径。') : _('没有新增路径（可能已存在或输入为空）。'));
 				if (!invalid.length) input.value = '';
 			}
-			var addButton = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add',
-				click: function() { addPaths(input.value); } }, _('添加'));
-			rootSelect.addEventListener('change', function(ev) {
-				if (ev.target.value) { input.value = (input.value ? input.value.replace(/\s+$/, '') + '\n' : '') + ev.target.value; ev.target.value = ''; }
+			function renderBrowser(entries, truncated) {
+				while (browserList.firstChild) browserList.removeChild(browserList.firstChild);
+				if (!entries || !entries.length) {
+					browserList.appendChild(E('div', { 'class': 'myupdate-browser-empty' }, _('此目录没有可浏览的普通文件或目录。')));
+					return;
+				}
+				entries.forEach(function(entry) {
+					var nameNode = entry.type == 'directory' && entry.can_open ?
+						E('button', { 'type': 'button', 'class': 'myupdate-browser-name myupdate-browser-directory',
+							click: function() { loadDirectory(entry.path); } }, [
+							E('span', { 'class': 'myupdate-browser-icon', 'aria-hidden': 'true' }, '📁'),
+							E('span', {}, entry.name)
+						]) :
+						E('span', { 'class': 'myupdate-browser-name' }, [
+							E('span', { 'class': 'myupdate-browser-icon', 'aria-hidden': 'true' }, entry.type == 'directory' ? '📁' : '📄'),
+							E('span', {}, entry.name)
+						]);
+					var add = entry.can_add ?
+						E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add myupdate-browser-add',
+							click: function() { addPaths(entry.path); } }, _('添加')) :
+						E('span', { 'class': 'myupdate-browser-restricted' }, _('不可添加'));
+					browserList.appendChild(E('div', { 'class': 'myupdate-browser-entry' }, [ nameNode, add ]));
+				});
+				if (truncated) browserHint.textContent = _('目录项目较多，仅显示前 300 项；可进入子目录继续选择。');
+			}
+			function loadDirectory(path) {
+				if (browserBusy) return;
+				browserBusy = true;
+				browserPath.textContent = path;
+				browserList.textContent = _('正在读取目录…');
+				browserHint.textContent = '';
+				callListKeepPaths(path).then(function(result) {
+					if (!result || !result.ok) throw new Error(result && result.error ? result.error : _('无法读取该目录。'));
+					currentPath = result.path;
+					browserPath.textContent = currentPath;
+					browserLoaded = true;
+					renderBrowser(result.entries || [], result.truncated);
+				}).catch(function(error) {
+					browserList.textContent = '';
+					browserHint.textContent = error && error.message ? error.message : String(error);
+				}).then(function() { browserBusy = false; });
+			}
+			var upButton = E('button', { 'type': 'button', 'class': 'btn cbi-button myupdate-browser-up',
+				click: function() {
+					if (currentPath == '/') return;
+					loadDirectory(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/');
+				} }, _('上一级'));
+			browserToggle.addEventListener('click', function() {
+				var opening = browserPanel.style.display == 'none';
+				browserPanel.style.display = opening ? '' : 'none';
+				browserToggle.textContent = opening ? _('收起文件浏览器') : _('浏览设备文件…');
+				if (opening && !browserLoaded) loadDirectory('/');
 			});
+			var addButton = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add myupdate-path-manual-add',
+				click: function() { addPaths(input.value); } }, _('添加'));
 			input.addEventListener('keydown', function(ev) {
 				if ((ev.ctrlKey || ev.metaKey) && ev.key == 'Enter') { ev.preventDefault(); addPaths(input.value); }
 			});
+			browserPanel.appendChild(E('div', { 'class': 'myupdate-browser-toolbar' }, [ upButton, browserPath ]));
+			browserPanel.appendChild(browserList);
+			browserPanel.appendChild(browserHint);
 			renderChips();
 			return E('div', { 'class': 'myupdate-path-editor' }, [
 				E('div', { 'class': 'myupdate-path-entry-row' }, [ input, addButton ]),
-				E('div', { 'class': 'myupdate-path-picker-row' }, [ rootSelect,
-					E('span', {}, _('快捷入口包含根目录 /、/etc 和 /root；选择根目录后可在输入框补全文件名，例如 /.uuplugin_uuid。根目录本身不能作为保留项添加。')) ]),
-				message, chips
+				browserToggle, browserPanel, chips, message
 			]);
 		};
 
@@ -268,6 +308,26 @@ return view.extend({
 			E('div', { 'class': 'myupdate-progress-track' }, [ progressFill ]),
 			progressLabel
 		]);
+		var downgradeCheckbox = E('input', {
+			'type': 'checkbox',
+			'checked': cfg.allow_downgrade == '1',
+			'aria-label': _('允许降级'),
+			change: function(ev) {
+				var control = ev.target, previous = cfg.allow_downgrade == '1';
+				var value = control.checked ? '1' : '0';
+				control.disabled = true;
+				callSaveDowngrade(value).then(function(result) {
+					if (!result || !result.ok) throw new Error(result && result.error ? result.error : _('保存降级设置失败。'));
+					cfg.allow_downgrade = value;
+					notify(value == '1' ? _('已启用降级；执行升级时将允许安装低于当前版本的固件。') : _('已关闭降级；执行升级时不允许安装低于当前版本的固件。'), 'info');
+				}).catch(function(error) {
+					control.checked = previous;
+					notify(error && error.message ? error.message : String(error), 'error');
+				}).then(function() { control.disabled = false; });
+			}
+		});
+		var downgradeLabel = E('label', { 'class': 'myupdate-downgrade-toggle' }, [ downgradeCheckbox, E('span', {}, _('允许降级')) ]);
+
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [
 				E('h3', _('检测状态')),
@@ -278,6 +338,7 @@ return view.extend({
 			progressPanel,
 			E('div', { 'class': 'myupdate-status-note' }, _('自动升级会按设定时间检查更新；发现新版本后可下载并验证签名、设备兼容性和 SHA256。验证通过后，需手动确认才会执行 sysupgrade 并重启。升级使用 LEDE 默认配置备份与恢复机制。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
 			E('div', { 'class': 'myupdate-actions' }, [
+				downgradeLabel,
 				E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
 					return reportTaskStart(callCheck(), _('检查任务启动失败'), notify);
 				} }, _('检查更新')),
@@ -331,18 +392,31 @@ return view.extend({
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important}
 				.myupdate-key-convert{display:flex;align-items:center;flex:0 0 auto}
 				.myupdate-path-editor{width:100%}
-				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:10px}
-				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;resize:vertical}
-				.myupdate-path-entry-row .btn{align-self:stretch;min-width:76px}
-				.myupdate-path-picker-row{display:flex;align-items:center;gap:10px;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
-				.myupdate-path-root-select{max-width:260px}
+				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:8px}
+				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
+				.myupdate-path-manual-add{align-self:flex-end;min-width:0;padding:5px 12px}
+				.myupdate-browser-toggle{margin-top:8px}
+				.myupdate-file-browser{margin-top:8px;border:1px solid var(--border-color-medium,#ccc);border-radius:5px;padding:10px;background:var(--background-color-high,#fff)}
+				.myupdate-browser-toolbar{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color-medium,#ddd);font-size:.9em}
+				.myupdate-browser-path{min-width:0;overflow-wrap:anywhere;font-family:monospace}
+				.myupdate-browser-list{max-height:320px;overflow:auto}
+				.myupdate-browser-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 2px;border-bottom:1px solid var(--border-color-low,#eee)}
+				.myupdate-browser-name{display:inline-flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere;text-align:left}
+				.myupdate-browser-directory{border:0;background:transparent;color:var(--link-color,#0069c2);cursor:pointer;padding:4px 0}
+				.myupdate-browser-icon{flex:0 0 auto}
+				.myupdate-browser-add{flex:0 0 auto;min-width:0;padding:4px 10px}
+				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#777)}
+				.myupdate-browser-hint{padding-top:6px}
+				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
+				.myupdate-downgrade-toggle{display:inline-flex;align-items:center;gap:7px;margin-right:auto;padding:5px 8px;border:1px solid var(--border-color-medium,#ccc);border-radius:5px;font-weight:600;cursor:pointer}
+				.myupdate-downgrade-toggle input{margin:0}
 				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 				.myupdate-path-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:7px 10px;border-radius:4px;background:var(--background-color-high,#f1f1f1);border:1px solid var(--border-color-medium,#ddd)}
 				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
 				.myupdate-path-chip-remove{border:0;background:transparent;color:var(--gray-color-high,#555);font-size:1.25em;line-height:1;cursor:pointer;padding:0 1px}
 				.myupdate-path-chip-remove:hover{color:#dc2626}
-				@media(max-width:767px){.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:column}.myupdate-key-convert .btn{width:100%}.myupdate-path-picker-row{align-items:flex-start;flex-direction:column}}
+				@media(max-width:767px){.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:column}.myupdate-key-convert .btn{width:100%}.myupdate-path-manual-add{align-self:flex-end}.myupdate-browser-toolbar{align-items:flex-start;flex-direction:column}}
 				@media(max-width:767px){.myupdate-status-heading{align-items:flex-start;flex-direction:column}.myupdate-actions .btn{flex:1}.myupdate-status-panel{padding:14px}}
 			`);
 			return E('div', { 'class': 'cbi-map myupdate-page' }, [
