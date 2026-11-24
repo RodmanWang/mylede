@@ -79,9 +79,10 @@ jobs:
           version, tag = meta.get('version', ''), meta.get('tag', '')
           if not re.fullmatch(r'[0-9]{14}', version) or tag != f'mylede-v{version}':
               raise SystemExit('Invalid firmware version/tag in build metadata.')
-          for key in ('lede_commit', 'mylede_commit'):
-              if not re.fullmatch(r'[0-9a-f]{40}', meta.get(key, '')):
-                  raise SystemExit(f'Invalid {key} in build metadata.')
+          if not re.fullmatch(r'[0-9a-f]{7}', meta.get('lede_commit', '')):
+              raise SystemExit('Invalid seven-character LEDE checkout SHA in build metadata.')
+          if not re.fullmatch(r'[0-9a-f]{40}', meta.get('mylede_commit', '')):
+              raise SystemExit('Invalid full MyLEDE source commit in build metadata.')
           if meta['mylede_commit'] != os.environ['SOURCE_HEAD_SHA']:
               raise SystemExit('Artifact build metadata does not match the selected workflow run commit.')
           for key in ('smartdns', 'smartdns_webui', 'luci_app_smartdns', 'openclash'):
