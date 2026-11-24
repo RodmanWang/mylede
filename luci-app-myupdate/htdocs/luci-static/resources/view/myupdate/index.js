@@ -8,7 +8,8 @@ var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
 var callListKeepPaths = rpc.declare({ object: 'myupdate', method: 'list_keep_paths', params: [ 'path' ] });
 var callSaveKeepPaths = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'custom_keep_paths' ] });
-var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'allow_downgrade' ] });
+var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'set_allow_downgrade', params: [ 'allow_downgrade' ] });
+var callSavePublicKey = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'minisign_public_key' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
@@ -159,6 +160,13 @@ return view.extend({
 		pubkey.rows = 2;
 		pubkey.monospace = true;
 		pubkey.description = _('公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。支持粘贴 minisign.pub 完整两行内容，或直接填写 Base64 公钥主体。');
+		pubkey.write = function(section_id, value) {
+			var normalized = String(value || '').replace(/(?:\r?\n)+$/, '');
+			return callSavePublicKey(normalized).then(function(result) {
+				if (!result || !result.ok)
+					throw new Error(result && result.error ? result.error : _('Minisign 公钥保存失败。'));
+			});
+		};
 		pubkey.validate = function(section_id, value) {
 			var key = (value || '').trim();
 			if (!/^RW[A-Za-z0-9+/]{54}$/.test(key))
@@ -304,11 +312,22 @@ return view.extend({
 					if (currentPath == '/') return;
 					loadDirectory(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/');
 				} }, _('上一级'));
+			function closeBrowser() {
+				browserPanel.style.display = 'none';
+				browserToggle.textContent = _('浏览设备文件…');
+				document.removeEventListener('click', onOutsideBrowserClick);
+			}
+			function onOutsideBrowserClick(ev) {
+				if (!browserPanel.contains(ev.target) && !browserToggle.contains(ev.target))
+					closeBrowser();
+			}
 			browserToggle.addEventListener('click', function() {
 				var opening = browserPanel.style.display == 'none';
-				browserPanel.style.display = opening ? '' : 'none';
-				browserToggle.textContent = opening ? _('收起文件浏览器') : _('浏览设备文件…');
-				if (opening && !browserLoaded) loadDirectory('/');
+				if (!opening) { closeBrowser(); return; }
+				browserPanel.style.display = '';
+				browserToggle.textContent = _('收起文件浏览器');
+				document.addEventListener('click', onOutsideBrowserClick);
+				if (!browserLoaded) loadDirectory('/');
 			});
 			var addButton = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-add myupdate-path-manual-add',
 				click: function() { addPaths(input.value); } }, _('添加'));
@@ -334,15 +353,16 @@ return view.extend({
 		]);
 		var downgradeCheckbox = E('input', {
 			'type': 'checkbox',
-			'checked': cfg.allow_downgrade == '1',
+			'checked': (cfg.allow_downgrade || '0') == '1',
 			'aria-label': _('允许降级'),
 			change: function(ev) {
-				var control = ev.target, previous = cfg.allow_downgrade == '1';
+				var control = ev.target, previous = (cfg.allow_downgrade || '0') == '1';
 				var value = control.checked ? '1' : '0';
 				control.disabled = true;
 				callSaveDowngrade(value).then(function(result) {
 					if (!result || !result.ok) throw new Error(result && result.error ? result.error : _('保存降级设置失败。'));
-					cfg.allow_downgrade = value;
+					cfg.allow_downgrade = result.allow_downgrade || value;
+					control.checked = cfg.allow_downgrade == '1';
 					notify(value == '1' ? _('已启用降级；执行升级时将允许安装低于当前版本的固件。') : _('已关闭降级；执行升级时不允许安装低于当前版本的固件。'), 'info');
 				}).catch(function(error) {
 					control.checked = previous;
@@ -373,14 +393,15 @@ return view.extend({
 					} }, _('检查更新')),
 					E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
 						return reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify);
-					} }, _('下载并验证'))
-				]),
-				E('div', { 'class': 'myupdate-actions-final' }, [
-					downgradeLabel,
+					} }, _('下载并验证')),
 					E('button', { 'class': 'btn cbi-button cbi-button-negative myupdate-upgrade-button', click: function() {
 						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
 					} }, _('执行升级'))
+				]),
+				E('div', { 'class': 'myupdate-downgrade-row' }, [
+					downgradeLabel,
+					E('span', { 'class': 'myupdate-downgrade-hint' }, _('默认关闭。启用后，执行升级时允许安装低于当前版本的固件。'))
 				])
 			])
 		]);
@@ -426,6 +447,9 @@ return view.extend({
 				.myupdate-actions-primary,.myupdate-actions-final{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
 				.myupdate-actions-primary .btn{min-width:142px}
 				.myupdate-actions-final{justify-content:flex-end}
+				.myupdate-downgrade-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-downgrade-toggle{margin:0;padding:6px 9px;border-color:rgba(217,119,6,.28);background:rgba(217,119,6,.045)}
+				.myupdate-downgrade-hint{font-size:.86em;color:var(--gray-color-medium,#778397)}
 				.myupdate-actions .btn{min-height:38px;border-radius:6px;font-weight:650}
 				.myupdate-actions .cbi-button-action{box-shadow:0 2px 5px rgba(37,99,235,.13)}
 				.myupdate-actions .myupdate-upgrade-button{min-width:124px}
@@ -453,16 +477,16 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-key-input-row{display:flex;align-items:stretch;gap:10px;width:100%}
-				.myupdate-key-input{flex:1;min-width:0}
-				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important}
+				.myupdate-key-input-row{display:flex;align-items:stretch;gap:10px;width:min(100%,620px)}
+				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
+				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;flex:0 0 auto}
-				.myupdate-path-editor{width:100%}
-				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:8px}
+				.myupdate-path-editor{width:min(100%,760px);max-width:760px}
+				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:8px;max-width:760px}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
 				.myupdate-path-manual-add{align-self:flex-end;min-width:0;padding:5px 12px}
 				.myupdate-browser-toggle{margin-top:8px}
-				.myupdate-file-browser{margin-top:8px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:8px;padding:10px;background:var(--background-color,#fafbfc)}
+				.myupdate-file-browser{width:100%;max-width:760px;box-sizing:border-box;margin-top:8px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:8px;padding:10px;background:var(--background-color,#fafbfc)}
 				.myupdate-browser-toolbar{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color-low,#e6eaf0);font-size:.9em}
 				.myupdate-browser-path{min-width:0;overflow-wrap:anywhere;font-family:monospace;color:var(--text-color-high,#344054)}
 				.myupdate-browser-list{max-height:320px;overflow:auto}
@@ -487,11 +511,10 @@ return view.extend({
 					.myupdate-status-panel{padding:15px}
 					.myupdate-status-heading{align-items:flex-start;flex-direction:column;gap:4px}
 					.myupdate-status-overview{grid-template-columns:1fr;gap:9px}
-					.myupdate-actions-primary{display:grid;grid-template-columns:1fr 1fr}
+					.myupdate-actions-primary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 					.myupdate-actions-primary .btn{min-width:0;width:100%;white-space:normal}
-					.myupdate-actions-final{justify-content:space-between}
-					.myupdate-actions-final .btn{flex:1}
-					.myupdate-downgrade-toggle{margin-right:0}
+					.myupdate-actions-primary .btn{min-width:0;padding-left:7px;padding-right:7px}
+					.myupdate-downgrade-row{align-items:flex-start;flex-direction:column;gap:5px}
 					.myupdate-page .cbi-section{padding:8px 12px 12px}
 					.myupdate-page .cbi-value{display:block;padding:11px 0}
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
@@ -503,9 +526,7 @@ return view.extend({
 				@media(max-width:420px){
 					.myupdate-hero-mark{display:none}
 					.myupdate-actions-primary{grid-template-columns:1fr}
-					.myupdate-actions-final{align-items:stretch;flex-direction:column}
-					.myupdate-downgrade-toggle{align-self:flex-start}
-					.myupdate-actions-final .btn{width:100%}
+
 					.myupdate-key-input-row{flex-direction:column}
 					.myupdate-key-convert .btn{width:100%}
 					.myupdate-path-entry-row{align-items:flex-end}
