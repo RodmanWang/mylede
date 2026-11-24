@@ -154,11 +154,18 @@ jobs:
             exit 1
           fi
 
+          # Fetch the exact pinned Git object instead of relying on
+          # raw.githubusercontent.com, which returned HTTP 403 on this runner.
           FEEDS_FILE="$RUNNER_TEMP/feeds.conf.default"
-          curl --fail --location --retry 3 --retry-delay 2 \
-            "https://raw.githubusercontent.com/coolsnowwolf/lede/${LEDE_COMMIT}/feeds.conf.default" \
-            --output "$FEEDS_FILE"
-          [[ -s "$FEEDS_FILE" ]] || { echo '::error::feeds.conf.default 文件为空。'; exit 1; }
+          LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-feeds-preflight"
+          git init "$LEDE_PREFLIGHT_REPO"
+          git -C "$LEDE_PREFLIGHT_REPO" remote add origin "$LEDE_URL"
+          git -C "$LEDE_PREFLIGHT_REPO" \
+            -c http.lowSpeedLimit=1000 \
+            -c http.lowSpeedTime=30 \
+            fetch --no-tags --depth=1 origin "$LEDE_COMMIT"
+          git -C "$LEDE_PREFLIGHT_REPO" show FETCH_HEAD:feeds.conf.default > "$FEEDS_FILE"
+          [[ -s "$FEEDS_FILE" ]] || { echo '::error::从锁定的 LEDE Git 提交读取 feeds.conf.default 失败或文件为空。'; exit 1; }
           FEEDS_SHA256="$(sha256sum "$FEEDS_FILE" | awk '{print $1}')"
 
           python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" <<'PY'
