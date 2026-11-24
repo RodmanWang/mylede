@@ -194,5 +194,19 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("MYLEDE_BUILD_COMMIT", workflow)
 
 
+    def test_minisign_source_archive_uses_codeload_endpoint(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            'https://codeload.github.com/jedisct1/minisign/tar.gz/refs/tags/${MINISIGN_VERSION}',
+            workflow,
+        )
+        self.assertNotIn(
+            'https://github.com/jedisct1/minisign/archive/refs/tags/',
+            workflow,
+        )
+        self.assertIn('正在下载 minisign 源码归档：$MINISIGN_ARCHIVE_URL', workflow)
+        self.assertIn('--connect-timeout 15 --max-time 180', workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
