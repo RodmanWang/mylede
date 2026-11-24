@@ -208,5 +208,13 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('--connect-timeout 15 --max-time 180', workflow)
 
 
+    def test_build_reads_pinned_feeds_config_from_git_not_raw_cdn(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('fetch --no-tags --depth=1 origin "$LEDE_COMMIT"', workflow)
+        self.assertIn('git -C "$LEDE_PREFLIGHT_REPO" show FETCH_HEAD:feeds.conf.default', workflow)
+        self.assertNotIn('https://raw.githubusercontent.com/coolsnowwolf/lede/', workflow)
+        self.assertIn("LEDE_PREFLIGHT_REPO", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
