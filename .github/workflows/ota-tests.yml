@@ -1,4 +1,4 @@
-name: 3、MyUpdate插件 OTA 测试
+name: MyUpdate插件 OTA 测试
 
 on:
   push:
