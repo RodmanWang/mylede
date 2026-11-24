@@ -131,5 +131,12 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertLess(row.index("下载并验证"), row.index("执行升级"))
 
 
+    def test_luci_global_navigation_dropdowns_stay_above_myupdate_content(self):
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn(".myupdate-page{position:relative;z-index:0", view)
+        self.assertIn("#header,#mainmenu,.navbar,.mainmenu{position:relative;z-index:10000}", view)
+        self.assertIn(".dropdown-menu{z-index:10001}", view)
+
+
 if __name__ == "__main__":
     unittest.main()
