@@ -83,9 +83,19 @@ function blocked_keep_path(path) {
 	return false;
 }
 function valid_browser_directory(path) {
-	if (type(path) != 'string' || length(path) > 512 || !match(path, /^\\/(?:[^\\/]+(?:\\/[^\\/]+)*)?$/) ||
-	    index(path, '\\n') >= 0 || index(path, '\\r') >= 0 || index(path, '\\\\') >= 0 ||
-	    match(path, /(^|\\/)\\.\\.?($|\\/)/)) return false;
+	if (type(path) != 'string' || length(path) > 512 || substr(path, 0, 1) != '/' ||
+	    index(path, '\n') >= 0 || index(path, '\r') >= 0 || index(path, '\\') >= 0 ||
+	    index(path, '\t') >= 0 || index(path, '\0') >= 0 || blocked_keep_path(path))
+		return false;
+	if (path != '/') {
+		if (substr(path, 1, 1) == '/' || substr(path, length(path) - 1, 1) == '/')
+			return false;
+		let first = true;
+		for (let part in split(path, '/')) {
+			if (first) { first = false; continue; }
+			if (part == '' || part == '.' || part == '..') return false;
+		}
+	}
 	let resolved = fs.realpath(path), info = fs.lstat(path);
 	return resolved == path && info != null && info.type == 'directory';
 }
@@ -96,7 +106,7 @@ function list_keep_paths(path) {
 	let entries = [], truncated = length(names) > 300;
 	for (let name in names) {
 		if (length(entries) >= 300) break;
-		if (name == '.' || name == '..' || index(name, '/') >= 0 || index(name, '\\n') >= 0 || index(name, '\\r') >= 0)
+		if (name == '.' || name == '..' || index(name, '/') >= 0 || index(name, '\n') >= 0 || index(name, '\r') >= 0)
 			continue;
 		let child = path == '/' ? '/' + name : path + '/' + name;
 		let info = fs.lstat(child);
@@ -105,7 +115,7 @@ function list_keep_paths(path) {
 		entries[length(entries)] = {
 			name: name, path: child, type: info.type,
 			can_open: info.type == 'directory' && canonical && !blocked,
-			can_add: canonical && !blocked && match(child, /^\\/[A-Za-z0-9._/@+-]+$/)
+			can_add: canonical && !blocked && match(child, /^\/[A-Za-z0-9._/@+-]+$/)
 		};
 	}
 	return { ok: true, path: path, entries: entries, truncated: truncated };
