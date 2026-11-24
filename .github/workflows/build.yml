@@ -160,6 +160,7 @@ jobs:
           add('plugin:smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
           add('plugin:smartdns_webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
           add('plugin:luci_app_smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
+          add('feed:OpenClash', 'https://github.com/vernesong/OpenClash.git', 'refs/heads/dev')
 
           with output_file.open('w', encoding='utf-8') as stream:
               for (url, ref), name in sorted(repositories.items()):
