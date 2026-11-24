@@ -172,5 +172,26 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('"uses_boot_part") is not True', validator)
 
 
+    def test_build_uses_last_successful_partition_values_for_auto_and_manual_runs(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        state = json.loads((ROOT / "build-config/last-successful-partition-layout.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["kernel_partsize_mib"], 256)
+        self.assertEqual(state["rootfs_partsize_mib"], 4096)
+        self.assertIn("steps.last_partition_defaults.outputs.kernel_partsize", workflow)
+        self.assertIn("needs.source_check.outputs.last_kernel_partsize", workflow)
+        self.assertIn("needs.source_check.outputs.last_rootfs_partsize", workflow)
+        self.assertIn("scripts/update-build-partition-defaults.py", workflow)
+        self.assertIn('git push origin "HEAD:${GITHUB_REF}"', workflow)
+        self.assertIn("contents: write", workflow)
+        self.assertIn("上游源码默认为 64 MiB", workflow)
+        self.assertIn("上游源码默认为 448 MiB", workflow)
+
+    def test_generated_partition_state_commit_does_not_invalidate_build_fingerprint(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("ci(build): remember last successful firmware partition layout", workflow)
+        self.assertIn("MYLEDE_BUILD_COMMIT", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
