@@ -647,12 +647,60 @@ jobs:
           [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::找不到已锁定版本的 LEDE Makefile：$LEDE_DIR"; exit 1; }
           cd "$LEDE_DIR"
           echo '========== 已锁定 LEDE 源码中的分区默认值 =========='
-          # Ask the pinned LEDE build system to resolve its own defaults for comparison.
-          if ! make -s printvars VARS='KERNEL_PARTSIZE ROOTFS_PARTSIZE' 2>&1; then
-            echo '::warning::LEDE printvars 无法解析分区默认值，改为显示源码定义。'
-            grep -RInE '(^|[[:space:]])(KERNEL_PARTSIZE|ROOTFS_PARTSIZE)[[:space:]]*[:?+]?=' \
-              target/linux/x86 include/target.mk target/Makefile 2>/dev/null | head -80 || true
-          fi
+          # Read the pinned LEDE Kconfig defaults directly. Do not call printvars:
+          # without .config it enters menuconfig, which requires an interactive TTY.
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          source = Path("config/Config-images.in")
+          if not source.is_file():
+              raise SystemExit(f"找不到 LEDE 分区默认值定义文件：{source}")
+
+          lines = source.read_text(encoding="utf-8").splitlines()
+          symbols = {
+              "TARGET_KERNEL_PARTSIZE": "内核分区",
+              "TARGET_ROOTFS_PARTSIZE": "根文件系统分区",
+          }
+
+          for symbol, label in symbols.items():
+              start = next(
+                  (i for i, line in enumerate(lines)
+                   if re.match(rf"^\\s*config\\s+{re.escape(symbol)}\\s*$", line)),
+                  None,
+              )
+              if start is None:
+                  raise SystemExit(f"LEDE Kconfig 中未找到 {symbol}")
+
+              block = []
+              for line in lines[start + 1:]:
+                  if re.match(r"^\\s*(?:config|menuconfig|choice|endchoice|comment|source)\\b", line):
+                      break
+                  block.append((len(block) + start + 2, line))
+
+              defaults = []
+              for line_number, line in block:
+                  match = re.match(r"^\\s*default\\s+(\\d+)(?:\\s+if\\s+(.+?))?\\s*$", line)
+                  if match:
+                      defaults.append((int(match.group(1)), match.group(2), line_number, line.strip()))
+
+              # The build workflow is fixed to LEDE x86/64. Select the first
+              # default whose condition explicitly includes TARGET_x86; retain
+              # the unconditional Kconfig default as a defensive fallback.
+              selected = next(
+                  (item for item in defaults if item[1] and re.search(r"\\bTARGET_x86\\b", item[1])),
+                  None,
+              )
+              if selected is None:
+                  selected = next((item for item in defaults if item[1] is None), None)
+              if selected is None:
+                  raise SystemExit(f"无法从 {source} 解析 {symbol} 的默认值")
+
+              value, condition, line_number, definition = selected
+              scope = "TARGET_x86" if condition else "通用默认值"
+              print(f"{label}：{value} MiB（{scope}，{source}:{line_number}）")
+              print(f"  源码定义：{definition}")
+          PY
           echo '========== MyLEDE 请求的固件分区布局 =========='
           echo "内核分区：${KERNEL_PARTSIZE} MB"
           echo "根文件系统分区：${ROOTFS_PARTSIZE} MB"
