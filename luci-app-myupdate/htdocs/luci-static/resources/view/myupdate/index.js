@@ -9,7 +9,6 @@ var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
 var callListKeepPaths = rpc.declare({ object: 'myupdate', method: 'list_keep_paths', params: [ 'path' ] });
 var callSaveKeepPaths = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'custom_keep_paths' ] });
 var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'set_allow_downgrade', params: [ 'allow_downgrade' ] });
-var callSavePublicKey = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'minisign_public_key' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
@@ -160,13 +159,6 @@ return view.extend({
 		pubkey.rows = 2;
 		pubkey.monospace = true;
 		pubkey.description = _('公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。支持粘贴 minisign.pub 完整两行内容，或直接填写 Base64 公钥主体。');
-		pubkey.write = function(section_id, value) {
-			var normalized = String(value || '').replace(/(?:\r?\n)+$/, '');
-			return callSavePublicKey(normalized).then(function(result) {
-				if (!result || !result.ok)
-					throw new Error(result && result.error ? result.error : _('Minisign 公钥保存失败。'));
-			});
-		};
 		pubkey.validate = function(section_id, value) {
 			var key = (value || '').trim();
 			if (!/^RW[A-Za-z0-9+/]{54}$/.test(key))
@@ -414,6 +406,16 @@ return view.extend({
 			var originalPubkeyRender = pubkey.renderWidget;
 			pubkey.renderWidget = function(section_id, option_index, cfgvalue) {
 				var inputWidget = originalPubkeyRender.apply(this, arguments);
+				var keyInput = inputWidget.tagName == 'TEXTAREA' ? inputWidget :
+					(inputWidget.querySelector ? inputWidget.querySelector('textarea') : null);
+				if (keyInput) keyInput.addEventListener('blur', function() {
+					var normalized = keyInput.value.replace(/\\r?\\n$/, '');
+					if (normalized != keyInput.value) {
+						keyInput.value = normalized;
+						keyInput.dispatchEvent(new Event('input', { bubbles: true }));
+						keyInput.dispatchEvent(new Event('change', { bubbles: true }));
+					}
+				});
 				return E('div', { 'class': 'myupdate-key-input-row' }, [
 					E('div', { 'class': 'myupdate-key-input' }, [ inputWidget ]),
 					E('div', { 'class': 'myupdate-key-convert' }, [ convertKey ])
