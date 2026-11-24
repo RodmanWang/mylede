@@ -24,7 +24,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("keepPaths.renderWidget = function(section_id)", source)
         self.assertIn("keepPaths.write = function(section_id, values)", source)
         self.assertIn("callSaveKeepPaths(paths.join", source)
-        self.assertIn("callListKeepPaths('/')", source)
+        self.assertIn("loadDirectory('/')", source)
         self.assertIn("myupdate-browser-entry", source)
         self.assertIn("myupdate-browser-add", source)
         self.assertIn("keepPathValues.splice(index, 1)", source)
