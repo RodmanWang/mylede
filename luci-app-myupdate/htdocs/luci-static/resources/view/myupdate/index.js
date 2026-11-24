@@ -423,7 +423,10 @@ return view.extend({
 			};
 		return m.render().then(function(mapNode) {
 			var style = E('style', {}, `
-				.myupdate-page{max-width:1180px;margin:0 auto;padding-bottom:32px}
+				.myupdate-page{position:relative;z-index:0;isolation:auto;max-width:1180px;margin:0 auto;padding-bottom:32px}
+				/* Keep LuCI's global navigation and its dropdowns above page content. */
+				#header,#mainmenu,.navbar,.mainmenu{position:relative;z-index:10000}
+				#header .dropdown-menu,#mainmenu .dropdown-menu,.navbar .dropdown-menu,.mainmenu .dropdown-menu{z-index:10001}
 				.myupdate-hero{display:flex;align-items:center;gap:18px;margin:4px 0 22px;padding:22px 24px;border:1px solid var(--border-color-medium,#d7dee7);border-radius:12px;background:linear-gradient(115deg,var(--background-color-high,#fff),var(--background-color,#f5f7fa));}
 				.myupdate-hero-mark{display:flex;align-items:center;justify-content:center;flex:0 0 58px;height:58px;border-radius:14px;background:var(--primary-color,#2563eb);color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;box-shadow:0 5px 16px rgba(37,99,235,.18)}
 				.myupdate-hero-copy{min-width:0}
