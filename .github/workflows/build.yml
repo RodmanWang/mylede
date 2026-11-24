@@ -647,10 +647,9 @@ jobs:
           [[ -f "$LEDE_DIR/Makefile" ]] || { echo "::error::找不到已锁定版本的 LEDE Makefile：$LEDE_DIR"; exit 1; }
           cd "$LEDE_DIR"
           echo '========== 已锁定 LEDE 源码中的分区默认值 =========='
-          # Read the pinned LEDE Kconfig defaults directly. Do not call printvars:
-          # without .config it enters menuconfig, which requires an interactive TTY.
+          # Parse the pinned LEDE Kconfig directly; printvars may enter
+          # interactive menuconfig when .config does not exist yet.
           python3 - <<'PY'
-          import re
           from pathlib import Path
 
           source = Path("config/Config-images.in")
@@ -665,30 +664,28 @@ jobs:
 
           for symbol, label in symbols.items():
               start = next(
-                  (i for i, line in enumerate(lines)
-                   if re.match(rf"^\\s*config\\s+{re.escape(symbol)}\\s*$", line)),
+                  (i for i, line in enumerate(lines) if line.strip() == f"config {symbol}"),
                   None,
               )
               if start is None:
                   raise SystemExit(f"LEDE Kconfig 中未找到 {symbol}")
 
-              block = []
-              for line in lines[start + 1:]:
-                  if re.match(r"^\\s*(?:config|menuconfig|choice|endchoice|comment|source)\\b", line):
-                      break
-                  block.append((len(block) + start + 2, line))
-
               defaults = []
-              for line_number, line in block:
-                  match = re.match(r"^\\s*default\\s+(\\d+)(?:\\s+if\\s+(.+?))?\\s*$", line)
-                  if match:
-                      defaults.append((int(match.group(1)), match.group(2), line_number, line.strip()))
+              for offset, line in enumerate(lines[start + 1:], start + 2):
+                  stripped = line.strip()
+                  if stripped.startswith(("config ", "menuconfig ", "choice", "endchoice", "comment ", "source ")):
+                      break
+                  if not stripped.startswith("default "):
+                      continue
 
-              # The build workflow is fixed to LEDE x86/64. Select the first
-              # default whose condition explicitly includes TARGET_x86; retain
-              # the unconditional Kconfig default as a defensive fallback.
+                  expression = stripped[len("default "):]
+                  value_text, separator, condition = expression.partition(" if ")
+                  if not value_text.isdigit():
+                      continue
+                  defaults.append((int(value_text), condition if separator else None, offset, stripped))
+
               selected = next(
-                  (item for item in defaults if item[1] and re.search(r"\\bTARGET_x86\\b", item[1])),
+                  (item for item in defaults if item[1] and "TARGET_x86" in item[1].split()),
                   None,
               )
               if selected is None:
