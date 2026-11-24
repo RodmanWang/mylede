@@ -110,12 +110,12 @@ function list_keep_paths(path) {
 			continue;
 		let child = path == '/' ? '/' + name : path + '/' + name;
 		let info = fs.lstat(child);
-		if (info == null || (info.type != 'directory' && info.type != 'file')) continue;
+		if (info == null || (info.type != 'directory' && info.type != 'file' && info.type != 'symlink')) continue;
 		let canonical = fs.realpath(child) == child, blocked = blocked_keep_path(child);
 		entries[length(entries)] = {
 			name: name, path: child, type: info.type,
 			can_open: info.type == 'directory' && canonical && !blocked,
-			can_add: canonical && !blocked && match(child, /^\/[A-Za-z0-9._/@+-]+$/)
+			can_add: (info.type == 'directory' || info.type == 'file') && canonical && !blocked && match(child, /^\/[A-Za-z0-9._/@+-]+$/)
 		};
 	}
 	return { ok: true, path: path, entries: entries, truncated: truncated };
