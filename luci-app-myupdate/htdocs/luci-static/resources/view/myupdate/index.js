@@ -74,6 +74,19 @@ return view.extend({
 		var m = new form.Map('myupdate');
 		var s = m.section(form.NamedSection, 'main', 'myupdate');
 		s.addremove = false;
+
+		function addSettingsHeading(id, title, description) {
+			var heading = s.option(form.DummyValue, id, title);
+			heading.cfgvalue = function() { return ''; };
+			heading.renderWidget = function() {
+				return E('div', { 'class': 'myupdate-settings-heading' }, [
+					E('h3', {}, title),
+					E('p', {}, description)
+				]);
+			};
+		}
+
+		addSettingsHeading('_heading_repository', _('仓库与访问权限'), _('配置固件来源，以及访问公开或私有 GitHub 仓库所需的凭据。'));
 		var noticeNode = E('div', { 'class': 'myupdate-inline-notice', role: 'status', 'aria-live': 'polite', style: 'display:none' });
 		var notify = createInlineNotifier(noticeNode);
 
@@ -117,6 +130,7 @@ return view.extend({
 			});
 		};
 
+		addSettingsHeading('_heading_schedule', _('更新策略'), _('选择检查方式，并设置定时任务的执行频率与时间。'));
 		var mode = s.option(form.ListValue, 'upgrade_mode', _('检查模式'));
 		mode.value('manual', _('手动检查'));
 		mode.value('notify', _('定时检查，有更新时显示状态'));
@@ -140,6 +154,7 @@ return view.extend({
 		autoTime.datatype = 'time';
 		autoTime.description = _('仅在选择自动升级模式时生效；每天最多自动执行一次。');
 
+		addSettingsHeading('_heading_verification', _('固件验证'), _('使用与发布流程匹配的 Minisign 公钥验证固件来源，验证通过后才允许继续升级。'));
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
 		pubkey.monospace = true;
@@ -178,6 +193,7 @@ return view.extend({
 			}
 		}, _('识别并转换'));
 
+		addSettingsHeading('_heading_backup', _('配置保留'), _('选择升级后需要恢复的文件或目录；请只添加确实需要跨版本保留的数据。'));
 		var keepPathValues = (cfg.custom_keep_paths || []).slice();
 		var keepPaths = s.option(form.DynamicList, 'custom_keep_paths', _('自定义文件保留路径'));
 		keepPaths.optional = true;
@@ -338,25 +354,34 @@ return view.extend({
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [
-				E('h3', _('检测状态')),
-				E('span', { 'class': 'myupdate-status-caption' }, _('固件检查、下载与验证进度'))
+				E('div', { 'class': 'myupdate-status-title' }, [
+					E('span', { 'class': 'myupdate-status-kicker' }, _('UPDATE CENTER')),
+					E('h3', _('更新状态'))
+				]),
+				E('span', { 'class': 'myupdate-status-caption' }, _('检查 · 下载 · 验证 · 升级'))
 			]),
 			noticeNode,
-			statusText,
+			E('div', { 'class': 'myupdate-status-overview' }, [
+				statusText,
+				E('p', { 'class': 'myupdate-status-note' }, _('固件下载完成后会验证 Minisign 签名、设备兼容性和 SHA256。只有验证通过，才可确认执行 sysupgrade。升级会重启设备，并按 LEDE 默认机制恢复配置备份。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'))
+			]),
 			progressPanel,
-			E('div', { 'class': 'myupdate-status-note' }, _('自动升级会按设定时间检查更新；发现新版本后可下载并验证签名、设备兼容性和 SHA256。验证通过后，需手动确认才会执行 sysupgrade 并重启。升级使用 LEDE 默认配置备份与恢复机制。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
 			E('div', { 'class': 'myupdate-actions' }, [
-				E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
-					return reportTaskStart(callCheck(), _('检查任务启动失败'), notify);
-				} }, _('检查更新')),
-				E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
-					return reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify);
-				} }, _('下载并验证')),
-				downgradeLabel,
-				E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
-					if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
-					return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
-				} }, _('执行升级'))
+				E('div', { 'class': 'myupdate-actions-primary' }, [
+					E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
+						return reportTaskStart(callCheck(), _('检查任务启动失败'), notify);
+					} }, _('检查更新')),
+					E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
+						return reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify);
+					} }, _('下载并验证'))
+				]),
+				E('div', { 'class': 'myupdate-actions-final' }, [
+					downgradeLabel,
+					E('button', { 'class': 'btn cbi-button cbi-button-negative myupdate-upgrade-button', click: function() {
+						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
+						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
+					} }, _('执行升级'))
+				])
 			])
 		]);
 		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
@@ -375,24 +400,57 @@ return view.extend({
 			};
 		return m.render().then(function(mapNode) {
 			var style = E('style', {}, `
-				.myupdate-status-panel{border:1px solid #c8d4df;border-left:4px solid #64748b;border-radius:8px;background:var(--background-color-high,#fff);padding:18px 20px;margin:12px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.045)}
-				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
-				.myupdate-inline-notice{margin:0 0 12px;padding:10px 14px;border-radius:6px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
-				.myupdate-inline-notice.notice-info{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
-				.myupdate-inline-notice.notice-error{background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626}
-				.myupdate-status-heading h3{margin:0;font-size:1.2rem}
-				.myupdate-status-caption{font-size:.9em;color:var(--gray-color-medium,#777)}
-				.myupdate-status-message{padding:12px 14px;border-radius:6px;background:#f1f5f9;color:#334155;font-weight:600;line-height:1.65}
-				.myupdate-status-message.state-checked,.myupdate-status-message.state-downloaded,.myupdate-status-message.state-current{background:#ecfdf3;color:#166534;border-left:4px solid #16a34a}
-				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running,.myupdate-status-message.state-verifying{background:#eff6ff;color:#1d4ed8;border-left:4px solid #3b82f6}
-				.myupdate-status-message.state-error{background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626}
-				.myupdate-status-message.state-upgrading{background:#fff7ed;color:#c2410c;border-left:4px solid #f97316}
-				.myupdate-status-note{margin:12px 0;color:var(--gray-color-medium,#666);font-size:.92em;line-height:1.7}
-				.myupdate-actions{display:flex;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--border-color-medium,#ddd)}
-				.myupdate-progress{margin-top:14px}
-				.myupdate-progress-track{height:13px;border-radius:10px;background:#e2e8f0;overflow:hidden}
-				.myupdate-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#2563eb,#16a34a);border-radius:10px;transition:width .35s ease}
-				.myupdate-progress-label{margin-top:6px;text-align:right;font-size:.9em;color:var(--gray-color-medium,#555);font-variant-numeric:tabular-nums}
+				.myupdate-page{max-width:1180px;margin:0 auto;padding-bottom:32px}
+				.myupdate-hero{display:flex;align-items:center;gap:18px;margin:4px 0 22px;padding:22px 24px;border:1px solid var(--border-color-medium,#d7dee7);border-radius:12px;background:linear-gradient(115deg,var(--background-color-high,#fff),var(--background-color,#f5f7fa));}
+				.myupdate-hero-mark{display:flex;align-items:center;justify-content:center;flex:0 0 58px;height:58px;border-radius:14px;background:var(--primary-color,#2563eb);color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;box-shadow:0 5px 16px rgba(37,99,235,.18)}
+				.myupdate-hero-copy{min-width:0}
+				.myupdate-hero-eyebrow,.myupdate-status-kicker{display:block;margin-bottom:4px;color:var(--gray-color-medium,#778397);font-size:10px;font-weight:800;letter-spacing:.14em}
+				.myupdate-hero h2{margin:0;color:var(--text-color-high,#1f2937);font-size:1.65rem;font-weight:750;letter-spacing:-.025em}
+				.myupdate-hero p{margin:5px 0 0;color:var(--gray-color-medium,#697586);line-height:1.55}
+				.myupdate-status-panel{border:1px solid var(--border-color-medium,#d5dce5);border-radius:12px;background:var(--background-color-high,#fff);padding:20px 22px;margin:0 0 28px;box-shadow:0 5px 18px rgba(15,23,42,.045)}
+				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+				.myupdate-status-title h3{margin:0;font-size:1.18rem;font-weight:750}
+				.myupdate-status-kicker{margin-bottom:3px}
+				.myupdate-status-caption{font-size:.85em;color:var(--gray-color-medium,#778397)}
+				.myupdate-inline-notice{margin:0 0 14px;padding:10px 13px;border-radius:7px;font-weight:600;line-height:1.55;overflow-wrap:anywhere}
+				.myupdate-inline-notice.notice-info{background:var(--info-bg,#eff6ff);color:var(--info-color,#1d4ed8);border:1px solid rgba(59,130,246,.22)}
+				.myupdate-inline-notice.notice-error{background:var(--error-bg,#fef2f2);color:var(--error-color,#b91c1c);border:1px solid rgba(220,38,38,.22)}
+				.myupdate-status-overview{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(250px,.85fr);gap:18px;align-items:stretch}
+				.myupdate-status-message{display:flex;align-items:center;min-height:72px;padding:15px 17px;border:1px solid var(--border-color-medium,#e0e6ed);border-left:4px solid #94a3b8;border-radius:8px;background:var(--background-color,#f7f9fc);color:var(--text-color-high,#334155);font-weight:650;line-height:1.65;overflow-wrap:anywhere}
+				.myupdate-status-message.state-checked,.myupdate-status-message.state-downloaded,.myupdate-status-message.state-current{background:rgba(22,163,74,.07);color:var(--success-color,#166534);border-left-color:#16a34a}
+				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running,.myupdate-status-message.state-verifying{background:rgba(37,99,235,.07);color:var(--info-color,#1d4ed8);border-left-color:#3b82f6}
+				.myupdate-status-message.state-error{background:rgba(220,38,38,.07);color:var(--error-color,#b91c1c);border-left-color:#dc2626}
+				.myupdate-status-message.state-upgrading{background:rgba(234,88,12,.08);color:var(--warning-color,#c2410c);border-left-color:#f97316}
+				.myupdate-status-note{display:flex;align-items:center;margin:0;padding:13px 15px;border:1px solid var(--border-color-low,#e7ebf0);border-radius:8px;background:var(--background-color,#fafbfc);color:var(--gray-color-medium,#687385);font-size:.9em;line-height:1.7}
+				.myupdate-actions{display:flex;flex-direction:column;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border-color-low,#e6eaf0)}
+				.myupdate-actions-primary,.myupdate-actions-final{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+				.myupdate-actions-primary .btn{min-width:142px}
+				.myupdate-actions-final{justify-content:flex-end}
+				.myupdate-actions .btn{min-height:38px;border-radius:6px;font-weight:650}
+				.myupdate-actions .cbi-button-action{box-shadow:0 2px 5px rgba(37,99,235,.13)}
+				.myupdate-actions .myupdate-upgrade-button{min-width:124px}
+				.myupdate-downgrade-toggle{display:inline-flex;align-items:center;gap:8px;margin-right:auto;padding:8px 11px;border:1px solid var(--border-color-medium,#d5dce5);border-radius:7px;background:var(--background-color,#fafbfc);font-size:.9em;font-weight:600;cursor:pointer}
+				.myupdate-downgrade-toggle input{margin:0;accent-color:var(--primary-color,#2563eb)}
+				.myupdate-progress{margin-top:15px;padding:13px 15px;border:1px solid var(--border-color-low,#e4e9ef);border-radius:8px;background:var(--background-color,#fafbfc)}
+				.myupdate-progress-track{height:9px;border-radius:20px;background:var(--border-color-low,#e5eaf0);overflow:hidden}
+				.myupdate-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#2563eb,#0d9488);border-radius:20px;transition:width .35s ease}
+				.myupdate-progress-label{margin-top:8px;text-align:right;font-size:.85em;color:var(--gray-color-medium,#64748b);font-variant-numeric:tabular-nums}
+				.myupdate-settings-intro{margin:0 0 8px;padding:0 2px}
+				.myupdate-settings-intro h3{margin:0;font-size:1.2rem;font-weight:750}
+				.myupdate-settings-intro p{margin:4px 0 0;color:var(--gray-color-medium,#6b7280);font-size:.92em;line-height:1.6}
+				.myupdate-page .cbi-section{margin-top:10px;padding:12px 20px 18px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:11px;background:var(--background-color-high,#fff);box-shadow:0 3px 12px rgba(15,23,42,.025)}
+				.myupdate-page .cbi-value{padding:13px 0;border-bottom:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-page .cbi-value:last-child{border-bottom:0}
+				.myupdate-page .cbi-value-title{padding-top:7px;color:var(--text-color-high,#344054);font-weight:650}
+				.myupdate-page .cbi-value-field{min-width:0}
+				.myupdate-page input:not([type=checkbox]),.myupdate-page select,.myupdate-page textarea{border-radius:6px}
+				.myupdate-page input:focus,.myupdate-page select:focus,.myupdate-page textarea:focus{outline:2px solid rgba(37,99,235,.18);outline-offset:1px}
+				.myupdate-page .cbi-value-description{margin-top:6px;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.55}
+				.myupdate-page .cbi-value:has(.myupdate-settings-heading){padding:18px 0 8px;border-bottom:0}
+				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-title{display:none}
+				.myupdate-settings-heading{padding:0 0 10px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
+				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
+				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
 				.myupdate-key-input-row{display:flex;align-items:stretch;gap:10px;width:100%}
@@ -404,33 +462,71 @@ return view.extend({
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
 				.myupdate-path-manual-add{align-self:flex-end;min-width:0;padding:5px 12px}
 				.myupdate-browser-toggle{margin-top:8px}
-				.myupdate-file-browser{margin-top:8px;border:1px solid var(--border-color-medium,#ccc);border-radius:5px;padding:10px;background:var(--background-color-high,#fff)}
-				.myupdate-browser-toolbar{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color-medium,#ddd);font-size:.9em}
-				.myupdate-browser-path{min-width:0;overflow-wrap:anywhere;font-family:monospace}
+				.myupdate-file-browser{margin-top:8px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:8px;padding:10px;background:var(--background-color,#fafbfc)}
+				.myupdate-browser-toolbar{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color-low,#e6eaf0);font-size:.9em}
+				.myupdate-browser-path{min-width:0;overflow-wrap:anywhere;font-family:monospace;color:var(--text-color-high,#344054)}
 				.myupdate-browser-list{max-height:320px;overflow:auto}
-				.myupdate-browser-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 2px;border-bottom:1px solid var(--border-color-low,#eee)}
+				.myupdate-browser-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 3px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-browser-name{display:inline-flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere;text-align:left}
-				.myupdate-browser-directory{border:0;background:transparent;color:var(--link-color,#0069c2);cursor:pointer;padding:4px 0}
+				.myupdate-browser-directory{border:0;background:transparent;color:var(--link-color,#1769aa);cursor:pointer;padding:4px 0;font-weight:600}
 				.myupdate-browser-icon{flex:0 0 auto}
-				.myupdate-browser-add{flex:0 0 auto;min-width:0;padding:4px 10px}
-				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#777)}
+				.myupdate-browser-add{flex:0 0 auto;min-width:0;padding:4px 10px;border-radius:5px}
+				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#778397)}
 				.myupdate-browser-hint{padding-top:6px}
 				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#777);font-size:.9em}
-				.myupdate-downgrade-toggle{display:inline-flex;align-items:center;gap:7px;margin-right:auto;padding:5px 8px;border:1px solid var(--border-color-medium,#ccc);border-radius:5px;font-weight:600;cursor:pointer}
-				.myupdate-downgrade-toggle input{margin:0}
-				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-				.myupdate-path-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:7px 10px;border-radius:4px;background:var(--background-color-high,#f1f1f1);border:1px solid var(--border-color-medium,#ddd)}
+				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
+				.myupdate-path-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:7px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
 				.myupdate-path-chip-remove{border:0;background:transparent;color:var(--gray-color-high,#555);font-size:1.25em;line-height:1;cursor:pointer;padding:0 1px}
 				.myupdate-path-chip-remove:hover{color:#dc2626}
-				@media(max-width:767px){.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:column}.myupdate-key-convert .btn{width:100%}.myupdate-path-manual-add{align-self:flex-end}.myupdate-browser-toolbar{align-items:flex-start;flex-direction:column}}
-				@media(max-width:767px){.myupdate-status-heading{align-items:flex-start;flex-direction:column}.myupdate-actions .btn{flex:1}.myupdate-status-panel{padding:14px}}
+				@media(max-width:767px){
+					.myupdate-page{padding-bottom:20px}
+					.myupdate-hero{align-items:flex-start;gap:12px;padding:16px}
+					.myupdate-hero-mark{flex-basis:46px;height:46px;border-radius:11px;font-size:14px}
+					.myupdate-hero h2{font-size:1.35rem}
+					.myupdate-status-panel{padding:15px}
+					.myupdate-status-heading{align-items:flex-start;flex-direction:column;gap:4px}
+					.myupdate-status-overview{grid-template-columns:1fr;gap:9px}
+					.myupdate-actions-primary{display:grid;grid-template-columns:1fr 1fr}
+					.myupdate-actions-primary .btn{min-width:0;width:100%;white-space:normal}
+					.myupdate-actions-final{justify-content:space-between}
+					.myupdate-actions-final .btn{flex:1}
+					.myupdate-downgrade-toggle{margin-right:0}
+					.myupdate-page .cbi-section{padding:8px 12px 12px}
+					.myupdate-page .cbi-value{display:block;padding:11px 0}
+					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
+					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
+					.myupdate-key-convert .btn{width:auto}
+					.myupdate-path-manual-add{align-self:flex-end}
+					.myupdate-browser-toolbar{align-items:flex-start;flex-direction:column}
+				}
+				@media(max-width:420px){
+					.myupdate-hero-mark{display:none}
+					.myupdate-actions-primary{grid-template-columns:1fr}
+					.myupdate-actions-final{align-items:stretch;flex-direction:column}
+					.myupdate-downgrade-toggle{align-self:flex-start}
+					.myupdate-actions-final .btn{width:100%}
+					.myupdate-key-input-row{flex-direction:column}
+					.myupdate-key-convert .btn{width:100%}
+					.myupdate-path-entry-row{align-items:flex-end}
+					.myupdate-path-batch-input{min-width:0}
+				}
 			`);
 			return E('div', { 'class': 'cbi-map myupdate-page' }, [
 				style,
-				E('h2', _('固件在线升级')),
+				E('header', { 'class': 'myupdate-hero' }, [
+					E('div', { 'class': 'myupdate-hero-mark', 'aria-hidden': 'true' }, 'OTA'),
+					E('div', { 'class': 'myupdate-hero-copy' }, [
+						E('span', { 'class': 'myupdate-hero-eyebrow' }, _('SYSTEM MAINTENANCE')),
+						E('h2', _('固件在线升级')),
+						E('p', _('管理固件更新、完整性验证与升级后的配置恢复。'))
+					])
+				]),
 				statusPanel,
+				E('div', { 'class': 'myupdate-settings-intro' }, [
+					E('h3', _('升级设置')),
+					E('p', _('配置更新来源、检查策略、验证密钥与配置保留规则。修改完成后，请使用页面底部的“保存并应用”提交设置。'))
+				]),
 				mapNode
 			]);
 		});
