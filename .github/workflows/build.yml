@@ -883,7 +883,7 @@ jobs:
           # shortened archive names in dl/.
           locked = {}
           for line in lock_file.read_text(encoding="utf-8").splitlines():
-              fields = line.split("\\t")
+              fields = line.split("\t")
               if len(fields) != 4:
                   raise SystemExit(f"invalid source lock row: {line!r}")
               name, url, ref, commit = fields
@@ -914,7 +914,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in outputs.items():
-                  stream.write(f"{name}={value}\\n")
+                  stream.write(f"{name}={value}\n")
           PY
       - name: 选择 UEFI 镜像并准备发布文件
         if: success()
