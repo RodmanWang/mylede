@@ -186,6 +186,38 @@ jobs:
           printf 'LEDE\t%s\t%s\t%s\n' "$LEDE_URL" "$LEDE_REF" "$LEDE_COMMIT" \
             >> "$RUNNER_TEMP/source-revisions.tsv"
 
+          # Resolve the latest non-prerelease minisign release and pin the exact
+          # source archive digest before either build job starts.
+          MINISIGN_RELEASE_API='https://api.github.com/repos/jedisct1/minisign/releases/latest'
+          MINISIGN_RELEASE_JSON="$RUNNER_TEMP/minisign-latest-release.json"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            --header 'Accept: application/vnd.github+json' \
+            "$MINISIGN_RELEASE_API" --output "$MINISIGN_RELEASE_JSON"
+          MINISIGN_VERSION="$(python3 - "$MINISIGN_RELEASE_JSON" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          release = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          tag = release.get("tag_name", "")
+          if release.get("draft") or release.get("prerelease"):
+              raise SystemExit("GitHub latest release endpoint returned a draft/prerelease")
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", tag):
+              raise SystemExit(f"Invalid minisign release tag: {tag!r}")
+          print(tag)
+          PY
+          )"
+          MINISIGN_ARCHIVE_URL="https://github.com/jedisct1/minisign/archive/refs/tags/${MINISIGN_VERSION}.tar.gz"
+          MINISIGN_ARCHIVE="$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "$MINISIGN_ARCHIVE_URL" --output "$MINISIGN_ARCHIVE"
+          MINISIGN_SHA256="$(sha256sum "$MINISIGN_ARCHIVE" | awk '{print $1}')"
+          [[ "$MINISIGN_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+            echo '::error::无法计算 minisign 源码归档 SHA-256。'
+            exit 1
+          }
+          printf 'MINISIGN_RELEASE\thttps://github.com/jedisct1/minisign\t%s\t%s\n' \
+            "$MINISIGN_VERSION" "$MINISIGN_SHA256" >> "$RUNNER_TEMP/source-revisions.tsv"
+          echo "已锁定 minisign 最新正式 Release：$MINISIGN_VERSION（SHA-256: $MINISIGN_SHA256）"
+
           {
             printf 'LEDE\t%s\n' "$LEDE_COMMIT"
             printf 'FEEDS_CONF_SHA256\t%s\n' "$FEEDS_SHA256"
