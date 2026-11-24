@@ -43,8 +43,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  cleanup-failed-runs:
+    name: 1、优先清理失败和已取消的工作流记录
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 优先清理全部失败和已取消的工作流运行记录
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .id' | sort -u > "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
+
+          FAILED_OR_CANCELLED_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            FAILED_OR_CANCELLED_DELETED=$((FAILED_OR_CANCELLED_DELETED + 1))
+          done < "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
+
+          echo "已优先删除仓库全部工作流中的失败或已取消运行记录：$FAILED_OR_CANCELLED_DELETED 条。"
+          echo "- 第一阶段清理失败或已取消的 Actions 运行记录：$FAILED_OR_CANCELLED_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
+
+
+
   preflight:
-    name: 检查其他工作流并优先清理失败记录
+    needs: cleanup-failed-runs
+    name: 3、检查其他工作流是否正在运行
     outputs:
       proceed: ${{ steps.check-active-runs.outputs.proceed }}
     runs-on: ubuntu-latest
@@ -83,27 +110,10 @@ jobs:
           echo "proceed=true" >> "$GITHUB_OUTPUT"
           echo "未发现其他正在运行或排队中的工作流，可以开始清理。"
 
-      - name: 优先清理全部失败和已取消的工作流运行记录
-        if: steps.check-active-runs.outputs.proceed == 'true'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .id' | sort -u > "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
-
-          FAILED_OR_CANCELLED_DELETED=0
-          while IFS= read -r run_id; do
-            [[ -n "$run_id" ]] || continue
-            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
-            FAILED_OR_CANCELLED_DELETED=$((FAILED_OR_CANCELLED_DELETED + 1))
-          done < "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
-
-          echo "已优先删除仓库全部工作流中的失败或已取消运行记录：$FAILED_OR_CANCELLED_DELETED 条。"
-          echo "- 第一阶段清理失败或已取消的 Actions 运行记录：$FAILED_OR_CANCELLED_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
-
   cleanup-retention:
     needs: preflight
     if: ${{ needs.preflight.outputs.proceed == 'true' }}
-    name: 清理全部工作流运行记录与正式版本发布
+    name: 2、按保留策略清理旧记录与正式版本发布
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -180,7 +190,7 @@ jobs:
 
   archive-closed-prs:
     needs: preflight
-    name: 归档已关闭的历史拉取请求
+    name: 4、按条件归档历史拉取请求
     if: ${{ needs.preflight.outputs.proceed == 'true' && github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
     runs-on: ubuntu-latest
     permissions:
@@ -294,7 +304,7 @@ jobs:
   reset-main-history:
     needs: preflight
     if: ${{ needs.preflight.outputs.proceed == 'true' }}
-    name: 重置全部分支的提交历史
+    name: 4、按条件重置全部分支的提交历史
     runs-on: ubuntu-latest
     steps:
       - name: 说明本次不会执行历史修改
