@@ -16,7 +16,7 @@ PKG_NAME:=smartdns
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/pymumu/smartdns.git
 MYLEDE_SOURCE_LOCK?=/home/ubuntu/source-revisions.tsv
-PKG_SOURCE_VERSION:=$(shell awk -F '\t' '$1 == "plugin:smartdns" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)")
+PKG_SOURCE_VERSION:=$(shell awk -F '\t' '$$1 == "plugin:smartdns" {print $$4; exit}' "$(MYLEDE_SOURCE_LOCK)")
 ifeq ($(strip $(PKG_SOURCE_VERSION)),)
 $(error Missing locked full SHA for plugin:smartdns in $(MYLEDE_SOURCE_LOCK))
 endif
@@ -27,7 +27,7 @@ PKG_MIRROR_HASH:=skip
 SMARTDNS_WEBUI_VERSION:=$(shell TZ=Asia/Shanghai date +%y.%m.%d)
 SMARTDNS_WEBUI_SOURCE_PROTO:=git
 SMARTDNS_WEBUI_SOURCE_URL:=https://github.com/pymumu/smartdns-webui.git
-SMARTDNS_WEBUI_SOURCE_VERSION:=$(shell awk -F '\t' '$1 == "plugin:smartdns_webui" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)")
+SMARTDNS_WEBUI_SOURCE_VERSION:=$(shell awk -F '\t' '$$1 == "plugin:smartdns_webui" {print $$4; exit}' "$(MYLEDE_SOURCE_LOCK)")
 ifeq ($(strip $(SMARTDNS_WEBUI_SOURCE_VERSION)),)
 $(error Missing locked full SHA for plugin:smartdns_webui in $(MYLEDE_SOURCE_LOCK))
 endif
