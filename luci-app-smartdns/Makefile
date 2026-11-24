@@ -14,7 +14,7 @@ PKG_VERSION:=$(shell TZ=Asia/Shanghai date +%y.%m.%d)
 
 # 获取 pymumu/luci-app-smartdns master 最新 Commit
 MYLEDE_SOURCE_LOCK?=/home/ubuntu/source-revisions.tsv
-PKG_SOURCE_VERSION:=$(shell awk -F '\t' '$1 == "plugin:luci_app_smartdns" {print $4; exit}' "$(MYLEDE_SOURCE_LOCK)")
+PKG_SOURCE_VERSION:=$(shell awk -F '\t' '$$1 == "plugin:luci_app_smartdns" {print $$4; exit}' "$(MYLEDE_SOURCE_LOCK)")
 ifeq ($(strip $(PKG_SOURCE_VERSION)),)
 $(error Missing locked full SHA for plugin:luci_app_smartdns in $(MYLEDE_SOURCE_LOCK))
 endif
