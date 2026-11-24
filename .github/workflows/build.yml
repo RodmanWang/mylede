@@ -75,6 +75,8 @@ jobs:
           python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/task.sh
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh
+          sh -n luci-app-myupdate/root/usr/libexec/myupdate/check-partition-layout.sh
+          bash tests/ota/test_partition_layout.sh
 
       - name: 检测 LEDE、软件源及自定义软件包版本
         id: detect
