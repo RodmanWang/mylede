@@ -30,7 +30,10 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("status.download_percent = progress.percent", rpc)
         self.assertIn("progressFill.style.width = percent + '%'", view)
         self.assertIn("formatBytes(s.downloaded_bytes)", view)
-        self.assertIn("E('h3', _('检测状态'))", view)
+        self.assertIn("E('h3', _('更新状态'))", view)
+        self.assertIn("myupdate-status-overview", view)
+        self.assertIn("myupdate-settings-heading", view)
+        self.assertIn("myupdate-actions-final", view)
         self.assertIn("state-error", view)
         self.assertIn("识别并转换", view)
 
