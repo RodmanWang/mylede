@@ -409,7 +409,7 @@ return view.extend({
 				var keyInput = inputWidget.tagName == 'TEXTAREA' ? inputWidget :
 					(inputWidget.querySelector ? inputWidget.querySelector('textarea') : null);
 				if (keyInput) keyInput.addEventListener('blur', function() {
-					var normalized = keyInput.value.replace(/\\r?\\n$/, '');
+					var normalized = keyInput.value.replace(/\r?\n$/, '');
 					if (normalized != keyInput.value) {
 						keyInput.value = normalized;
 						keyInput.dispatchEvent(new Event('input', { bubbles: true }));
