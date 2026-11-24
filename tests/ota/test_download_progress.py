@@ -35,5 +35,32 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("识别并转换", view)
 
 
+    def test_check_pipeline_reports_stages_and_fetches_manifests_in_parallel(self):
+        source = TASK.read_text(encoding="utf-8")
+        self.assertIn("Release 已获取，正在并行下载 Manifest 和签名", source)
+        self.assertIn("正在验证签名和设备兼容性", source)
+        self.assertIn('"$R/manifest.json" &', source)
+        self.assertIn('"$R/manifest.minisig" &', source)
+        self.assertIn('wait "$MANIFEST_PID"', source)
+        self.assertIn('wait "$SIGNATURE_PID"', source)
+        self.assertIn("verify-manifest.sh", source)
+
+    def test_metadata_timeouts_are_bounded_without_shortening_firmware_download(self):
+        api = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/github-api.sh").read_text(encoding="utf-8")
+        downloader = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/github-download-asset.sh").read_text(encoding="utf-8")
+        self.assertIn("--connect-timeout 10 --max-time 35", api)
+        self.assertIn("--connect-timeout 10 --max-time 60", downloader)
+        self.assertIn("--connect-timeout 10 --max-time 1800", downloader)
+
+    def test_luci_uses_embedded_auto_dismissing_notices(self):
+        source = VIEW.read_text(encoding="utf-8")
+        self.assertIn("myupdate-inline-notice", source)
+        self.assertIn("}, 3000);", source)
+        self.assertIn("reportTaskStart(callCheck(), _('检查任务启动失败'), notify)", source)
+        self.assertIn("reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify)", source)
+        self.assertIn("reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify)", source)
+        self.assertNotIn("ui.addNotification", source)
+
+
 if __name__ == "__main__":
     unittest.main()
