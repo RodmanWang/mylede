@@ -13,7 +13,7 @@ if not re.fullmatch(r"\d{14}", version):
     raise SystemExit(f"invalid firmware version: {version!r}")
 if manifest.get("tag") != f"mylede-v{version}":
     raise SystemExit("manifest tag does not match its version")
-if manifest.get("schema_version") != 1 or manifest.get("channel") != "stable":
+if manifest.get("schema_version") != 2 or manifest.get("channel") != "stable":
     raise SystemExit("unsupported manifest schema or channel")
 image = manifest.get("image") or {}
 if image.get("asset") != image_path.name:
@@ -23,6 +23,18 @@ if digest != image.get("sha256"):
     raise SystemExit("manifest SHA256 does not match the release image")
 if image_path.stat().st_size != image.get("size"):
     raise SystemExit("manifest size does not match the release image")
+layout = manifest.get("partition_layout") or {}
+for field in ("kernel_partsize_mib", "rootfs_partsize_mib"):
+    value = layout.get(field)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise SystemExit(f"invalid partition layout field {field}: {value!r}")
+if layout.get("uses_boot_part") is not True:
+    raise SystemExit("x86 EFI firmware must declare uses_boot_part=true")
+upstream = layout.get("upstream_defaults_mib") or {}
+for field in ("kernel_partsize", "rootfs_partsize"):
+    value = upstream.get(field)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise SystemExit(f"invalid upstream partition default {field}: {value!r}")
 compat = manifest.get("compatibility") or {}
 if (compat.get("target"), compat.get("subtarget"), compat.get("arch")) != ("x86", "64", "x86_64"):
     raise SystemExit("unexpected firmware compatibility metadata")
