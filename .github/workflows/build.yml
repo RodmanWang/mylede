@@ -9,12 +9,12 @@ on:
         required: false
         default: ''
       kernel_partsize:
-        description: 内核分区大小（MiB）；当前上游 x86 默认 64 MiB（运行时以锁定源码检查结果为准）
+        description: 内核分区大小（MiB）；上游源码默认为 64 MiB（首次启用值，后续自动更新为上次成功 Manifest 记录）
         type: string
         required: false
         default: '256'
       rootfs_partsize:
-        description: 根文件系统分区大小（MiB）；当前上游 x86 默认 448 MiB（运行时以锁定源码检查结果为准）
+        description: 根文件系统分区大小（MiB）；上游源码默认为 448 MiB（首次启用值，后续自动更新为上次成功 Manifest 记录）
         type: string
         required: false
         default: '4096'
@@ -93,7 +93,7 @@ jobs:
                   raise SystemExit(f"持久化分区配置无效：{name}={value!r}")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in values.items():
-                  stream.write(f"{name}={value}\\n")
+                  stream.write(f"{name}={value}\n")
           print("上次成功固件分区：Kernel={} MiB，Rootfs={} MiB".format(
               values["kernel_partsize"], values["rootfs_partsize"]))
           print("Manifest 上游默认值：Kernel={} MiB，Rootfs={} MiB".format(
@@ -1434,63 +1434,10 @@ jobs:
             echo "::error::成功固件只允许从 main 分支发布，拒绝将分区默认值写入其他分支。"
             exit 1
           }
-          python3 - release-input/manifest.json build-config/last-successful-partition-layout.json .github/workflows/build.yml <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          manifest_path, state_path, workflow_path = map(Path, sys.argv[1:])
-          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-          layout = manifest.get("partition_layout") or {}
-          upstream = layout.get("upstream_defaults_mib") or {}
-          fields = {
-              "kernel_partsize_mib": layout.get("kernel_partsize_mib"),
-              "rootfs_partsize_mib": layout.get("rootfs_partsize_mib"),
-              "upstream_kernel": upstream.get("kernel_partsize"),
-              "upstream_rootfs": upstream.get("rootfs_partsize"),
-          }
-          for name, value in fields.items():
-              if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                  raise SystemExit(f"Manifest 分区字段无效，不能更新下次编译默认值：{name}={value!r}")
-          if layout.get("uses_boot_part") is not True:
-              raise SystemExit("Manifest 未声明 x86 boot-part，拒绝更新分区默认值")
-          state = {
-              "schema_version": 1,
-              "kernel_partsize_mib": fields["kernel_partsize_mib"],
-              "rootfs_partsize_mib": fields["rootfs_partsize_mib"],
-              "upstream_defaults_mib": {
-                  "kernel_partsize": fields["upstream_kernel"],
-                  "rootfs_partsize": fields["upstream_rootfs"],
-              },
-              "manifest_tag": manifest.get("tag"),
-              "manifest_version": manifest.get("version"),
-              "manifest_schema_version": manifest.get("schema_version"),
-          }
-          state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-          workflow = workflow_path.read_text(encoding="utf-8")
-          field_updates = [
-              (
-                  r"(^      kernel_partsize:\n        description: )[^\n]*(\n        type: string\n        required: false\n        default: ')[^']+(')",
-                  f"内核分区大小（MiB）；上游源码默认为 {fields['upstream_kernel']} MiB（上次成功 Manifest 记录）",
-                  str(fields["kernel_partsize_mib"]),
-              ),
-              (
-                  r"(^      rootfs_partsize:\n        description: )[^\n]*(\n        type: string\n        required: false\n        default: ')[^']+(')",
-                  f"根文件系统分区大小（MiB）；上游源码默认为 {fields['upstream_rootfs']} MiB（上次成功 Manifest 记录）",
-                  str(fields["rootfs_partsize_mib"]),
-              ),
-          ]
-          for pattern, description, default_value in field_updates:
-              def replace_field(match):
-                  return match.group(1) + description + match.group(2) + default_value + match.group(3)
-              workflow, count = re.subn(pattern, replace_field, workflow, count=1, flags=re.MULTILINE)
-              if count != 1:
-                  raise SystemExit(f"无法唯一更新 workflow_dispatch 表单字段：{pattern}")
-          workflow_path.write_text(workflow, encoding="utf-8")
-          print("已保存下次默认分区：Kernel={} MiB，Rootfs={} MiB".format(
-              fields["kernel_partsize_mib"], fields["rootfs_partsize_mib"]))
-          print("已更新 Actions 表单上游默认提示：Kernel={} MiB，Rootfs={} MiB".format(
-              fields["upstream_kernel"], fields["upstream_rootfs"]))
-          PY
+          python3 scripts/update-build-partition-defaults.py \
+            release-input/manifest.json \
+            build-config/last-successful-partition-layout.json \
+            .github/workflows/build.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add build-config/last-successful-partition-layout.json .github/workflows/build.yml
