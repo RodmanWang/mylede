@@ -1021,8 +1021,8 @@ jobs:
           LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns }}
           OPENCLASH_COMMIT: ${{ steps.plugin_source_revisions.outputs.openclash_commit }}
           BUILD_TARGET: x86_64
-          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || '256' }}
-          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || '4096' }}
+          KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || needs.source_check.outputs.last_kernel_partsize || '256' }}
+          ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || needs.source_check.outputs.last_rootfs_partsize || '4096' }}
           UPSTREAM_KERNEL_PARTSIZE: ${{ steps.partition_defaults.outputs.kernel_partsize }}
           UPSTREAM_ROOTFS_PARTSIZE: ${{ steps.partition_defaults.outputs.rootfs_partsize }}
           USES_BOOT_PART: ${{ steps.partition_defaults.outputs.uses_boot_part }}
