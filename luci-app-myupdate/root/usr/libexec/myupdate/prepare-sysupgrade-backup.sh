@@ -38,8 +38,16 @@ printf '%s\n' "$KEEP_PATHS" | tr ' ' '\n' | while IFS= read -r path; do
 			exit 1
 			;;
 	esac
-	if [ -e "$path" ] || [ -L "$path" ]; then
-		printf '%s\n' "$path" >> "$TMP"
+	if [ -L "$path" ]; then
+		echo "Refusing symlinked custom sysupgrade path: $path" >&2
+		exit 1
+	elif [ -f "$path" ] || [ -d "$path" ]; then
+		RESOLVED="$(readlink -f "$path" 2>/dev/null || true)"
+		[ "$RESOLVED" = "$path" ] || { echo "Refusing non-canonical custom sysupgrade path: $path" >&2; exit 1; }
+		printf '%s\\n' "$path" >> "$TMP"
+	elif [ -e "$path" ]; then
+		echo "Refusing special custom sysupgrade path: $path" >&2
+		exit 1
 	else
 		echo "Skipping missing custom sysupgrade path: $path" >&2
 	fi
