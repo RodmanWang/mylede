@@ -1299,6 +1299,18 @@ jobs:
           - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
           - OpenClash: [${OPENCLASH_COMMIT}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
           EOF
+          # The GITHUB_TOKEN cannot create a release tag targeting a commit
+          # that changes workflow files relative to the default branch. Ensure
+          # this build still matches main, then let the Releases API use the
+          # default branch head (without an explicit target_commitish).
+          DEFAULT_BRANCH_SHA="$(git ls-remote origin refs/heads/main | awk 'NR == 1 { print $1 }')"
+          if [[ -z "$DEFAULT_BRANCH_SHA" || "$DEFAULT_BRANCH_SHA" != "$GITHUB_SHA" ]]; then
+            echo "::error::发布前 main 分支已发生变化，或本次运行并非基于 main 最新提交。为避免发布错误源码版本，已停止创建 Release。"
+            echo "构建提交：$GITHUB_SHA"
+            echo "当前 main：${DEFAULT_BRANCH_SHA:-无法获取}"
+            exit 1
+          fi
+
           gh release create "$RELEASE_TAG" \
             "$IMAGE" \
             release-input/manifest.json \
@@ -1306,7 +1318,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "MyLEDE ${RELEASE_VERSION}" \
             --notes-file release-input/release-notes.md \
-            --target "$GITHUB_SHA" \
             --latest
       - name: 准备成功编译的源码指纹标记
         env:
