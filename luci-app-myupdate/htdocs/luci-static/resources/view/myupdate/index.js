@@ -346,13 +346,13 @@ return view.extend({
 			progressPanel,
 			E('div', { 'class': 'myupdate-status-note' }, _('自动升级会按设定时间检查更新；发现新版本后可下载并验证签名、设备兼容性和 SHA256。验证通过后，需手动确认才会执行 sysupgrade 并重启。升级使用 LEDE 默认配置备份与恢复机制。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。')),
 			E('div', { 'class': 'myupdate-actions' }, [
-				downgradeLabel,
 				E('button', { 'class': 'btn cbi-button cbi-button-action', click: function() {
 					return reportTaskStart(callCheck(), _('检查任务启动失败'), notify);
 				} }, _('检查更新')),
 				E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
 					return reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify);
 				} }, _('下载并验证')),
+				downgradeLabel,
 				E('button', { 'class': 'btn cbi-button cbi-button-negative', click: function() {
 					if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 					return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
