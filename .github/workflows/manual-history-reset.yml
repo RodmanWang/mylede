@@ -1,0 +1,370 @@
+name: 4、清理仓库历史与记录
+
+on:
+  schedule:
+    # 每天北京时间 03:00（UTC 前一天 19:00）执行历史保留清理。
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+    inputs:
+      keep_days:
+        description: '历史保留天数（适用于全部工作流运行记录和正式版本发布）'
+        required: true
+        default: '7'
+        type: string
+      keep_count:
+        description: '至少保留的最新记录数量（适用于全部工作流运行记录和正式版本发布）'
+        required: true
+        default: '30'
+        type: string
+      confirm_reset:
+        description: "是否将仓库所有分支历史重置为各自当前文件快照？此操作不可逆。"
+        required: true
+        type: choice
+        options:
+          - "否"
+          - "是"
+        default: "否"
+      archive_closed_prs:
+        description: "是否同时归档所有已关闭或已合并的历史拉取请求（普通访客将看到 404）？"
+        required: true
+        type: choice
+        options:
+          - "否"
+          - "是"
+        default: "否"
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+concurrency:
+  group: repository-history-maintenance
+  cancel-in-progress: false
+
+jobs:
+  cleanup-failed-runs:
+    name: 1、优先清理失败和已取消的工作流记录
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 优先清理全部失败和已取消的工作流运行记录
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled") | .id' | sort -u > "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
+
+          FAILED_OR_CANCELLED_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            FAILED_OR_CANCELLED_DELETED=$((FAILED_OR_CANCELLED_DELETED + 1))
+          done < "$RUNNER_TEMP/failed-or-cancelled-run-ids.txt"
+
+          echo "已优先删除仓库全部工作流中的失败或已取消运行记录：$FAILED_OR_CANCELLED_DELETED 条。"
+          echo "- 第一阶段清理失败或已取消的 Actions 运行记录：$FAILED_OR_CANCELLED_DELETED 条" >> "$GITHUB_STEP_SUMMARY"
+
+  preflight:
+    needs: cleanup-failed-runs
+    name: 3、检查其他工作流是否正在运行
+    outputs:
+      proceed: ${{ steps.check-active-runs.outputs.proceed }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CURRENT_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: 检查仓库是否存在其他正在运行的工作流
+        id: check-active-runs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id, .status, .name, .html_url] | @tsv' > "$RUNNER_TEMP/workflow-runs.tsv"
+
+          awk -F '\t' -v current="$CURRENT_RUN_ID" '$1 != current && $2 != "completed" { print }' \
+            "$RUNNER_TEMP/workflow-runs.tsv" > "$RUNNER_TEMP/active-workflow-runs.tsv"
+
+          if [[ -s "$RUNNER_TEMP/active-workflow-runs.tsv" ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::检测到其他正在运行或排队中的工作流，本次仓库清理将立即取消。"
+            {
+              echo "## 清理任务已取消"
+              echo "检测到以下其他工作流尚未完成；为避免清理过程影响正在执行的任务，本次将停止后续保留策略清理、PR 归档和分支历史重置："
+              awk -F '\t' '{ printf "- Run %s：%s（状态：%s） %s\n", $1, $3, $2, $4 }' "$RUNNER_TEMP/active-workflow-runs.tsv"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            # Cancel this workflow run itself. All maintenance jobs depend on
+            # this preflight job and cannot start after it is cancelled.
+            gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$CURRENT_RUN_ID/cancel"
+            echo "::notice::已请求取消本次历史清理工作流。"
+            exit 0
+          fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+          echo "未发现其他正在运行或排队中的工作流，可以开始清理。"
+
+  cleanup-retention:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.proceed == 'true' }}
+    name: 2、按保留策略清理旧记录与正式版本发布
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_KEEP_DAYS: ${{ inputs.keep_days }}
+      INPUT_KEEP_COUNT: ${{ inputs.keep_count }}
+      CURRENT_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: 按保留策略清理版本发布与剩余工作流记录
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KEEP_DAYS="${INPUT_KEEP_DAYS:-7}"
+          KEEP_COUNT="${INPUT_KEEP_COUNT:-30}"
+          [[ "$KEEP_DAYS" =~ ^[1-9][0-9]*$ ]] || { echo '::error::保留天数必须是正整数。'; exit 1; }
+          [[ "$KEEP_COUNT" =~ ^[1-9][0-9]*$ ]] || { echo '::error::保留数量必须是正整数。'; exit 1; }
+          CUTOFF="$(date -u -d "$KEEP_DAYS days ago" +%s)"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | [.tag_name, (.published_at // ""), (.prerelease | tostring)] | @tsv' > "$RUNNER_TEMP/all-releases.tsv"
+          python3 - "$RUNNER_TEMP/all-releases.tsv" "$CUTOFF" "$KEEP_COUNT" <<'PY' > "$RUNNER_TEMP/old-release-tags.txt"
+          import datetime, sys
+          path, cutoff, keep_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+          items=[]
+          with open(path, encoding='utf-8') as f:
+              for line in f:
+                  tag, published, prerelease = line.rstrip('\n').split('\t')
+                  if not tag or not published or prerelease == 'true' or tag == 'toolchain-cache': continue
+                  dt=datetime.datetime.fromisoformat(published.replace('Z','+00:00'))
+                  items.append((dt.timestamp(), tag))
+          items.sort(reverse=True)
+          kept=0
+          for timestamp, tag in items:
+              if kept == 0 or (timestamp >= cutoff and kept < keep_count): kept += 1
+              else: print(tag)
+          PY
+          RELEASE_DELETED=0
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            RELEASE_DELETED=$((RELEASE_DELETED + 1))
+          done < "$RUNNER_TEMP/old-release-tags.txt"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id, .created_at, .status] | @tsv' > "$RUNNER_TEMP/all-workflow-runs.tsv"
+          python3 - "$RUNNER_TEMP/all-workflow-runs.tsv" "$CUTOFF" "$KEEP_COUNT" "$CURRENT_RUN_ID" <<'PY' > "$RUNNER_TEMP/old-run-ids.txt"
+          import datetime, sys
+          path, cutoff, keep_count, current_id = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+          runs=[]
+          with open(path, encoding='utf-8') as f:
+              for line in f:
+                  run_id, created, status = line.rstrip('\n').split('\t')
+                  if run_id and status == 'completed' and run_id != current_id:
+                      stamp=datetime.datetime.fromisoformat(created.replace('Z','+00:00')).timestamp()
+                      runs.append((stamp, run_id))
+          runs.sort(reverse=True)
+          kept=0
+          for stamp, run_id in runs:
+              if stamp >= cutoff and kept < keep_count: kept += 1
+              else: print(run_id)
+          PY
+          RUN_DELETED=0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            RUN_DELETED=$((RUN_DELETED + 1))
+          done < "$RUNNER_TEMP/old-run-ids.txt"
+          {
+            echo '## 全仓库历史清理结果'
+            echo "- 保留天数：$KEEP_DAYS 天"
+            echo "- 最少保留数量：$KEEP_COUNT 条"
+            echo "- 删除正式版本发布：$RELEASE_DELETED 个"
+            echo "- 删除全部工作流的已完成运行记录：$RUN_DELETED 条"
+            echo '- 保留工具链缓存版本、预发布版本、当前清理任务及尚未完成的工作流运行记录。'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  archive-closed-prs:
+    needs: preflight
+    name: 4、按条件归档历史拉取请求
+    if: ${{ needs.preflight.outputs.proceed == 'true' && github.event_name == 'workflow_dispatch' && inputs.archive_closed_prs == '是' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      # archivePullRequest requires the token owner to have at least Triage access.
+      # Configure PERSON_TOKEN as a repository Actions secret (fine-grained PAT).
+      GH_TOKEN: ${{ secrets.PERSON_TOKEN }}
+    steps:
+      - name: 验证是否从 main 分支手动触发
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::请在 main 分支手动运行此工作流；历史拉取请求归档仅支持从 main 分支手动触发。"
+            exit 1
+          fi
+
+      - name: 归档已关闭的历史拉取请求
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Archive the repository's current closed-PR inventory; it does not depend on the dispatch commit SHA.
+
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          query='query($owner: String!, $name: String!, $cursor: String) { repository(owner: $owner, name: $name) { pullRequests(first: 100, after: $cursor, states: [CLOSED]) { nodes { id number title timelineItems(itemTypes: [ARCHIVED_EVENT], first: 1) { nodes { __typename } } } pageInfo { hasNextPage endCursor } } } }'
+          mutation='mutation($pullRequestId: ID!) { archivePullRequest(input: {pullRequestId: $pullRequestId}) { pullRequest { number } } }'
+          cursor=""
+          candidates="$RUNNER_TEMP/closed-prs-to-archive.jsonl"
+          : > "$candidates"
+
+          # Collect every closed PR first; open PRs are deliberately excluded.
+          while true; do
+            args=(-f "query=$query" -f "owner=$owner" -f "name=$repo")
+            if [[ -n "$cursor" ]]; then args+=(-f "cursor=$cursor"); fi
+            page="$(gh api graphql "${args[@]}")"
+            jq -c '.data.repository.pullRequests.nodes[] | select((.timelineItems.nodes | length) == 0)' <<< "$page" >> "$candidates"
+            has_next="$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' <<< "$page")"
+            cursor="$(jq -r '.data.repository.pullRequests.pageInfo.endCursor // empty' <<< "$page")"
+            [[ "$has_next" == "true" ]] || break
+            [[ -n "$cursor" ]] || { echo "::error::缺少 GraphQL 分页游标。"; exit 1; }
+          done
+
+          count="$(wc -l < "$candidates" | tr -d ' ')"
+          echo "发现 $count 个尚未归档的已关闭或已合并拉取请求；未关闭的拉取请求不会被处理。"
+          {
+            echo "## 历史拉取请求归档清单"
+            echo ""
+            if [[ "$count" == "0" ]]; then
+              echo "没有需要归档的历史拉取请求。"
+            else
+              while IFS= read -r pr; do
+                number="$(jq -r '.number' <<< "$pr")"
+                title="$(jq -r '.title' <<< "$pr")"
+                echo "- #$number — $title"
+              done < "$candidates"
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          failures="$RUNNER_TEMP/pr-archive-failures.txt"
+          : > "$failures"
+          succeeded=0
+          failed=0
+
+          while IFS= read -r pr; do
+            [[ -n "$pr" ]] || continue
+            pr_id="$(jq -r '.id' <<< "$pr")"
+            number="$(jq -r '.number' <<< "$pr")"
+            title="$(jq -r '.title' <<< "$pr")"
+
+            # The archive mutation's returned PullRequest is the authoritative
+            # acknowledgement. Do not infer success from an ARCHIVED_EVENT
+            # timeline read, which can lag or be unavailable after archiving.
+            if mutation_result="$(gh api graphql -f query="$mutation" -f pullRequestId="$pr_id")"; then
+              returned_number="$(jq -r '.data.archivePullRequest.pullRequest.number // empty' <<< "$mutation_result")"
+              if [[ "$returned_number" == "$number" ]]; then
+                echo "已归档拉取请求 #$number：$title"
+                succeeded=$((succeeded + 1))
+              else
+                echo "::error::拉取请求 #$number 的归档操作未返回预期编号：$title"
+                printf 'PR #%s — %s（mutation 返回异常）\n' "$number" "$title" >> "$failures"
+                failed=$((failed + 1))
+              fi
+            else
+              echo "::error::拉取请求 #$number 归档请求失败：$title"
+              printf 'PR #%s — %s（归档请求失败）\n' "$number" "$title" >> "$failures"
+              failed=$((failed + 1))
+            fi
+          done < "$candidates"
+
+          {
+            echo "## 历史拉取请求归档结果"
+            echo "- 成功：$succeeded"
+            echo "- 失败：$failed"
+            if [[ "$failed" -gt 0 ]]; then
+              echo ""
+              cat "$failures"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::error::有 $failed 个拉取请求归档失败；其他项目已继续处理，请查看上方清单。"
+            exit 1
+          fi
+
+          echo "已完成历史拉取请求归档；无仓库访问权限的访客访问这些页面时将看到 404。"
+
+  reset-main-history:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.proceed == 'true' }}
+    name: 4、按条件重置全部分支的提交历史
+    runs-on: ubuntu-latest
+    steps:
+      - name: 说明本次不会执行历史修改
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm_reset != '是' }}
+        run: |
+          echo "已选择“否”。本次运行不会修改任何分支或提交历史。"
+
+      - name: 验证是否从 main 分支手动触发
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::请在 main 分支手动运行此工作流；分支历史重置仅支持从 main 分支手动触发。"
+            exit 1
+          fi
+
+      - name: 检出本次手动触发时的 main 分支版本
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: 将每个分支的历史替换为单个根提交
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_reset == '是' }}
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git ls-remote --heads origin > "$RUNNER_TEMP/branch-inventory.txt"
+          current_main_sha="$(awk '$2 == "refs/heads/main" {print $1}' "$RUNNER_TEMP/branch-inventory.txt")"
+          if [[ -z "$current_main_sha" || "$current_main_sha" != "$EXPECTED_MAIN_SHA" ]]; then
+            echo "::error::main 分支已发生变化，或触发时的提交版本不匹配；尚未开始重置。"
+            exit 1
+          fi
+          branch_count="$(wc -l < "$RUNNER_TEMP/branch-inventory.txt" | tr -d ' ')"
+          echo "本次将处理 $branch_count 个远程分支。"
+          { echo '## 全分支历史重置清单'; echo ''; cat "$RUNNER_TEMP/branch-inventory.txt"; echo ''; } >> "$GITHUB_STEP_SUMMARY"
+          index=0
+          while read -r expected_sha ref_name; do
+            [[ -n "$expected_sha" && -n "$ref_name" ]] || continue
+            branch="${ref_name#refs/heads/}"
+            index=$((index + 1))
+            echo "[$index/$branch_count] 正在重置分支 $branch（原提交版本：$expected_sha）"
+            current_sha="$(git ls-remote origin "$ref_name" | awk 'NR == 1 {print $1}')"
+            if [[ "$current_sha" != "$expected_sha" ]]; then
+              echo "::error::分支 $branch 在生成清单后发生变化；为避免覆盖新提交，已停止操作。"
+              exit 1
+            fi
+            git checkout --detach "$expected_sha"
+            orphan_branch="history-reset-${GITHUB_RUN_ID}-${index}"
+            git checkout --orphan "$orphan_branch"
+            git add --all
+            git commit --allow-empty -m "将分支 $branch 的历史重置为当前文件快照"
+            git push --force-with-lease="$ref_name:$expected_sha" origin "HEAD:$ref_name"
+            echo "分支 $branch 已完成历史重置。"
+            git checkout --detach "$expected_sha"
+          done < "$RUNNER_TEMP/branch-inventory.txt"
+          echo "已处理清单中的全部远程分支。"
+          echo "::notice::此操作会重写 refs/heads/* 中所有分支的提交历史；不会删除非正式版本标签、派生仓库、缓存、GitHub 内部保留数据或拉取请求引用。受保护分支可能拒绝强制推送，导致流程中止。"
