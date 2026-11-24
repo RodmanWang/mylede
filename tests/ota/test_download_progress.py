@@ -162,8 +162,8 @@ class DownloadProgressContractTests(unittest.TestCase):
     def test_build_records_upstream_defaults_and_effective_partition_sizes_with_source_commits(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         validator = (ROOT / "tests/ota/validate_release.py").read_text(encoding="utf-8")
-        self.assertIn("上游 x86 默认 64 MiB", workflow)
-        self.assertIn("上游 x86 默认 448 MiB", workflow)
+        self.assertIn("上游源码默认为 64 MiB", workflow)
+        self.assertIn("上游源码默认为 448 MiB", workflow)
         self.assertIn("id: partition_defaults", workflow)
         self.assertIn('"boot-part" in features.group(1).split()', workflow)
         self.assertIn("'partition_layout': {", workflow)
