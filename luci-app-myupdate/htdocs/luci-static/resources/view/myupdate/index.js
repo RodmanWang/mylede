@@ -259,15 +259,21 @@ return view.extend({
 						'aria-label': _('删除 ') + path,
 						'disabled': keepPathSaving
 					}, '×');
-					// Bind on the concrete button node after creation. This avoids
-					// relying on LuCI's E() attribute event translation for this
-					// dynamically rebuilt control.
-					remove.addEventListener('click', function(ev) {
-						ev.preventDefault();
-						ev.stopPropagation();
+					// Handle pointer release directly on the control. LuCI themes may
+					// apply button click behavior that interferes with dynamically
+					// rendered controls; pointerup also covers touch input reliably.
+					function removePath(ev) {
+						if (ev) {
+							ev.preventDefault();
+							ev.stopPropagation();
+						}
 						if (keepPathSaving || keepPathValues.indexOf(path) < 0) return;
 						var next = keepPathValues.filter(function(item) { return item != path; });
 						persistKeepPaths(next, _('已删除路径，配置已保存。'));
+					}
+					remove.addEventListener('pointerup', removePath);
+					remove.addEventListener('keydown', function(ev) {
+						if (ev.key == 'Enter' || ev.key == ' ') removePath(ev);
 					});
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
 						E('span', { 'class': 'myupdate-path-chip-text' }, path),
