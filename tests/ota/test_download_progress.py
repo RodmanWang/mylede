@@ -196,6 +196,9 @@ class DownloadProgressContractTests(unittest.TestCase):
 
     def test_minisign_archive_is_built_from_git_and_reused_by_firmware_job(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn("git -C \"$MINISIGN_REPO\" ls-remote --tags --refs origin 'refs/tags/[0-9]*'", workflow)
+        self.assertIn('re.fullmatch(r"[0-9]+(?:\\\\.[0-9]+)*", tag)', workflow)
+        self.assertNotIn("api.github.com/repos/jedisct1/minisign/releases/latest", workflow)
         self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)
         self.assertIn('git -C "$MINISIGN_REPO" archive --format=tar.gz', workflow)
         self.assertNotIn("codeload.github.com/jedisct1/minisign/tar.gz", workflow)
