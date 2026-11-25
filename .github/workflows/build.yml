@@ -271,16 +271,7 @@ jobs:
             echo '::error::从 minisign 锁定的 Git tag 生成源码归档失败或文件为空。'
             exit 1
           }
-          python3 - "$MINISIGN_ARCHIVE" "$MINISIGN_VERSION" <<'PY'
-          import sys, tarfile
-          archive, version = sys.argv[1:]
-          prefix = f"minisign-{version}/"
-          with tarfile.open(archive, "r:gz") as tar:
-              names = tar.getnames()
-          if not names or any(not name.startswith(prefix) for name in names):
-              raise SystemExit("minisign Git archive has an unexpected top-level path")
-          print(f"已从锁定 Git tag 生成归档：{version}（{len(names)} 个条目）")
-          PY
+          python3 scripts/validate-minisign-archive.py "$MINISIGN_ARCHIVE" "$MINISIGN_VERSION"
           MINISIGN_SHA256="$(sha256sum "$MINISIGN_ARCHIVE" | awk '{print $1}')"
           [[ "$MINISIGN_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
             echo '::error::无法计算 minisign 源码归档 SHA-256。'
