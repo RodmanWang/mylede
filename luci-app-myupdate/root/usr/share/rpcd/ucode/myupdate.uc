@@ -202,18 +202,20 @@ function save_keep_paths(args) {
 	if (paths == null)
 		return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
 	let c = cursor();
-	let value = length(paths) ? join('\n', paths) : '';
-	if (c.set(CONFIG, 'main', 'custom_keep_paths', value) !== true)
-		return { ok: false, error: '无法写入自定义保留路径：' + (uci.error() || 'UCI set 失败') };
+	// Store paths as native UCI list entries. set_list([]) removes the option,
+	// so deleting the final chip really clears the configuration.
+	let changed = length(paths)
+		? c.set(CONFIG, 'main', 'custom_keep_paths', paths)
+		: c.delete(CONFIG, 'main', 'custom_keep_paths');
+	if (changed !== true)
+		return { ok: false, error: '无法写入自定义保留路径列表：' + (uci.error() || 'UCI 列表更新失败') };
 	if (c.commit(CONFIG) !== true)
 		return { ok: false, error: '保存自定义保留路径失败：' + (uci.error() || '未知 UCI 错误') };
 	let verify = cursor();
 	if (verify.load(CONFIG) !== true)
 		return { ok: false, error: '路径已提交，但无法重新加载配置核实：' + (uci.error() || '未知 UCI 错误') };
 	let raw = verify.get(CONFIG, 'main', 'custom_keep_paths');
-	let saved = [];
-	if (type(raw) == 'array') saved = raw;
-	else if (type(raw) == 'string' && raw != '') saved = split(raw, '\n');
+	let saved = type(raw) == 'array' ? raw : [];
 	if (length(saved) != length(paths))
 		return { ok: false, error: '路径保存后回读数量不一致' };
 	for (let i = 0; i < length(paths); i++)

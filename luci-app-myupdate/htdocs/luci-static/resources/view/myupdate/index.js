@@ -385,9 +385,7 @@ return view.extend({
 				control.disabled = true;
 				callSaveDowngrade(value).then(function(result) {
 					if (!result || !result.ok) throw new Error(result && result.error ? result.error : _('保存降级设置失败。'));
-					return callConfig();
-				}).then(function(savedConfig) {
-					var persisted = savedConfig && savedConfig.allow_downgrade != null ? String(savedConfig.allow_downgrade) : '0';
+					var persisted = result.allow_downgrade != null ? String(result.allow_downgrade) : '';
 					if (persisted != value)
 						throw new Error(_('降级设置回读不一致，未确认保存成功。'));
 					cfg.allow_downgrade = persisted;
