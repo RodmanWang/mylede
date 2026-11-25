@@ -202,6 +202,12 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertNotIn("api.github.com/repos/jedisct1/minisign/releases/latest", workflow)
         self.assertNotIn("MINISIGN_RELEASE_API", workflow)
 
+    def test_minisign_repository_is_initialized_and_origin_added_only_once(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertEqual(workflow.count('git init "$MINISIGN_REPO"'), 1)
+        self.assertEqual(workflow.count('git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git'), 1)
+        self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)
+
     def test_minisign_archive_is_built_from_git_and_reused_by_firmware_job(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)

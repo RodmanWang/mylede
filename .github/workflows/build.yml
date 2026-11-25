@@ -261,12 +261,9 @@ jobs:
           print(tags[0])
           PY
           )"
-          # Fetch the exact release tag over Git and create the source archive locally.
-          # This avoids archive-download endpoints that returned HTTP 403 on runners.
-          MINISIGN_REPO="$RUNNER_TEMP/minisign-git"
+          # Fetch the exact release tag in the repository initialized above,
+          # then create the source archive locally without re-adding origin.
           MINISIGN_ARCHIVE="$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz"
-          git init "$MINISIGN_REPO"
-          git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git
           git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"
           git -C "$MINISIGN_REPO" archive --format=tar.gz \
             --prefix="minisign-${MINISIGN_VERSION}/" FETCH_HEAD > "$MINISIGN_ARCHIVE"
