@@ -186,8 +186,8 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("release-input/manifest.json", workflow)
         self.assertIn("layout.get('kernel_partsize_mib')", workflow)
         self.assertIn("layout.get('rootfs_partsize_mib')", workflow)
-        self.assertIn("内核分区大小：**${KERNEL_PARTSIZE} MiB**", workflow)
-        self.assertIn("根文件系统分区大小：**${ROOTFS_PARTSIZE} MiB**", workflow)
+        self.assertIn("本次固件内核分区大小：${KERNEL_PARTSIZE} MiB", workflow)
+        self.assertIn("本次固件根文件系统分区大小：${ROOTFS_PARTSIZE} MiB", workflow)
         self.assertIn("UPSTREAM_KERNEL_PARTSIZE", workflow)
         self.assertIn("UPSTREAM_ROOTFS_PARTSIZE", workflow)
 
