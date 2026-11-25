@@ -201,9 +201,12 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertNotIn("codeload.github.com/jedisct1/minisign", workflow)
         self.assertNotIn("github.com/jedisct1/minisign/archive/refs/tags/", workflow)
         self.assertIn('source-lock-artifact/source-revisions.tsv', workflow)
-        self.assertIn('install -m 0644 "$MINISIGN_ARCHIVE" "$RUNNER_TEMP/source-lock-artifact/"', workflow)
-        self.assertEqual(workflow.count('install -D -m 0644 "$MINISIGN_ARCHIVE" "/home/ubuntu/lede/dl/minisign-${MINISIGN_VERSION}.tar.gz"'), 2)
-        self.assertEqual(workflow.count('ACTUAL_SHA256="$(sha256sum "$MINISIGN_ARCHIVE" | awk \'{print $1}\')"'), 2)
+        self.assertIn('shutil.copyfile(archive, artifact_dir / archive.name)', workflow)
+        self.assertEqual(workflow.count('hashlib.sha256(archive.read_bytes()).hexdigest()'), 1)
+        self.assertEqual(workflow.count('shutil.copyfile(archive, target)'), 1)
+        self.assertIn('path: /home/ubuntu/dl', workflow)
+        self.assertIn('actions/cache/restore@v6', workflow)
+        self.assertIn('shutil.copyfile(archive, target)', workflow)
         self.assertIn('tarfile.open(archive, "r:gz")', workflow)
 
 
