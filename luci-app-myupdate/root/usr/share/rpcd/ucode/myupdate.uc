@@ -70,7 +70,15 @@ function safe_missing_keep_path(path) {
 	}
 	return true;
 }
-function parse_keep_paths(value) {
+function current_keep_path_set(c) {
+	let raw = c.get(CONFIG, 'main', 'custom_keep_paths');
+	let paths = type(raw) == 'array' ? raw : (type(raw) == 'string' ? split(raw, '\n') : []);
+	let existing = {};
+	for (let path in paths)
+		if (path != '') existing[path] = true;
+	return existing;
+}
+function parse_keep_paths(value, existing) {
 	if (type(value) != 'string' || length(value) > 8192 || index(value, '\r') >= 0)
 		return null;
 	let paths = [], seen = {};
@@ -82,13 +90,18 @@ function parse_keep_paths(value) {
 		for (let prefix in [ '/proc', '/sys', '/dev', '/tmp', '/rom', '/overlay' ])
 			if (path == prefix || substr(path, 0, length(prefix) + 1) == prefix + '/')
 				return null;
-		let info = fs.lstat(path);
-		if (info == null) {
-			if (!safe_missing_keep_path(path)) return null;
-		}
-		else {
-			let resolved = fs.realpath(path);
-			if ((info.type != 'file' && info.type != 'directory') || resolved != path) return null;
+		// Existing entries must remain removable even if the target has
+		// disappeared or changed type since it was first added. New entries
+		// still receive the full filesystem and symlink validation.
+		if (!(path in existing)) {
+			let info = fs.lstat(path);
+			if (info == null) {
+				if (!safe_missing_keep_path(path)) return null;
+			}
+			else {
+				let resolved = fs.realpath(path);
+				if ((info.type != 'file' && info.type != 'directory') || resolved != path) return null;
+			}
 		}
 		if (seen[path]) return null;
 		seen[path] = true;
@@ -155,7 +168,7 @@ function save_config(args) {
 	    !match(args.repo_url, /^https:\/\/github[.]com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+([.]git)?\/?$/))
 		return { ok: false, error: 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' };
 	if ('custom_keep_paths' in args) {
-		let paths = parse_keep_paths(args.custom_keep_paths);
+		let paths = parse_keep_paths(args.custom_keep_paths, current_keep_path_set(c));
 		if (paths == null)
 			return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
 		// An array value is serialized by UCI as repeated `list` entries.
@@ -198,7 +211,7 @@ function set_allow_downgrade(args) {
 	return { ok: true, allow_downgrade: String(saved) };
 }
 function save_keep_paths(args) {
-	let paths = parse_keep_paths(args.custom_keep_paths);
+	let paths = parse_keep_paths(args.custom_keep_paths, current_keep_path_set(c));
 	if (paths == null)
 		return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
 	let c = cursor();
