@@ -1004,8 +1004,13 @@ jobs:
               if len(fields) != 4:
                   raise SystemExit(f"invalid source lock row: {line!r}")
               name, url, ref, commit = fields
-              if not re.fullmatch(r"[0-9a-f]{40}", commit):
-                  raise SystemExit(f"invalid full SHA in source lock for {name}: {commit!r}")
+              # Git source revisions are 40-character commit IDs. The minisign
+              # release entry is different: its fourth column stores the SHA-256
+              # digest of the downloaded source archive (64 hexadecimal chars).
+              expected_length = 64 if name == "MINISIGN_RELEASE" else 40
+              if not re.fullmatch(rf"[0-9a-f]{{{expected_length}}}", commit):
+                  kind = "SHA-256 digest" if name == "MINISIGN_RELEASE" else "Git commit SHA"
+                  raise SystemExit(f"invalid {kind} in source lock for {name}: {commit!r}")
               if name in locked:
                   raise SystemExit(f"duplicate source lock entry: {name}")
               locked[name] = (url, ref, commit)
