@@ -23,6 +23,12 @@ LUCI_LANG.zh_Hans:=简体中文
 PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=MyUpdate
 
+# Keep administrator settings when this package is upgraded or reinstalled.
+# This is required for opkg to treat the UCI file as a user configuration file.
+define Package/luci-app-myupdate/conffiles
+/etc/config/myupdate
+endef
+
 # Normalize package-owned file modes after live installation. Some generated
 # IPKs have arrived with world-writable files, which is unsafe and can break
 # services that enforce strict file permissions.
