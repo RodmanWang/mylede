@@ -58,6 +58,18 @@ function get_config() {
 function valid_string(v, max) {
 	return type(v) == 'string' && length(v) <= max && index(v, '\n') < 0 && index(v, '\r') < 0;
 }
+function safe_missing_keep_path(path) {
+	let parts = split(path, '/'), current = '';
+	// Missing targets are harmless: the backup preparation script skips them.
+	// Still reject any existing symlink or non-directory parent component.
+	for (let i = 1; i < length(parts) - 1; i++) {
+		current += '/' + parts[i];
+		let parent = fs.lstat(current);
+		if (parent == null) return true;
+		if (parent.type != 'directory' || fs.realpath(current) != current) return false;
+	}
+	return true;
+}
 function parse_keep_paths(value) {
 	if (type(value) != 'string' || length(value) > 8192 || index(value, '\r') >= 0)
 		return null;
@@ -70,8 +82,14 @@ function parse_keep_paths(value) {
 		for (let prefix in [ '/proc', '/sys', '/dev', '/tmp', '/rom', '/overlay' ])
 			if (path == prefix || substr(path, 0, length(prefix) + 1) == prefix + '/')
 				return null;
-		let info = fs.lstat(path), resolved = fs.realpath(path);
-		if (info == null || (info.type != 'file' && info.type != 'directory') || resolved != path) return null;
+		let info = fs.lstat(path);
+		if (info == null) {
+			if (!safe_missing_keep_path(path)) return null;
+		}
+		else {
+			let resolved = fs.realpath(path);
+			if ((info.type != 'file' && info.type != 'directory') || resolved != path) return null;
+		}
 		if (seen[path]) return null;
 		seen[path] = true;
 		paths[length(paths)] = path;
@@ -170,7 +188,8 @@ function set_allow_downgrade(args) {
 	c.set(CONFIG, 'main', 'allow_downgrade', value);
 	if (c.commit(CONFIG) !== true)
 		return { ok: false, error: '保存降级设置失败：' + (uci.error() || '未知 UCI 错误') };
-	let saved = c.get(CONFIG, 'main', 'allow_downgrade');
+	let verify = cursor();
+	let saved = verify.get(CONFIG, 'main', 'allow_downgrade');
 	if (saved != value)
 		return { ok: false, error: '降级设置写入后回读不一致' };
 	return { ok: true, allow_downgrade: saved };
