@@ -271,7 +271,7 @@ jobs:
             echo '::error::从 minisign 锁定的 Git tag 生成源码归档失败或文件为空。'
             exit 1
           }
-          python3 scripts/validate-minisign-archive.py "$MINISIGN_ARCHIVE" "$MINISIGN_VERSION"
+          python3 scripts/validate_minisign_archive.py "$MINISIGN_ARCHIVE" "$MINISIGN_VERSION"
           MINISIGN_SHA256="$(sha256sum "$MINISIGN_ARCHIVE" | awk '{print $1}')"
           [[ "$MINISIGN_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
             echo '::error::无法计算 minisign 源码归档 SHA-256。'
