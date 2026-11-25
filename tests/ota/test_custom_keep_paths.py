@@ -64,6 +64,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("function save_keep_paths(args)", source)
         save_body = source.split("function save_keep_paths(args)", 1)[1].split("function set_token", 1)[0]
         self.assertLess(save_body.index("let c = cursor();"), save_body.index("current_keep_path_set(c)"))
+        self.assertLess(save_body.index("c.load(CONFIG)"), save_body.index("current_keep_path_set(c)"))
         self.assertIn("function current_keep_path_set(c)", source)
         self.assertIn("if (!(path in existing))", source)
         self.assertIn("verify.load(CONFIG)", source)
