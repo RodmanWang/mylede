@@ -185,14 +185,41 @@ function set_allow_downgrade(args) {
 	if (value != '0' && value != '1')
 		return { ok: false, error: '允许降级设置无效，只能为 0 或 1' };
 	let c = cursor();
-	c.set(CONFIG, 'main', 'allow_downgrade', value);
+	if (c.set(CONFIG, 'main', 'allow_downgrade', value) !== true)
+		return { ok: false, error: '无法写入允许降级设置：' + (uci.error() || 'UCI set 失败') };
 	if (c.commit(CONFIG) !== true)
 		return { ok: false, error: '保存降级设置失败：' + (uci.error() || '未知 UCI 错误') };
 	let verify = cursor();
+	if (verify.load(CONFIG) !== true)
+		return { ok: false, error: '降级设置已提交，但无法重新加载配置核实：' + (uci.error() || '未知 UCI 错误') };
 	let saved = verify.get(CONFIG, 'main', 'allow_downgrade');
-	if (saved != value)
-		return { ok: false, error: '降级设置写入后回读不一致' };
-	return { ok: true, allow_downgrade: saved };
+	if (String(saved) != value)
+		return { ok: false, error: '降级设置写入后回读不一致（读取值：' + String(saved) + '）' };
+	return { ok: true, allow_downgrade: String(saved) };
+}
+function save_keep_paths(args) {
+	let paths = parse_keep_paths(args.custom_keep_paths);
+	if (paths == null)
+		return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
+	let c = cursor();
+	let value = length(paths) ? join('\n', paths) : '';
+	if (c.set(CONFIG, 'main', 'custom_keep_paths', value) !== true)
+		return { ok: false, error: '无法写入自定义保留路径：' + (uci.error() || 'UCI set 失败') };
+	if (c.commit(CONFIG) !== true)
+		return { ok: false, error: '保存自定义保留路径失败：' + (uci.error() || '未知 UCI 错误') };
+	let verify = cursor();
+	if (verify.load(CONFIG) !== true)
+		return { ok: false, error: '路径已提交，但无法重新加载配置核实：' + (uci.error() || '未知 UCI 错误') };
+	let raw = verify.get(CONFIG, 'main', 'custom_keep_paths');
+	let saved = [];
+	if (type(raw) == 'array') saved = raw;
+	else if (type(raw) == 'string' && raw != '') saved = split(raw, '\n');
+	if (length(saved) != length(paths))
+		return { ok: false, error: '路径保存后回读数量不一致' };
+	for (let i = 0; i < length(paths); i++)
+		if (saved[i] != paths[i])
+			return { ok: false, error: '路径保存后回读内容不一致' };
+	return { ok: true, custom_keep_paths: saved };
 }
 function set_token(args) {
 	let token = args.token;
@@ -255,6 +282,7 @@ return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
 	set_allow_downgrade: { args: { allow_downgrade: 'String' }, call: function(request) { return set_allow_downgrade(request.args); } },
+	save_keep_paths: { args: { custom_keep_paths: 'String' }, call: function(request) { return save_keep_paths(request.args); } },
 	list_keep_paths: { args: { path: 'String' }, call: function(request) { return list_keep_paths(request.args.path); } },
 	save_config: { args: { repo_url: 'String', repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
 		upgrade_mode: 'String', check_interval: 'String', auto_upgrade_time: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
