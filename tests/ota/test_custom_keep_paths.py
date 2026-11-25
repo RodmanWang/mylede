@@ -15,7 +15,8 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         source = BACKEND.read_text(encoding="utf-8")
         self.assertIn("type(keep_paths) == 'array'", source)
         self.assertIn("split(keep_paths, '\\n')", source)
-        self.assertIn("c.set_list(CONFIG, 'main', 'custom_keep_paths', paths)", source)
+        self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', paths)", source)
+        self.assertIn("c.delete(CONFIG, 'main', 'custom_keep_paths')", source)
         self.assertIn("let saved = type(raw) == 'array' ? raw : [];", source)
 
     def test_luci_uses_custom_dynamic_list_and_filesystem_browser(self):
