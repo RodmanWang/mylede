@@ -256,9 +256,15 @@ return view.extend({
 					var remove = E('button', {
 						'type': 'button',
 						'class': 'myupdate-path-chip-remove',
-						'data-keep-path': path,
 						'aria-label': _('删除 ') + path,
-						'disabled': keepPathSaving
+						'disabled': keepPathSaving,
+					'click': function(ev) {
+							ev.preventDefault();
+							ev.stopPropagation();
+							if (keepPathSaving || keepPathValues.indexOf(path) < 0) return;
+							var next = keepPathValues.filter(function(item) { return item != path; });
+							persistKeepPaths(next, _('已删除路径，配置已保存。'));
+						}
 					}, '×');
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
 						E('span', { 'class': 'myupdate-path-chip-text' }, path),
@@ -266,19 +272,6 @@ return view.extend({
 					]));
 				});
 			}
-			// Delegate deletion clicks from the stable chip container. Chips are
-			// rebuilt after every save, so one listener handles both current and
-			// subsequently rendered remove buttons.
-			chips.addEventListener('click', function(ev) {
-				var remove = ev.target.closest('.myupdate-path-chip-remove');
-				if (!remove || keepPathSaving) return;
-				ev.preventDefault();
-				ev.stopPropagation();
-				var path = remove.getAttribute('data-keep-path');
-				if (keepPathValues.indexOf(path) < 0) return;
-				var next = keepPathValues.filter(function(item) { return item != path; });
-				persistKeepPaths(next, _('已删除路径，配置已保存。'));
-			});
 			function allowedPath(path) {
 				return /^\/[A-Za-z0-9._/@+-]+$/.test(path) && path != '/' &&
 					!/(^|\/)\.\.?($|\/)/.test(path) &&
