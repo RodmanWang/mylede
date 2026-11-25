@@ -1535,9 +1535,9 @@ jobs:
 
           ### 本次固件分区布局
 
-          - 内核分区大小：**${KERNEL_PARTSIZE} MiB**
-          - 根文件系统分区大小：**${ROOTFS_PARTSIZE} MiB**
-          - 上游源码默认值：内核 **${UPSTREAM_KERNEL_PARTSIZE} MiB**，根文件系统 **${UPSTREAM_ROOTFS_PARTSIZE} MiB**
+          - 本次固件内核分区大小：${KERNEL_PARTSIZE} MiB
+          - 本次固件根文件系统分区大小：${ROOTFS_PARTSIZE} MiB
+          - 上游源码默认值：内核 ${UPSTREAM_KERNEL_PARTSIZE} MiB，根文件系统 ${UPSTREAM_ROOTFS_PARTSIZE} MiB
 
           ### 本次编译使用的源码版本
 
