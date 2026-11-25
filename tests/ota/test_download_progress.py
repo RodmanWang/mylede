@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """Contract tests for live MyUpdate firmware download progress."""
+import io
 import json
 from pathlib import Path
+import sys
+import tarfile
+import tempfile
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from validate_minisign_archive import validate_archive
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -207,6 +214,32 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertEqual(workflow.count('git init "$MINISIGN_REPO"'), 1)
         self.assertEqual(workflow.count('git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git'), 1)
         self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)
+
+    def test_minisign_archive_validator_accepts_git_archive_root_directory_entry(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive = Path(temp_dir) / "minisign-0.12.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                root = tarfile.TarInfo("minisign-0.12")
+                root.type = tarfile.DIRTYPE
+                tar.addfile(root)
+                payload = b"fixture\\n"
+                child = tarfile.TarInfo("minisign-0.12/README.md")
+                child.size = len(payload)
+                tar.addfile(child, io.BytesIO(payload))
+            names = validate_archive(str(archive), "0.12")
+            self.assertEqual(names[0], "minisign-0.12")
+            self.assertIn("minisign-0.12/README.md", names)
+
+    def test_minisign_archive_validator_rejects_entries_outside_release_root(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive = Path(temp_dir) / "invalid.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                payload = b"unexpected\\n"
+                entry = tarfile.TarInfo("other/README.md")
+                entry.size = len(payload)
+                tar.addfile(entry, io.BytesIO(payload))
+            with self.assertRaises(ValueError):
+                validate_archive(str(archive), "0.12")
 
     def test_minisign_archive_is_built_from_git_and_reused_by_firmware_job(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
