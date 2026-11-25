@@ -180,6 +180,17 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('"uses_boot_part") is not True', validator)
 
 
+    def test_release_notes_display_effective_partition_layout_from_manifest(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn("mapfile -t PARTITION_VALUES", workflow)
+        self.assertIn("release-input/manifest.json", workflow)
+        self.assertIn("layout.get('kernel_partsize_mib')", workflow)
+        self.assertIn("layout.get('rootfs_partsize_mib')", workflow)
+        self.assertIn("本次固件内核分区大小：${KERNEL_PARTSIZE} MiB", workflow)
+        self.assertIn("本次固件根文件系统分区大小：${ROOTFS_PARTSIZE} MiB", workflow)
+        self.assertIn("UPSTREAM_KERNEL_PARTSIZE", workflow)
+        self.assertIn("UPSTREAM_ROOTFS_PARTSIZE", workflow)
+
     def test_build_uses_last_successful_partition_values_for_auto_and_manual_runs(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         state = json.loads((ROOT / "build-config/last-successful-partition-layout.json").read_text(encoding="utf-8"))
