@@ -228,23 +228,37 @@ jobs:
           printf 'LEDE\t%s\t%s\t%s\n' "$LEDE_URL" "$LEDE_REF" "$LEDE_COMMIT" \
             >> "$RUNNER_TEMP/source-revisions.tsv"
 
-          # Resolve the latest non-prerelease minisign release and pin the exact
-          # source archive digest before either build job starts.
-          MINISIGN_RELEASE_API='https://api.github.com/repos/jedisct1/minisign/releases/latest'
-          MINISIGN_RELEASE_JSON="$RUNNER_TEMP/minisign-latest-release.json"
-          curl --fail --location --retry 3 --retry-delay 2 \
-            --header 'Accept: application/vnd.github+json' \
-            "$MINISIGN_RELEASE_API" --output "$MINISIGN_RELEASE_JSON"
-          MINISIGN_VERSION="$(python3 - "$MINISIGN_RELEASE_JSON" <<'PY'
-          import json, re, sys
+          # Discover stable version tags through Git instead of the GitHub Releases
+          # REST API, which returned HTTP 403 on this runner.
+          MINISIGN_REPO="$RUNNER_TEMP/minisign-git"
+          MINISIGN_TAGS="$RUNNER_TEMP/minisign-tags.txt"
+          git init "$MINISIGN_REPO"
+          git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git
+          git -C "$MINISIGN_REPO" ls-remote --tags --refs origin > "$MINISIGN_TAGS"
+          MINISIGN_VERSION="$(python3 - "$MINISIGN_TAGS" <<'PY'
+          import re, sys
           from pathlib import Path
-          release = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          tag = release.get("tag_name", "")
-          if release.get("draft") or release.get("prerelease"):
-              raise SystemExit("GitHub latest release endpoint returned a draft/prerelease")
-          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", tag):
-              raise SystemExit(f"Invalid minisign release tag: {tag!r}")
-          print(tag)
+
+          candidates = []
+          for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+              fields = line.split()
+              if len(fields) != 2 or not fields[1].startswith("refs/tags/"):
+                  continue
+              tag = fields[1][len("refs/tags/"):]
+              # Accept plain numeric stable tags (e.g. 0.11 or v0.11), and
+              # deliberately exclude prerelease/build-suffix tags.
+              match = re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))+(?:\.(0|[1-9][0-9]*))*", tag)
+              if not match:
+                  continue
+              numbers = tuple(int(part) for part in tag.removeprefix("v").split("."))
+              candidates.append((numbers, tag))
+          if not candidates:
+              raise SystemExit("No stable numeric minisign version tags were found via Git.")
+          highest = max(numbers for numbers, _ in candidates)
+          tags = sorted(tag for numbers, tag in candidates if numbers == highest)
+          if len(tags) != 1:
+              raise SystemExit(f"Ambiguous minisign tags for latest version {highest}: {tags!r}")
+          print(tags[0])
           PY
           )"
           # Fetch the exact release tag over Git and create the source archive locally.
