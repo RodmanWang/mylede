@@ -228,31 +228,32 @@ jobs:
           printf 'LEDE\t%s\t%s\t%s\n' "$LEDE_URL" "$LEDE_REF" "$LEDE_COMMIT" \
             >> "$RUNNER_TEMP/source-revisions.tsv"
 
-          # Resolve the latest non-prerelease minisign release and pin the exact
-          # source archive digest before either build job starts.
-          MINISIGN_RELEASE_API='https://api.github.com/repos/jedisct1/minisign/releases/latest'
-          MINISIGN_RELEASE_JSON="$RUNNER_TEMP/minisign-latest-release.json"
-          curl --fail --location --retry 3 --retry-delay 2 \
-            --header 'Accept: application/vnd.github+json' \
-            "$MINISIGN_RELEASE_API" --output "$MINISIGN_RELEASE_JSON"
-          MINISIGN_VERSION="$(python3 - "$MINISIGN_RELEASE_JSON" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          release = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          tag = release.get("tag_name", "")
-          if release.get("draft") or release.get("prerelease"):
-              raise SystemExit("GitHub latest release endpoint returned a draft/prerelease")
-          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", tag):
-              raise SystemExit(f"Invalid minisign release tag: {tag!r}")
-          print(tag)
-          PY
-          )"
-          # Fetch the exact release tag over Git and create the source archive locally.
-          # This avoids archive-download endpoints that returned HTTP 403 on runners.
+          # Resolve the newest stable numeric release tag directly from Git.
+          # Do not call the GitHub Releases REST API: unauthenticated API requests
+          # returned HTTP 403 on the hosted runner even though Git access worked.
           MINISIGN_REPO="$RUNNER_TEMP/minisign-git"
-          MINISIGN_ARCHIVE="$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz"
           git init "$MINISIGN_REPO"
           git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git
+          MINISIGN_TAGS="$(git -C "$MINISIGN_REPO" ls-remote --tags --refs origin 'refs/tags/[0-9]*')"
+          MINISIGN_VERSION="$(python3 - "$MINISIGN_TAGS" <<'PY'
+          import re, sys
+          versions = []
+          for line in sys.argv[1].splitlines():
+              fields = line.split()
+              if len(fields) != 2:
+                  continue
+              tag = fields[1].removeprefix("refs/tags/")
+              if re.fullmatch(r"[0-9]+(?:\\.[0-9]+)*", tag):
+                  versions.append((tuple(int(part) for part in tag.split(".")), tag))
+          if not versions:
+              raise SystemExit("无法从 minisign Git 标签中找到稳定数字版本")
+          print(max(versions)[1])
+          PY
+          )"
+          echo "从 minisign Git 稳定版本标签中选择：$MINISIGN_VERSION"
+          # Fetch the exact release tag over Git and create the source archive locally.
+          # This avoids archive-download endpoints that returned HTTP 403 on runners.
+          MINISIGN_ARCHIVE="$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz"
           git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"
           git -C "$MINISIGN_REPO" archive --format=tar.gz \
             --prefix="minisign-${MINISIGN_VERSION}/" FETCH_HEAD > "$MINISIGN_ARCHIVE"
