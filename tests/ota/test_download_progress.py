@@ -208,6 +208,12 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('--connect-timeout 15 --max-time 180', workflow)
 
 
+    def test_source_lock_validates_git_commits_and_minisign_archive_digest_separately(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('expected_length = 64 if name == "MINISIGN_RELEASE" else 40', workflow)
+        self.assertIn('rf"[0-9a-f]{{{expected_length}}}"', workflow)
+        self.assertIn('kind = "SHA-256 digest" if name == "MINISIGN_RELEASE" else "Git commit SHA"', workflow)
+
     def test_build_reads_pinned_feeds_config_from_git_not_raw_cdn(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         self.assertIn('fetch --no-tags --depth=1 origin "$LEDE_COMMIT"', workflow)
