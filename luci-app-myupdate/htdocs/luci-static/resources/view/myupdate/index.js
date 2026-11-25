@@ -245,6 +245,7 @@ return view.extend({
 					return false;
 				}).then(function(saved) {
 					keepPathSaving = false;
+					renderChips();
 					return saved;
 				});
 			}
