@@ -253,7 +253,12 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('target = download_dir / archive.name', workflow)
         self.assertIn('shutil.copyfile(archive, target)', workflow)
         self.assertLess(workflow.index('path: /home/ubuntu/dl'), workflow.index('已安装并校验预检阶段锁定的 minisign 源码归档'))
-        self.assertIn('tarfile.open(archive, "r:gz")', workflow)
+        validator = (ROOT / "scripts/validate_minisign_archive.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'python3 scripts/validate_minisign_archive.py "$MINISIGN_ARCHIVE" "$MINISIGN_VERSION"',
+            workflow,
+        )
+        self.assertIn('tarfile.open(archive, "r:gz")', validator)
 
     def test_source_lock_validates_git_commits_and_minisign_archive_digest_separately(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
