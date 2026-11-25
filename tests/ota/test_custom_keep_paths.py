@@ -23,7 +23,9 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("keepPaths.formvalue = function() { return keepPathValues.slice(); };", source)
         self.assertIn("keepPaths.renderWidget = function(section_id)", source)
         self.assertIn("keepPaths.write = function(section_id, values)", source)
+        self.assertIn("persistKeepPaths(paths, successMessage)", source)
         self.assertIn("callSaveKeepPaths(paths.join", source)
+        self.assertIn("keepPaths.write = function() { return Promise.resolve(); };", source)
         self.assertIn("loadDirectory('/')", source)
         self.assertIn("myupdate-browser-entry", source)
         self.assertIn("myupdate-browser-add", source)
@@ -31,6 +33,8 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("'rows': '2'", source)
         self.assertNotIn("从常用固件目录中选择", source)
         self.assertNotIn("/.uuplugin_uuid", source)
+        self.assertNotIn("E('header', { 'class': 'myupdate-hero' }", source)
+        self.assertNotIn("#header,#mainmenu,.navbar,.mainmenu{position:relative", source)
 
     def test_browser_rpc_is_exposed_read_only_to_luci(self):
         source = BACKEND.read_text(encoding="utf-8")
@@ -48,6 +52,8 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         backup = BACKUP.read_text(encoding="utf-8")
         self.assertIn("info.type != 'file' && info.type != 'directory'", source)
         self.assertIn("resolved != path", source)
+        self.assertIn("function safe_missing_keep_path(path)", source)
+        self.assertIn("if (info == null)", source)
         self.assertIn('if [ -L "$path" ]; then', backup)
         self.assertIn('readlink -f "$path"', backup)
         self.assertIn('Refusing special custom sysupgrade path', backup)
