@@ -204,8 +204,11 @@ function save_keep_paths(args) {
 	let c = cursor();
 	// Store paths as native UCI list entries. set_list([]) removes the option,
 	// so deleting the final chip really clears the configuration.
-	if (c.set_list(CONFIG, 'main', 'custom_keep_paths', paths) !== true)
-		return { ok: false, error: '无法写入自定义保留路径列表：' + (uci.error() || 'UCI set_list 失败') };
+	let changed = length(paths)
+		? c.set(CONFIG, 'main', 'custom_keep_paths', paths)
+		: c.delete(CONFIG, 'main', 'custom_keep_paths');
+	if (changed !== true)
+		return { ok: false, error: '无法写入自定义保留路径列表：' + (uci.error() || 'UCI 列表更新失败') };
 	if (c.commit(CONFIG) !== true)
 		return { ok: false, error: '保存自定义保留路径失败：' + (uci.error() || '未知 UCI 错误') };
 	let verify = cursor();
