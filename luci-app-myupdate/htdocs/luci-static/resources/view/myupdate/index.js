@@ -252,15 +252,22 @@ return view.extend({
 
 			function renderChips() {
 				while (chips.firstChild) chips.removeChild(chips.firstChild);
-				keepPathValues.forEach(function(path, index) {
+				keepPathValues.forEach(function(path) {
+					var remove = E('button', {
+						'type': 'button',
+						'class': 'myupdate-path-chip-remove',
+						'aria-label': _('删除 ') + path,
+						'disabled': keepPathSaving
+					}, '×');
+					remove.addEventListener('click', function(ev) {
+						ev.preventDefault();
+						ev.stopPropagation();
+						var next = keepPathValues.filter(function(item) { return item != path; });
+						persistKeepPaths(next, _('已删除路径，配置已保存。'));
+					});
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
 						E('span', { 'class': 'myupdate-path-chip-text' }, path),
-						E('button', { 'type': 'button', 'class': 'myupdate-path-chip-remove', 'aria-label': _('删除 ') + path,
-							'disabled': keepPathSaving,
-							click: function() {
-								var next = keepPathValues.filter(function(item, i) { return i != index; });
-								persistKeepPaths(next, _('已删除路径，配置已保存。'));
-							} }, '×')
+						remove
 					]));
 				});
 			}
@@ -383,11 +390,25 @@ return view.extend({
 				var control = ev.target, previous = (cfg.allow_downgrade || '0') == '1';
 				var value = control.checked ? '1' : '0';
 				control.disabled = true;
-				callSaveDowngrade(value).then(function(result) {
-					if (!result || !result.ok) throw new Error(result && result.error ? result.error : _('保存降级设置失败。'));
-					var persisted = result.allow_downgrade != null ? String(result.allow_downgrade) : '';
-					if (persisted != value)
-						throw new Error(_('降级设置回读不一致，未确认保存成功。'));
+				callSaveDowngrade(value).catch(function(error) {
+					return { ok: false, error: error && error.message ? error.message : String(error) };
+				}).then(function(result) {
+					var rpcValue = result && result.ok && result.allow_downgrade != null ?
+						String(result.allow_downgrade) : '';
+					if (rpcValue == value)
+						return { allow_downgrade: rpcValue };
+					// The UCI commit may succeed even if rpcd returns an incomplete
+					// response. Confirm the effective value independently before
+					// reporting a save failure or reverting the checkbox.
+					return callConfig().then(function(config) {
+						var saved = config && config.allow_downgrade != null ?
+							String(config.allow_downgrade) : '';
+						if (saved == value)
+							return { allow_downgrade: saved, confirmed_by_readback: true };
+						throw new Error(result && result.error ? result.error : _('降级设置回读不一致，未确认保存成功。'));
+					});
+				}).then(function(result) {
+					var persisted = String(result.allow_downgrade);
 					cfg.allow_downgrade = persisted;
 					control.checked = persisted == '1';
 					notify(value == '1' ? _('已启用降级；设置已写入并回读确认。') : _('已关闭降级；设置已写入并回读确认。'), 'info');
