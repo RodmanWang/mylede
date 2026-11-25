@@ -243,7 +243,7 @@ jobs:
               if len(fields) != 2:
                   continue
               tag = fields[1].removeprefix("refs/tags/")
-              if re.fullmatch(r"[0-9]+(?:\\.[0-9]+)*", tag):
+              if re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", tag):
                   versions.append((tuple(int(part) for part in tag.split(".")), tag))
           if not versions:
               raise SystemExit("无法从 minisign Git 标签中找到稳定数字版本")
