@@ -314,7 +314,12 @@ jobs:
           set -Eeuo pipefail
           mkdir -p "$RUNNER_TEMP/source-lock-artifact"
           install -m 0644 "$RUNNER_TEMP/source-revisions.tsv" "$RUNNER_TEMP/source-lock-artifact/source-revisions.tsv"
-          install -m 0644 "$MINISIGN_ARCHIVE" "$RUNNER_TEMP/source-lock-artifact/"
+          MINISIGN_VERSION="$(awk -F '\\t' '$1 == "MINISIGN_RELEASE" { print $3; exit }' "$RUNNER_TEMP/source-revisions.tsv")"
+          [[ "$MINISIGN_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || {
+            echo '::error::源码锁定清单中的 minisign 版本号无效。'
+            exit 1
+          }
+          install -m 0644 "$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz" "$RUNNER_TEMP/source-lock-artifact/"
 
       - name: 上传不可变源码锁定清单和 minisign 源码归档
         uses: actions/upload-artifact@v7
@@ -407,8 +412,37 @@ jobs:
         run: |
           set -Eeuo pipefail
           install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
+          python3 - "$RUNNER_TEMP/source-lock" /home/ubuntu/source-revisions.tsv /home/ubuntu/lede/dl <<'PY'
+          import hashlib, re, shutil, sys
+          from pathlib import Path
 
-          IFS=
+          artifact_dir, lock_path, download_dir = map(Path, sys.argv[1:])
+          entries = [
+              line.split("\t")
+              for line in lock_path.read_text(encoding="utf-8").splitlines()
+              if line.startswith("MINISIGN_RELEASE\t")
+          ]
+          if len(entries) != 1 or len(entries[0]) != 4:
+              raise SystemExit("源码锁定清单必须且只能包含一条有效的 MINISIGN_RELEASE")
+          _, _, version, expected_sha256 = entries[0]
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", version):
+              raise SystemExit(f"无效的 minisign 版本号：{version!r}")
+          if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+              raise SystemExit("源码锁定清单中的 minisign SHA-256 无效")
+          archive = artifact_dir / f"minisign-{version}.tar.gz"
+          if not archive.is_file() or archive.stat().st_size == 0:
+              raise SystemExit(f"源码锁定工件缺少 minisign 归档：{archive}")
+          actual_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
+          if actual_sha256 != expected_sha256:
+              raise SystemExit(
+                  f"minisign 源码归档 SHA-256 不匹配：预期 {expected_sha256}，实际 {actual_sha256}"
+              )
+          download_dir.mkdir(parents=True, exist_ok=True)
+          target = download_dir / archive.name
+          shutil.copyfile(archive, target)
+          target.chmod(0o644)
+          print(f"已安装并校验预检阶段锁定的 minisign 源码归档：{version}")
+          PY
       - name: 计算稳定的工具链缓存标识
         id: toolchain_key
         env:
@@ -1842,8 +1876,37 @@ jobs:
         run: |
           set -Eeuo pipefail
           install -m 0644 "$RUNNER_TEMP/source-lock/source-revisions.tsv" /home/ubuntu/source-revisions.tsv
+          python3 - "$RUNNER_TEMP/source-lock" /home/ubuntu/source-revisions.tsv /home/ubuntu/lede/dl <<'PY'
+          import hashlib, re, shutil, sys
+          from pathlib import Path
 
-          IFS=
+          artifact_dir, lock_path, download_dir = map(Path, sys.argv[1:])
+          entries = [
+              line.split("\t")
+              for line in lock_path.read_text(encoding="utf-8").splitlines()
+              if line.startswith("MINISIGN_RELEASE\t")
+          ]
+          if len(entries) != 1 or len(entries[0]) != 4:
+              raise SystemExit("源码锁定清单必须且只能包含一条有效的 MINISIGN_RELEASE")
+          _, _, version, expected_sha256 = entries[0]
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", version):
+              raise SystemExit(f"无效的 minisign 版本号：{version!r}")
+          if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+              raise SystemExit("源码锁定清单中的 minisign SHA-256 无效")
+          archive = artifact_dir / f"minisign-{version}.tar.gz"
+          if not archive.is_file() or archive.stat().st_size == 0:
+              raise SystemExit(f"源码锁定工件缺少 minisign 归档：{archive}")
+          actual_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
+          if actual_sha256 != expected_sha256:
+              raise SystemExit(
+                  f"minisign 源码归档 SHA-256 不匹配：预期 {expected_sha256}，实际 {actual_sha256}"
+              )
+          download_dir.mkdir(parents=True, exist_ok=True)
+          target = download_dir / archive.name
+          shutil.copyfile(archive, target)
+          target.chmod(0o644)
+          print(f"已安装并校验预检阶段锁定的 minisign 源码归档：{version}")
+          PY
       - name: 恢复工具链阶段的 LEDE 下载缓存
         id: firmware_dl_cache
         uses: actions/cache/restore@v6
