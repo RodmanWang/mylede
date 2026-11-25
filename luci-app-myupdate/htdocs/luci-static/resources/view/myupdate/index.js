@@ -200,13 +200,9 @@ return view.extend({
 		keepPaths.rmempty = true;
 		keepPaths.cfgvalue = function() { return keepPathValues.slice(); };
 		keepPaths.formvalue = function() { return keepPathValues.slice(); };
-		keepPaths.write = function(section_id, values) {
-			var paths = Array.isArray(values) ? values : keepPathValues;
-			return callSaveKeepPaths(paths.join('\n')).then(function(result) {
-				if (!result || !result.ok)
-					throw new Error(result && result.error ? result.error : _('自定义保留路径保存失败。'));
-			});
-		};
+		// Custom editor changes are persisted immediately by Add/Remove. Do not
+		// let LuCI's generic form save overwrite the independently committed list.
+		keepPaths.write = function() { return Promise.resolve(); };
 		keepPaths.validate = function(section_id, values) {
 			var paths = Array.isArray(values) ? values : keepPathValues;
 			for (var i = 0; i < paths.length; i++) {
@@ -218,7 +214,7 @@ return view.extend({
 			}
 			return true;
 		};
-		keepPaths.description = _('可手动输入绝对路径，也可展开设备文件浏览器逐层选择文件或目录。符号链接、特殊文件和系统虚拟目录不会加入保留列表。');
+		keepPaths.description = _('可手动输入绝对路径，也可展开设备文件浏览器逐层选择文件或目录。点击“添加”或删除路径后会立即保存；符号链接、特殊文件和系统虚拟目录不会加入保留列表。');
 		keepPaths.renderWidget = function(section_id) {
 			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
 			var chips = E('div', { 'class': 'myupdate-path-chips' });
@@ -228,7 +224,30 @@ return view.extend({
 			var browserPath = E('div', { 'class': 'myupdate-browser-path' }, '/');
 			var browserList = E('div', { 'class': 'myupdate-browser-list' });
 			var browserHint = E('div', { 'class': 'myupdate-browser-hint', 'aria-live': 'polite' });
-			var currentPath = '/', browserLoaded = false, browserBusy = false;
+			var currentPath = '/', browserLoaded = false, browserBusy = false, keepPathSaving = false;
+
+			function persistKeepPaths(paths, successMessage) {
+				if (keepPathSaving) {
+					message.textContent = _('正在保存自定义保留路径，请稍候。');
+					return Promise.resolve(false);
+				}
+				keepPathSaving = true;
+				return callSaveKeepPaths(paths.join('\n')).then(function(result) {
+					if (!result || !result.ok)
+						throw new Error(result && result.error ? result.error : _('自定义保留路径保存失败。'));
+					keepPathValues = paths.slice();
+					cfg.custom_keep_paths = keepPathValues.slice();
+					renderChips();
+					message.textContent = successMessage || _('自定义保留路径已保存。');
+					return true;
+				}).catch(function(error) {
+					message.textContent = _('保存失败：') + (error && error.message ? error.message : String(error));
+					return false;
+				}).then(function(saved) {
+					keepPathSaving = false;
+					return saved;
+				});
+			}
 
 			function renderChips() {
 				while (chips.firstChild) chips.removeChild(chips.firstChild);
@@ -236,7 +255,11 @@ return view.extend({
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
 						E('span', { 'class': 'myupdate-path-chip-text' }, path),
 						E('button', { 'type': 'button', 'class': 'myupdate-path-chip-remove', 'aria-label': _('删除 ') + path,
-							click: function() { keepPathValues.splice(index, 1); renderChips(); } }, '×')
+							'disabled': keepPathSaving,
+							click: function() {
+								var next = keepPathValues.filter(function(item, i) { return i != index; });
+								persistKeepPaths(next, _('已删除路径，配置已保存。'));
+							} }, '×')
 					]));
 				});
 			}
@@ -246,16 +269,24 @@ return view.extend({
 					!/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path);
 			}
 			function addPaths(raw) {
+				if (keepPathSaving) return;
 				var items = String(raw || '').split(/[\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
-				var added = 0, invalid = [];
+				var next = keepPathValues.slice(), added = 0, invalid = [];
 				items.forEach(function(path) {
 					if (!allowedPath(path)) { invalid.push(path); return; }
-					if (keepPathValues.indexOf(path) < 0) { keepPathValues.push(path); added++; }
+					if (next.indexOf(path) < 0) { next.push(path); added++; }
 				});
-				renderChips();
-				message.textContent = invalid.length ? _('以下路径格式无效或不允许保留：') + ' ' + invalid.join(', ') :
-					(added ? _('已添加 ') + added + _(' 个路径。') : _('没有新增路径（可能已存在或输入为空）。'));
-				if (!invalid.length) input.value = '';
+				if (invalid.length) {
+					message.textContent = _('以下路径格式无效或不允许保留：') + ' ' + invalid.join(', ');
+					return;
+				}
+				if (!added) {
+					message.textContent = _('没有新增路径（可能已存在或输入为空）。');
+					return;
+				}
+				persistKeepPaths(next, _('已添加并保存 ') + added + _(' 个路径。')).then(function(saved) {
+					if (saved) input.value = '';
+				});
 			}
 			function renderBrowser(entries, truncated) {
 				while (browserList.firstChild) browserList.removeChild(browserList.firstChild);
@@ -353,9 +384,14 @@ return view.extend({
 				control.disabled = true;
 				callSaveDowngrade(value).then(function(result) {
 					if (!result || !result.ok) throw new Error(result && result.error ? result.error : _('保存降级设置失败。'));
-					cfg.allow_downgrade = result.allow_downgrade || value;
-					control.checked = cfg.allow_downgrade == '1';
-					notify(value == '1' ? _('已启用降级；执行升级时将允许安装低于当前版本的固件。') : _('已关闭降级；执行升级时不允许安装低于当前版本的固件。'), 'info');
+					return callConfig();
+				}).then(function(savedConfig) {
+					var persisted = savedConfig && savedConfig.allow_downgrade != null ? String(savedConfig.allow_downgrade) : '0';
+					if (persisted != value)
+						throw new Error(_('降级设置回读不一致，未确认保存成功。'));
+					cfg.allow_downgrade = persisted;
+					control.checked = persisted == '1';
+					notify(value == '1' ? _('已启用降级；设置已写入并回读确认。') : _('已关闭降级；设置已写入并回读确认。'), 'info');
 				}).catch(function(error) {
 					control.checked = previous;
 					notify(error && error.message ? error.message : String(error), 'error');
@@ -423,10 +459,8 @@ return view.extend({
 			};
 		return m.render().then(function(mapNode) {
 			var style = E('style', {}, `
-				.myupdate-page{position:relative;z-index:0;isolation:auto;max-width:1180px;margin:0 auto;padding-bottom:32px}
-				/* Keep LuCI's global navigation and its dropdowns above page content. */
-				#header,#mainmenu,.navbar,.mainmenu{position:relative;z-index:10000}
-				#header .dropdown-menu,#mainmenu .dropdown-menu,.navbar .dropdown-menu,.mainmenu .dropdown-menu{z-index:10001}
+				.myupdate-page{max-width:1180px;margin:0 auto;padding-bottom:32px}
+				.myupdate-hero{position:static!important;top:auto!important;z-index:auto!important}
 				.myupdate-hero{display:flex;align-items:center;gap:18px;margin:4px 0 22px;padding:22px 24px;border:1px solid var(--border-color-medium,#d7dee7);border-radius:12px;background:linear-gradient(115deg,var(--background-color-high,#fff),var(--background-color,#f5f7fa));}
 				.myupdate-hero-mark{display:flex;align-items:center;justify-content:center;flex:0 0 58px;height:58px;border-radius:14px;background:var(--primary-color,#2563eb);color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;box-shadow:0 5px 16px rgba(37,99,235,.18)}
 				.myupdate-hero-copy{min-width:0}
@@ -540,7 +574,7 @@ return view.extend({
 			`);
 			return E('div', { 'class': 'cbi-map myupdate-page' }, [
 				style,
-				E('header', { 'class': 'myupdate-hero' }, [
+				E('div', { 'class': 'myupdate-hero' }, [
 					E('div', { 'class': 'myupdate-hero-mark', 'aria-hidden': 'true' }, 'OTA'),
 					E('div', { 'class': 'myupdate-hero-copy' }, [
 						E('span', { 'class': 'myupdate-hero-eyebrow' }, _('SYSTEM MAINTENANCE')),
@@ -551,7 +585,7 @@ return view.extend({
 				statusPanel,
 				E('div', { 'class': 'myupdate-settings-intro' }, [
 					E('h3', _('升级设置')),
-					E('p', _('配置更新来源、检查策略、验证密钥与配置保留规则。修改完成后，请使用页面底部的“保存并应用”提交设置。'))
+					E('p', _('配置更新来源、检查策略和验证密钥后，请使用页面底部的“保存并应用”提交；自定义保留路径在点击“添加”或删除时立即保存。'))
 				]),
 				mapNode
 			]);
