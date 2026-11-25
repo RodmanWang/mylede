@@ -121,6 +121,8 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("verify.load(CONFIG)", rpc)
         self.assertIn("method: 'set_allow_downgrade'", view)
         self.assertIn("result.allow_downgrade", view)
+        self.assertIn("return callConfig().then(function(config)", view)
+        self.assertIn("confirmed_by_readback", view)
         self.assertNotIn("return callConfig();", view)
         self.assertIn("降级设置回读不一致", view)
         self.assertIn('"set_allow_downgrade"', acl)
