@@ -194,6 +194,14 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("MYLEDE_BUILD_COMMIT", workflow)
 
 
+    def test_minisign_release_discovery_uses_git_not_github_rest_api(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('git -C "$MINISIGN_REPO" ls-remote --tags --refs origin', workflow)
+        self.assertIn('MINISIGN_TAGS="$RUNNER_TEMP/minisign-tags.txt"', workflow)
+        self.assertIn('No stable numeric minisign version tags were found via Git.', workflow)
+        self.assertNotIn("api.github.com/repos/jedisct1/minisign/releases/latest", workflow)
+        self.assertNotIn("MINISIGN_RELEASE_API", workflow)
+
     def test_minisign_archive_is_built_from_git_and_reused_by_firmware_job(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)
@@ -207,7 +215,6 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('shutil.copyfile(archive, target)', workflow)
         self.assertLess(workflow.index('path: /home/ubuntu/dl'), workflow.index('已安装并校验预检阶段锁定的 minisign 源码归档'))
         self.assertIn('tarfile.open(archive, "r:gz")', workflow)
-
 
     def test_source_lock_validates_git_commits_and_minisign_archive_digest_separately(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
