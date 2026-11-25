@@ -1497,6 +1497,33 @@ jobs:
           SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
           LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
           OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
+          # Read effective partition sizes from the exact manifest that will be signed
+          # and published; do not reconstruct them from workflow inputs or defaults.
+          mapfile -t PARTITION_VALUES < <(python3 - release-input/manifest.json <<'PY'
+          import json, sys
+          manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+          layout = manifest.get("partition_layout") or {}
+          upstream = layout.get("upstream_defaults_mib") or {}
+          values = [
+              layout.get("kernel_partsize_mib"),
+              layout.get("rootfs_partsize_mib"),
+              upstream.get("kernel_partsize"),
+              upstream.get("rootfs_partsize"),
+          ]
+          if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in values):
+              raise SystemExit(f"Manifest 分区布局字段无效：{values!r}")
+          for value in values:
+              print(value)
+          PY
+          )
+          if (( ${#PARTITION_VALUES[@]} != 4 )); then
+            echo "::error::无法从 Manifest 读取完整的实际分区大小和上游默认值。"
+            exit 1
+          fi
+          KERNEL_PARTSIZE="${PARTITION_VALUES[0]}"
+          ROOTFS_PARTSIZE="${PARTITION_VALUES[1]}"
+          UPSTREAM_KERNEL_PARTSIZE="${PARTITION_VALUES[2]}"
+          UPSTREAM_ROOTFS_PARTSIZE="${PARTITION_VALUES[3]}"
 
           cat > release-input/release-notes.md <<EOF
           MyLEDE x86-64 固件自动编译发布。
@@ -1505,6 +1532,12 @@ jobs:
           - 固件文件：$(basename "$IMAGE")
           - 发布清单：manifest.json
           - 清单签名：manifest.minisig
+
+          ### 本次固件分区布局
+
+          - 内核分区大小：**${KERNEL_PARTSIZE} MiB**
+          - 根文件系统分区大小：**${ROOTFS_PARTSIZE} MiB**
+          - 上游源码默认值：内核 **${UPSTREAM_KERNEL_PARTSIZE} MiB**，根文件系统 **${UPSTREAM_ROOTFS_PARTSIZE} MiB**
 
           ### 本次编译使用的源码版本
 
