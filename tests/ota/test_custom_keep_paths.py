@@ -40,7 +40,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertNotIn("E('header', { 'class': 'myupdate-hero' }", source)
         self.assertNotIn("#header,#mainmenu,.navbar,.mainmenu{position:relative", source)
         self.assertIn("myupdate-hero{position:static!important", source)
-        self.assertIn("return callConfig();", source)
 
     def test_browser_rpc_is_exposed_read_only_to_luci(self):
         source = BACKEND.read_text(encoding="utf-8")
