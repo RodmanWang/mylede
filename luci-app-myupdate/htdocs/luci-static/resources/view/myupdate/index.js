@@ -394,7 +394,7 @@ return view.extend({
 				}).catch(function(error) {
 					control.checked = previous;
 					notify(error && error.message ? error.message : String(error), 'error');
-				})}).then(function() { control.disabled = false; });
+				}).then(function() { control.disabled = false; });
 			}
 		});
 		var downgradeLabel = E('label', { 'class': 'myupdate-downgrade-toggle' }, [ downgradeCheckbox, E('span', {}, _('允许降级')) ]);
