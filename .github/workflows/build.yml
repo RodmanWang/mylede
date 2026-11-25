@@ -247,7 +247,7 @@ jobs:
               tag = fields[1][len("refs/tags/"):]
               # Accept plain numeric stable tags (e.g. 0.11 or v0.11), and
               # deliberately exclude prerelease/build-suffix tags.
-              match = re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\\.(0|[1-9][0-9]*))+(?:\\.(0|[1-9][0-9]*))*", tag)
+              match = re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))+(?:\.(0|[1-9][0-9]*))*", tag)
               if not match:
                   continue
               numbers = tuple(int(part) for part in tag.removeprefix("v").split("."))
