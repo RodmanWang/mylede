@@ -216,6 +216,8 @@ function set_allow_downgrade(args) {
 }
 function save_keep_paths(args) {
 	let c = cursor();
+	if (c.load(CONFIG) !== true)
+		return { ok: false, error: '无法加载当前保留路径配置：' + (uci.error() || '未知 UCI 错误') };
 	let existing = current_keep_path_set(c);
 	let paths = parse_keep_paths(args.custom_keep_paths, existing);
 	if (paths == null)
