@@ -1,0 +1,13 @@
+{
+  "admin/system/myupdate": {
+    "title": "固件在线升级",
+    "order": 90,
+    "action": {
+      "type": "view",
+      "path": "myupdate/index"
+    },
+    "depends": {
+      "acl": [ "luci-app-myupdate" ]
+    }
+  }
+}

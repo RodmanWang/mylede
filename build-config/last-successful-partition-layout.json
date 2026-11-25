@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kernel_partsize_mib": 256,
+  "rootfs_partsize_mib": 4096,
+  "upstream_defaults_mib": {
+    "kernel_partsize": 64,
+    "rootfs_partsize": 448
+  },
+  "manifest_tag": "mylede-v20261125224352",
+  "manifest_version": "20261125224352",
+  "manifest_schema_version": 2
+}
