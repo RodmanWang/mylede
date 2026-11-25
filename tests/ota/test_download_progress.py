@@ -116,8 +116,11 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';", rpc)
         self.assertIn("function set_allow_downgrade(args)", rpc)
         self.assertIn("c.commit(CONFIG) !== true", rpc)
+        self.assertIn("let verify = cursor();", rpc)
         self.assertIn("saved != value", rpc)
         self.assertIn("method: 'set_allow_downgrade'", view)
+        self.assertIn("return callConfig();", view)
+        self.assertIn("降级设置回读不一致", view)
         self.assertIn('"set_allow_downgrade"', acl)
         self.assertIn("'checked': (cfg.allow_downgrade || '0') == '1'", view)
         self.assertIn("myupdate-downgrade-row", view)
@@ -139,11 +142,12 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertLess(row.index("下载并验证"), row.index("执行升级"))
 
 
-    def test_luci_global_navigation_dropdowns_stay_above_myupdate_content(self):
+    def test_myupdate_hero_does_not_stick_over_scrolled_page_content(self):
         view = VIEW.read_text(encoding="utf-8")
-        self.assertIn(".myupdate-page{position:relative;z-index:0", view)
-        self.assertIn("#header,#mainmenu,.navbar,.mainmenu{position:relative;z-index:10000}", view)
-        self.assertIn(".dropdown-menu{z-index:10001}", view)
+        self.assertIn("E('div', { 'class': 'myupdate-hero' }", view)
+        self.assertIn(".myupdate-hero{position:static!important", view)
+        self.assertNotIn("#header,#mainmenu,.navbar,.mainmenu{position:relative;z-index:10000}", view)
+        self.assertNotIn(".dropdown-menu{z-index:10001}", view)
 
 
     def test_allow_downgrade_defaults_to_disabled_in_shipped_uci_and_rpc(self):
