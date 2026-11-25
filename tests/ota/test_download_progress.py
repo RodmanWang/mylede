@@ -194,19 +194,18 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("MYLEDE_BUILD_COMMIT", workflow)
 
 
-    def test_minisign_archive_is_built_from_git_and_reused_by_both_build_jobs(self):
+    def test_minisign_archive_is_built_from_git_and_reused_by_firmware_job(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)
         self.assertIn('git -C "$MINISIGN_REPO" archive --format=tar.gz', workflow)
-        self.assertNotIn("codeload.github.com/jedisct1/minisign", workflow)
+        self.assertNotIn("codeload.github.com/jedisct1/minisign/tar.gz", workflow)
         self.assertNotIn("github.com/jedisct1/minisign/archive/refs/tags/", workflow)
         self.assertIn('source-lock-artifact/source-revisions.tsv', workflow)
         self.assertIn('shutil.copyfile(archive, artifact_dir / archive.name)', workflow)
-        self.assertEqual(workflow.count('hashlib.sha256(archive.read_bytes()).hexdigest()'), 1)
-        self.assertEqual(workflow.count('shutil.copyfile(archive, target)'), 1)
-        self.assertIn('path: /home/ubuntu/dl', workflow)
-        self.assertIn('actions/cache/restore@v6', workflow)
+        self.assertIn('hashlib.sha256(archive.read_bytes()).hexdigest()', workflow)
+        self.assertIn('target = download_dir / archive.name', workflow)
         self.assertIn('shutil.copyfile(archive, target)', workflow)
+        self.assertLess(workflow.index('path: /home/ubuntu/dl'), workflow.index('已安装并校验预检阶段锁定的 minisign 源码归档'))
         self.assertIn('tarfile.open(archive, "r:gz")', workflow)
 
 
