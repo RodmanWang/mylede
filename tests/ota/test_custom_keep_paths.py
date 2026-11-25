@@ -54,6 +54,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
     def test_keep_paths_are_server_validated_and_symlink_safe(self):
         source = BACKEND.read_text(encoding="utf-8")
         backup = BACKUP.read_text(encoding="utf-8")
+        acl = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/acl.d/luci-app-myupdate.json").read_text(encoding="utf-8")
         self.assertIn("info.type != 'file' && info.type != 'directory'", source)
         self.assertIn("resolved != path", source)
         self.assertIn("function safe_missing_keep_path(path)", source)
