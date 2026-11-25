@@ -745,7 +745,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          python3 - "$RUNNER_TEMP/source-lock" /home/ubuntu/source-revisions.tsv /home/ubuntu/lede/dl <<'PY'
+          python3 - "$RUNNER_TEMP/source-lock" /home/ubuntu/source-revisions.tsv /home/ubuntu/dl <<'PY'
           import hashlib, re, shutil, sys
           from pathlib import Path
 
