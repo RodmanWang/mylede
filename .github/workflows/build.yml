@@ -314,12 +314,27 @@ jobs:
           set -Eeuo pipefail
           mkdir -p "$RUNNER_TEMP/source-lock-artifact"
           install -m 0644 "$RUNNER_TEMP/source-revisions.tsv" "$RUNNER_TEMP/source-lock-artifact/source-revisions.tsv"
-          MINISIGN_VERSION="$(awk -F '\\t' '$1 == "MINISIGN_RELEASE" { print $3; exit }' "$RUNNER_TEMP/source-revisions.tsv")"
-          [[ "$MINISIGN_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || {
-            echo '::error::源码锁定清单中的 minisign 版本号无效。'
-            exit 1
-          }
-          install -m 0644 "$RUNNER_TEMP/minisign-${MINISIGN_VERSION}.tar.gz" "$RUNNER_TEMP/source-lock-artifact/"
+          python3 - "$RUNNER_TEMP/source-revisions.tsv" "$RUNNER_TEMP" "$RUNNER_TEMP/source-lock-artifact" <<'PY'
+          import re, shutil, sys
+          from pathlib import Path
+
+          lock_path, temp_dir, artifact_dir = map(Path, sys.argv[1:])
+          entries = [
+              line.split("\\t")
+              for line in lock_path.read_text(encoding="utf-8").splitlines()
+              if line.startswith("MINISIGN_RELEASE\\t")
+          ]
+          if len(entries) != 1 or len(entries[0]) != 4:
+              raise SystemExit("源码锁定清单必须且只能包含一条有效的 MINISIGN_RELEASE")
+          version = entries[0][2]
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", version):
+              raise SystemExit(f"无效的 minisign 版本号：{version!r}")
+          archive = temp_dir / f"minisign-{version}.tar.gz"
+          if not archive.is_file() or archive.stat().st_size == 0:
+              raise SystemExit(f"预检生成的 minisign 源码归档不存在或为空：{archive}")
+          shutil.copyfile(archive, artifact_dir / archive.name)
+          print(f"已将 minisign {version} 源码归档加入不可变源码工件")
+          PY
 
       - name: 上传不可变源码锁定清单和 minisign 源码归档
         uses: actions/upload-artifact@v7
