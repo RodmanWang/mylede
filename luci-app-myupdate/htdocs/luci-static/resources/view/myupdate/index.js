@@ -7,7 +7,7 @@
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
 var callListKeepPaths = rpc.declare({ object: 'myupdate', method: 'list_keep_paths', params: [ 'path' ] });
-var callSaveKeepPaths = rpc.declare({ object: 'myupdate', method: 'save_config', params: [ 'custom_keep_paths' ] });
+var callSaveKeepPaths = rpc.declare({ object: 'myupdate', method: 'save_keep_paths', params: [ 'custom_keep_paths' ] });
 var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'set_allow_downgrade', params: [ 'allow_downgrade' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
