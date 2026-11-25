@@ -418,6 +418,10 @@ return view.extend({
 				}).then(function() { control.disabled = false; });
 			}
 		});
+		// Set both live and default DOM state explicitly. This also prevents
+		// browsers restoring an old checkbox state after a page reload.
+		downgradeCheckbox.checked = String(cfg.allow_downgrade ?? '0') == '1';
+		downgradeCheckbox.defaultChecked = downgradeCheckbox.checked;
 		var downgradeLabel = E('label', { 'class': 'myupdate-downgrade-toggle' }, [ downgradeCheckbox, E('span', {}, _('允许降级')) ]);
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [

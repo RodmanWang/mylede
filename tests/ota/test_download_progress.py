@@ -113,6 +113,7 @@ class DownloadProgressContractTests(unittest.TestCase):
         rpc = RPC.read_text(encoding="utf-8")
         view = VIEW.read_text(encoding="utf-8")
         acl = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/acl.d/luci-app-myupdate.json").read_text(encoding="utf-8")
+        self.assertIn("if (c.load(CONFIG) !== true)", rpc.split("function get_config()", 1)[1].split("function valid_string", 1)[0])
         self.assertIn("out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';", rpc)
         self.assertIn("function set_allow_downgrade(args)", rpc)
         self.assertIn("c.commit(CONFIG) !== true", rpc)

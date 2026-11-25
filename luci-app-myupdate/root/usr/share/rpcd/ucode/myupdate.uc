@@ -34,6 +34,10 @@ function read_status() {
 }
 function get_config() {
 	let c = cursor(), out = {};
+	// rpcd may keep the ucode module alive across calls. Explicitly reload the
+	// committed UCI file so the LuCI page never renders a stale cached value.
+	if (c.load(CONFIG) !== true)
+		return { config_error: '无法重新加载 MyUpdate 配置：' + (uci.error() || '未知 UCI 错误') };
 	for (let key in [ 'repo_url', 'repo_owner', 'repo_name', 'repo_visibility', 'release_channel', 'upgrade_mode',
 		'check_interval', 'auto_upgrade_time', 'minisign_public_key', 'allow_downgrade' ])
 		out[key] = c.get(CONFIG, 'main', key) ?? '';
@@ -211,10 +215,13 @@ function set_allow_downgrade(args) {
 	return { ok: true, allow_downgrade: String(saved) };
 }
 function save_keep_paths(args) {
-	let paths = parse_keep_paths(args.custom_keep_paths, current_keep_path_set(c));
+	let c = cursor();
+	if (c.load(CONFIG) !== true)
+		return { ok: false, error: '无法加载当前保留路径配置：' + (uci.error() || '未知 UCI 错误') };
+	let existing = current_keep_path_set(c);
+	let paths = parse_keep_paths(args.custom_keep_paths, existing);
 	if (paths == null)
 		return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
-	let c = cursor();
 	// Store paths as native UCI list entries. set_list([]) removes the option,
 	// so deleting the final chip really clears the configuration.
 	let changed = length(paths)
