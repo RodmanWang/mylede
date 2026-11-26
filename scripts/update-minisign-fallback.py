@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-VERSION_RE = re.compile(r"v?(0|[1-9][0-9]*)(?:\\.(0|[1-9][0-9]*))+(?:\\.(0|[1-9][0-9]*))*")
+VERSION_RE = re.compile(r"v?(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))+(?:\.(0|[1-9][0-9]*))*")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -66,7 +66,7 @@ def main() -> int:
             )
         if current_version != new_version:
             updated = replace_once(
-                original, r"(?m)^(PKG_VERSION:=).*$", rf"\\g<1>{new_version}", "PKG_VERSION"
+                original, r"(?m)^(PKG_VERSION:=).*$", rf"\g<1>{new_version}", "PKG_VERSION"
             )
             makefile_path.write_text(updated, encoding="utf-8")
             print(f"已规范化 Minisign 托底版本标签：{current_version} -> {new_version}")
@@ -75,10 +75,10 @@ def main() -> int:
         return 0
 
     updated = replace_once(
-        original, r"(?m)^(PKG_VERSION:=).*$", rf"\\g<1>{new_version}", "PKG_VERSION"
+        original, r"(?m)^(PKG_VERSION:=).*$", rf"\g<1>{new_version}", "PKG_VERSION"
     )
     updated = replace_once(
-        updated, r"(?m)^(PKG_HASH:=).*$", rf"\\g<1>{new_sha256}", "PKG_HASH"
+        updated, r"(?m)^(PKG_HASH:=).*$", rf"\g<1>{new_sha256}", "PKG_HASH"
     )
     makefile_path.write_text(updated, encoding="utf-8")
     print(
