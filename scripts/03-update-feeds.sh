@@ -273,7 +273,7 @@ force_sync_all_feeds() {
 
                         # 最后尝试查询远程默认分支
                         remote_head="$(
-                            git ls-remote --symref origin HEAD 2>/dev/null |
+                            git -C "$feed_dir" ls-remote --symref "$remote" HEAD 2>/dev/null |
                                 awk '$1 == "ref:" && $3 == "HEAD" {
                                     sub("refs/heads/", "", $2)
                                     print $2
