@@ -124,10 +124,13 @@ if not (x86_dir / f"config-{selected}").is_file():
 path, original = read("target/linux/x86/Makefile")
 lines = original.splitlines(keepends=True)
 for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
-    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*:?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
+    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*(?::|\?)?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
     matches = [i for i, line in enumerate(lines) if pattern.match(line)]
+    if not matches and variable == b"KERNEL_TESTING_PATCHVER":
+        print("上游未定义 KERNEL_TESTING_PATCHVER，保留其当前内核测试版本设置")
+        continue
     if len(matches) != 1:
-        raise RuntimeError(f"{variable.decode()} 定义数量不是 1，拒绝修改")
+        raise RuntimeError(f"{variable.decode()} 定义数量为 {len(matches)}，无法安全地唯一定位")
     i = matches[0]
     match = pattern.match(lines[i])
     lines[i] = match.group(1) + selected.encode() + match.group(2) + (match.group(3) or b"")
