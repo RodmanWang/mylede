@@ -1486,38 +1486,30 @@ jobs:
               for chunk in iter(lambda: stream.read(1024 * 1024), b''):
                   digest.update(chunk)
 
+          sources = {}
+          for source in meta['source_repositories'].values():
+              url = source['url']
+              match = re.fullmatch(r'https://github\\.com/([^/]+/[^/]+?)(?:\\.git)?', url)
+              if not match:
+                  raise SystemExit(f'Invalid locked GitHub repository URL in build metadata: {url!r}')
+              repository = match.group(1)
+              commit = source['commit']
+              ref = source['ref']
+              if not re.fullmatch(r'[0-9a-f]{40}', commit):
+                  raise SystemExit(f'Invalid full source commit SHA for {repository}: {commit!r}')
+              display_ref = ref.removeprefix('refs/heads/') if ref.startswith('refs/heads/') else ref
+              sources[repository] = {
+                  'ref': f'{display_ref} (preflight-locked)',
+                  'commit': commit,
+                  'short_commit': commit[:7],
+              }
           manifest = {
               'schema_version': 2,
               'version': meta['version'],
               'tag': meta['tag'],
               'channel': 'stable',
-              'sources': {
-                  'coolsnowwolf/lede': {
-                      'ref': f"{meta['lede_ref']} (preflight-locked)",
-                      'commit': meta['lede_commit'],
-                      'short_commit': meta['lede_commit'][:7]
-                  },
-                  'pymumu/smartdns': {
-                      'ref': 'HEAD (preflight-locked)',
-                      'commit': meta['sources']['smartdns'],
-                      'short_commit': meta['sources']['smartdns'][:7]
-                  },
-                  'pymumu/smartdns-webui': {
-                      'ref': 'HEAD (preflight-locked)',
-                      'commit': meta['sources']['smartdns_webui'],
-                      'short_commit': meta['sources']['smartdns_webui'][:7]
-                  },
-                  'pymumu/luci-app-smartdns': {
-                      'ref': 'HEAD (preflight-locked)',
-                      'commit': meta['sources']['luci_app_smartdns'],
-                      'short_commit': meta['sources']['luci_app_smartdns'][:7]
-                  },
-                  'vernesong/OpenClash': {
-                      'ref': 'dev (preflight-locked)',
-                      'commit': meta['sources']['openclash'],
-                      'short_commit': meta['sources']['openclash'][:7]
-                  }
-              },
+              'sources': sources,
+              'source_repositories': meta['source_repositories'],
               'partition_layout': meta['partition_layout'],
               'compatibility': {
                   'target': target,
