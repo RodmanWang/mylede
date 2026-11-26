@@ -20,6 +20,9 @@ jobs:
 
       - name: Test version ordering and Tag contract
         run: python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
+ 
+      - name: Test source lock and release metadata contracts
+        run: python3 -m unittest discover -s tests/ci -p 'test_*.py' -v
 
       - name: Install Minisign for device verifier integration test
         run: |
