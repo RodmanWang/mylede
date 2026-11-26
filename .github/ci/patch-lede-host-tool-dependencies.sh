@@ -30,9 +30,10 @@ anchor, dependency = sys.argv[2:]
 text = path.read_text(encoding="utf-8")
 
 count = sum(line.strip() == anchor for line in text.splitlines())
-if text.splitlines().count(dependency) > 1:
+dependency_count = sum(line.strip() == dependency for line in text.splitlines())
+if dependency_count > 1:
     raise SystemExit("tools/Makefile 中 dwarves -> cmake 依赖重复，拒绝继续")
-if any(line.strip() == dependency for line in text.splitlines()):
+if dependency_count == 1:
     print("LEDE dwarves -> cmake 构建依赖已存在，无需修改")
 elif count != 1:
     raise SystemExit(
