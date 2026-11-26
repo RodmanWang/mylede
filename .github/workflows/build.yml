@@ -154,18 +154,23 @@ jobs:
             exit 1
           fi
 
-          # Fetch the exact pinned Git object instead of relying on
-          # raw.githubusercontent.com, which returned HTTP 403 on this runner.
-          FEEDS_FILE="$RUNNER_TEMP/feeds.conf.default"
-          LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-feeds-preflight"
-          git init "$LEDE_PREFLIGHT_REPO"
-          git -C "$LEDE_PREFLIGHT_REPO" remote add origin "$LEDE_URL"
-          git -C "$LEDE_PREFLIGHT_REPO" \
-            -c http.lowSpeedLimit=1000 \
-            -c http.lowSpeedTime=30 \
-            fetch --no-tags --depth=1 origin "$LEDE_COMMIT"
-          git -C "$LEDE_PREFLIGHT_REPO" show FETCH_HEAD:feeds.conf.default > "$FEEDS_FILE"
-          [[ -s "$FEEDS_FILE" ]] || { echo '::error::从锁定的 LEDE Git 提交读取 feeds.conf.default 失败或文件为空。'; exit 1; }
+          # Clone the complete LEDE source tree first. All subsequent feed/plugin
+          # discovery and upstream revision checks are based on this checkout.
+          # The exact commit is pinned even if master moves between ls-remote and clone.
+          LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-preflight"
+          git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
+            clone --depth=1 --single-branch --branch master "$LEDE_URL" "$LEDE_PREFLIGHT_REPO"
+          if [[ "$(git -C "$LEDE_PREFLIGHT_REPO" rev-parse HEAD)" != "$LEDE_COMMIT" ]]; then
+            git -C "$LEDE_PREFLIGHT_REPO" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
+              fetch --no-tags --depth=1 origin "$LEDE_COMMIT"
+            git -C "$LEDE_PREFLIGHT_REPO" reset --hard "$LEDE_COMMIT"
+          fi
+          [[ "$(git -C "$LEDE_PREFLIGHT_REPO" rev-parse HEAD)" == "$LEDE_COMMIT" ]] || {
+            echo '::error::完整 LEDE 源码未能固定到预检提交。'
+            exit 1
+          }
+          FEEDS_FILE="$LEDE_PREFLIGHT_REPO/feeds.conf.default"
+          [[ -s "$FEEDS_FILE" ]] || { echo '::error::锁定的 LEDE 工作树中 feeds.conf.default 不存在或为空。'; exit 1; }
           FEEDS_SHA256="$(sha256sum "$FEEDS_FILE" | awk '{print $1}')"
 
           python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" <<'PY'
