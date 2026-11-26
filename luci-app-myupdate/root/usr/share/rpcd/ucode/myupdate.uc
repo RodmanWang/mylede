@@ -197,52 +197,6 @@ function save_config(args) {
 	}
 	return { ok: true };
 }
-function set_allow_downgrade(args) {
-	let value = args.allow_downgrade;
-	if (value != '0' && value != '1')
-		return { ok: false, error: '允许降级设置无效，只能为 0 或 1' };
-	let c = cursor();
-	if (c.set(CONFIG, 'main', 'allow_downgrade', value) !== true)
-		return { ok: false, error: '无法写入允许降级设置：' + (uci.error() || 'UCI set 失败') };
-	if (c.commit(CONFIG) !== true)
-		return { ok: false, error: '保存降级设置失败：' + (uci.error() || '未知 UCI 错误') };
-	let verify = cursor();
-	if (verify.load(CONFIG) !== true)
-		return { ok: false, error: '降级设置已提交，但无法重新加载配置核实：' + (uci.error() || '未知 UCI 错误') };
-	let saved = verify.get(CONFIG, 'main', 'allow_downgrade');
-	if (String(saved) != value)
-		return { ok: false, error: '降级设置写入后回读不一致（读取值：' + String(saved) + '）' };
-	return { ok: true, allow_downgrade: String(saved) };
-}
-function save_keep_paths(args) {
-	let c = cursor();
-	if (c.load(CONFIG) !== true)
-		return { ok: false, error: '无法加载当前保留路径配置：' + (uci.error() || '未知 UCI 错误') };
-	let existing = current_keep_path_set(c);
-	let paths = parse_keep_paths(args.custom_keep_paths, existing);
-	if (paths == null)
-		return { ok: false, error: '自定义保留路径格式无效：请使用绝对路径，每行一条，不要填写根目录或虚拟文件系统路径' };
-	// Store paths as native UCI list entries. set_list([]) removes the option,
-	// so deleting the final chip really clears the configuration.
-	let changed = length(paths)
-		? c.set(CONFIG, 'main', 'custom_keep_paths', paths)
-		: c.delete(CONFIG, 'main', 'custom_keep_paths');
-	if (changed !== true)
-		return { ok: false, error: '无法写入自定义保留路径列表：' + (uci.error() || 'UCI 列表更新失败') };
-	if (c.commit(CONFIG) !== true)
-		return { ok: false, error: '保存自定义保留路径失败：' + (uci.error() || '未知 UCI 错误') };
-	let verify = cursor();
-	if (verify.load(CONFIG) !== true)
-		return { ok: false, error: '路径已提交，但无法重新加载配置核实：' + (uci.error() || '未知 UCI 错误') };
-	let raw = verify.get(CONFIG, 'main', 'custom_keep_paths');
-	let saved = type(raw) == 'array' ? raw : [];
-	if (length(saved) != length(paths))
-		return { ok: false, error: '路径保存后回读数量不一致' };
-	for (let i = 0; i < length(paths); i++)
-		if (saved[i] != paths[i])
-			return { ok: false, error: '路径保存后回读内容不一致' };
-	return { ok: true, custom_keep_paths: saved };
-}
 function set_token(args) {
 	let token = args.token;
 	if (!valid_string(token, 512) || !/^(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]+)$/.test(token))
@@ -303,8 +257,6 @@ function start_task(action) {
 return { myupdate: {
 	get_status: { call: function() { return read_status(); } },
 	get_config: { call: function() { return get_config(); } },
-	set_allow_downgrade: { args: { allow_downgrade: 'String' }, call: function(request) { return set_allow_downgrade(request.args); } },
-	save_keep_paths: { args: { custom_keep_paths: 'String' }, call: function(request) { return save_keep_paths(request.args); } },
 	list_keep_paths: { args: { path: 'String' }, call: function(request) { return list_keep_paths(request.args.path); } },
 	save_config: { args: { repo_url: 'String', repo_owner: 'String', repo_name: 'String', repo_visibility: 'String', release_channel: 'String',
 		upgrade_mode: 'String', check_interval: 'String', auto_upgrade_time: 'String', minisign_public_key: 'String', allow_downgrade: 'String',
