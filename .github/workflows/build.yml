@@ -344,9 +344,9 @@ jobs:
             "$MINISIGN_VERSION" "$MINISIGN_SHA256" >> "$RUNNER_TEMP/source-revisions.tsv"
           echo "已锁定 minisign 最新正式 Release：$MINISIGN_VERSION（SHA-256: $MINISIGN_SHA256）"
 
-          # The successful-build persistence commit only updates the remembered
-          # partition defaults and workflow_dispatch form hints. Walk through
-          # consecutive such commits so that this metadata-only commit does
+          # The successful-build persistence commit updates remembered partition defaults,
+          # workflow_dispatch hints, and the Minisign fallback. Walk through
+          # consecutive metadata-only commits so that they do
           # not force an otherwise identical scheduled build to rebuild.
           MYLEDE_BUILD_COMMIT="$GITHUB_SHA"
           while [[ "$(git log -1 --format=%s "$MYLEDE_BUILD_COMMIT")" == "ci(build): remember last successful firmware partition layout" ]]; do
@@ -1677,7 +1677,7 @@ jobs:
             --notes-file release-input/release-notes.md \
             --latest
 
-      - name: 保存本次成功固件分区值，更新下次编译默认值和表单提示
+      - name: 保存成功构建元数据并更新 Minisign 托底版本
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -1689,9 +1689,13 @@ jobs:
             release-input/manifest.json \
             build-config/last-successful-partition-layout.json \
             .github/workflows/build.yml
+          # Only a successfully compiled, signed, validated and published firmware
+          # may advance the standalone Minisign fallback used without a CI lock.
+          python3 scripts/update-minisign-fallback.py \
+            release-input/manifest.json minisign/Makefile
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build-config/last-successful-partition-layout.json .github/workflows/build.yml
+          git add build-config/last-successful-partition-layout.json .github/workflows/build.yml minisign/Makefile
           if ! git diff --cached --quiet; then
             git commit -m "ci(build): remember last successful firmware partition layout"
             git push origin "HEAD:${GITHUB_REF}"
