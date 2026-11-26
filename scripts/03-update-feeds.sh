@@ -462,81 +462,68 @@ fi
 # ============================================================
 
 echo
+echo "========== 移除官方 OpenClash 和 SmartDNS 重复源码及安装链接 =========="
+
+# 官方重复源码目录
+UPSTREAM_OC="$TOPDIR/feeds/luci/applications/luci-app-openclash"
+UPSTREAM_SMARTDNS_LUCI="$TOPDIR/feeds/luci/applications/luci-app-smartdns"
+UPSTREAM_SMARTDNS="$TOPDIR/feeds/packages/net/smartdns"
+
+# 官方软件包安装链接
+UPSTREAM_OC_LINK="$TOPDIR/package/feeds/luci/luci-app-openclash"
+UPSTREAM_SMARTDNS_LUCI_LINK="$TOPDIR/package/feeds/luci/luci-app-smartdns"
+UPSTREAM_SMARTDNS_LINK="$TOPDIR/package/feeds/packages/smartdns"
+
+# 删除官方重复源码目录
+for path in \
+    "$UPSTREAM_OC" \
+    "$UPSTREAM_SMARTDNS_LUCI" \
+    "$UPSTREAM_SMARTDNS"; do
+
+    if [[ -L "$path" ]]; then
+
+        echo "移除官方源码软链接：$path"
+        rm -- "$path"
+
+    elif [[ -d "$path" ]]; then
+
+        echo "删除官方重复源码目录：$path"
+        rm -rf -- "$path"
+
+    elif [[ -e "$path" ]]; then
+
+        echo "错误：官方源码路径不是目录：$path" >&2
+        exit 1
+
+    fi
+
+done
+
+# 删除官方软件包安装链接
+for path in \
+    "$UPSTREAM_OC_LINK" \
+    "$UPSTREAM_SMARTDNS_LUCI_LINK" \
+    "$UPSTREAM_SMARTDNS_LINK"; do
+
+    if [[ -L "$path" ]]; then
+
+        echo "移除官方安装链接：$path"
+        rm -- "$path"
+
+    elif [[ -e "$path" ]]; then
+
+        echo "错误：官方安装路径不是软链接，为避免误删停止操作：$path" >&2
+        exit 1
+
+    fi
+
+done
+
+# ============================================================
+# 安装所有 feeds 软件包
+# ============================================================
+
 echo
-echo "========== 动态发现并移除与自定义包冲突的上游源码 =========="
-
-python3 - "$TOPDIR" <<'PY'
-from pathlib import Path
-import os
-import re
-import shutil
-import sys
-
-topdir = Path(sys.argv[1]).resolve()
-feeds_root = topdir / "feeds"
-installed_root = topdir / "package" / "feeds"
-
-# Package source paths are discovered from the checked-out feed Makefiles.
-# Do not assume that LuCI or packages keeps a particular directory layout.
-targets = {
-    "luci-app-openclash": {"exclude_feeds": {"OpenClash"}},
-    "luci-app-smartdns": {"exclude_feeds": set()},
-    "smartdns": {"exclude_feeds": set()},
-}
-
-package_patterns = {
-    name: re.compile(
-        rb"^[ \t]*(?:define[ \t]+Package/" + re.escape(name.encode()) +
-        rb"(?:/[A-Za-z0-9_.+-]+)?[ \t]*$|PKG_NAME[ \t]*[:?+]?=[ \t]*" +
-        re.escape(name.encode()) + rb"[ \t]*$)",
-        re.MULTILINE,
-    )
-    for name in targets
-}
-
-matches = {name: [] for name in targets}
-for current_root, directories, filenames in os.walk(feeds_root, followlinks=False):
-    directories[:] = [name for name in directories if name != ".git"]
-    if "Makefile" not in filenames:
-        continue
-    makefile = Path(current_root) / "Makefile"
-    relative = makefile.relative_to(feeds_root)
-    if not relative.parts:
-        continue
-    feed_name = relative.parts[0]
-    content = makefile.read_bytes()
-    for package_name, settings in targets.items():
-        if feed_name in settings["exclude_feeds"]:
-            continue
-        if package_patterns[package_name].search(content):
-            matches[package_name].append(makefile.parent.absolute())
-
-for package_name, directories in matches.items():
-    unique = sorted(set(directories))
-    print(f"{package_name}: 动态发现 {len(unique)} 个上游包目录")
-    for package_dir in unique:
-        # Remove only feed-install symlinks that resolve to this exact source.
-        if installed_root.exists():
-            for link in installed_root.rglob(package_name):
-                if not link.is_symlink():
-                    continue
-                if os.path.realpath(link) == os.path.realpath(package_dir):
-                    print(f"移除 feed 安装链接：{link}")
-                    link.unlink()
-        if package_dir.is_symlink():
-            print(f"移除上游源码软链接：{package_dir}")
-            package_dir.unlink()
-        elif package_dir.is_dir():
-            print(f"移除上游重复源码目录：{package_dir}")
-            shutil.rmtree(package_dir)
-        elif package_dir.exists():
-            raise SystemExit(f"上游包路径不是目录，拒绝删除：{package_dir}")
-
-# Keep the custom OpenClash feed intact; only duplicate copies from other
-# feeds are removed. The explicit install below selects that configured feed.
-PY
-
-
 echo "========== 安装所有 feeds 软件包 =========="
 
 echo "提示：开始安装所有 feeds 中的软件包链接。"
