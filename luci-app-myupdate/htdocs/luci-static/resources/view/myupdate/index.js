@@ -551,7 +551,7 @@ return view.extend({
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
 					.myupdate-key-convert .btn{width:auto}
-					.myupdate-path-manual-add{align-self:flex-end}
+					.myupdate-path-manual-add{align-self:center}
 					.myupdate-browser-toolbar{align-items:flex-start;flex-direction:column}
 				}
 				@media(max-width:420px){
