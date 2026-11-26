@@ -7,8 +7,6 @@
 var callStatus = rpc.declare({ object: 'myupdate', method: 'get_status' });
 var callConfig = rpc.declare({ object: 'myupdate', method: 'get_config' });
 var callListKeepPaths = rpc.declare({ object: 'myupdate', method: 'list_keep_paths', params: [ 'path' ] });
-var callSaveKeepPaths = rpc.declare({ object: 'myupdate', method: 'save_keep_paths', params: [ 'custom_keep_paths' ] });
-var callSaveDowngrade = rpc.declare({ object: 'myupdate', method: 'set_allow_downgrade', params: [ 'allow_downgrade' ] });
 var callToken = rpc.declare({ object: 'myupdate', method: 'set_token', params: [ 'token' ] });
 var callCheck = rpc.declare({ object: 'myupdate', method: 'start_check' });
 var callDownload = rpc.declare({ object: 'myupdate', method: 'start_download' });
@@ -200,9 +198,6 @@ return view.extend({
 		keepPaths.rmempty = true;
 		keepPaths.cfgvalue = function() { return keepPathValues.slice(); };
 		keepPaths.formvalue = function() { return keepPathValues.slice(); };
-		// Custom editor changes are persisted immediately by Add/Remove. Do not
-		// let LuCI's generic form save overwrite the independently committed list.
-		keepPaths.write = function() { return Promise.resolve(); };
 		keepPaths.validate = function(section_id, values) {
 			var paths = Array.isArray(values) ? values : keepPathValues;
 			for (var i = 0; i < paths.length; i++) {
@@ -214,7 +209,7 @@ return view.extend({
 			}
 			return true;
 		};
-		keepPaths.description = _('可手动输入绝对路径，也可展开设备文件浏览器逐层选择文件或目录。点击“添加”或删除路径后会立即保存；符号链接、特殊文件和系统虚拟目录不会加入保留列表。');
+		keepPaths.description = _('可手动输入绝对路径，也可展开设备文件浏览器逐层选择文件或目录。添加或删除仅暂存在当前页面，点击页面底部“保存并应用”后才写入配置；符号链接、特殊文件和系统虚拟目录不会加入保留列表。');
 		keepPaths.renderWidget = function(section_id) {
 			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
 			var chips = E('div', { 'class': 'myupdate-path-chips' });
@@ -224,30 +219,12 @@ return view.extend({
 			var browserPath = E('div', { 'class': 'myupdate-browser-path' }, '/');
 			var browserList = E('div', { 'class': 'myupdate-browser-list' });
 			var browserHint = E('div', { 'class': 'myupdate-browser-hint', 'aria-live': 'polite' });
-			var currentPath = '/', browserLoaded = false, browserBusy = false, keepPathSaving = false;
+			var currentPath = '/', browserLoaded = false, browserBusy = false;
 
-			function persistKeepPaths(paths, successMessage) {
-				if (keepPathSaving) {
-					message.textContent = _('正在保存自定义保留路径，请稍候。');
-					return Promise.resolve(false);
-				}
-				keepPathSaving = true;
-				return callSaveKeepPaths(paths.join('\n')).then(function(result) {
-					if (!result || !result.ok)
-						throw new Error(result && result.error ? result.error : _('自定义保留路径保存失败。'));
-					keepPathValues = paths.slice();
-					cfg.custom_keep_paths = keepPathValues.slice();
-					renderChips();
-					message.textContent = successMessage || _('自定义保留路径已保存。');
-					return true;
-				}).catch(function(error) {
-					message.textContent = _('保存失败：') + (error && error.message ? error.message : String(error));
-					return false;
-				}).then(function(saved) {
-					keepPathSaving = false;
-					renderChips();
-					return saved;
-				});
+			function stageKeepPaths(paths, successMessage) {
+				keepPathValues = paths.slice();
+				renderChips();
+				message.textContent = successMessage || _('路径修改已暂存；点击“保存并应用”后才会写入配置。');
 			}
 
 			function renderChips() {
@@ -258,7 +235,6 @@ return view.extend({
 						'class': 'btn cbi-button myupdate-path-chip-remove',
 						'aria-label': _('删除 ') + path,
 						'data-keep-path': path,
-						'disabled': keepPathSaving
 					}, '×');
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
 						E('span', { 'class': 'myupdate-path-chip-text' }, path),
@@ -276,17 +252,13 @@ return view.extend({
 				var remove = chip.querySelector('.myupdate-path-chip-remove');
 				if (!remove) return;
 				var hitRemove = ev.target == remove || remove.contains(ev.target);
-				if (!hitRemove && ev.clientX) {
-					var rect = chip.getBoundingClientRect();
-					hitRemove = ev.clientX >= rect.right - 38 && ev.clientY >= rect.top && ev.clientY <= rect.bottom;
-				}
 				if (!hitRemove) return;
 				ev.preventDefault();
 				ev.stopPropagation();
 				var path = remove.getAttribute('data-keep-path');
-				if (!path || keepPathSaving || keepPathValues.indexOf(path) < 0) return;
+				if (!path || keepPathValues.indexOf(path) < 0) return;
 				var next = keepPathValues.filter(function(item) { return item != path; });
-				persistKeepPaths(next, _('已删除路径，配置已保存。'));
+				stageKeepPaths(next, _('已删除路径；点击“保存并应用”后生效。'));
 			}, true);
 			function allowedPath(path) {
 				return /^\/[A-Za-z0-9._/@+-]+$/.test(path) && path != '/' &&
@@ -294,7 +266,6 @@ return view.extend({
 					!/^\/(proc|sys|dev|tmp|rom|overlay)(\/|$)/.test(path);
 			}
 			function addPaths(raw) {
-				if (keepPathSaving) return;
 				var items = String(raw || '').split(/[\n,，]+/).map(function(v) { return v.trim(); }).filter(Boolean);
 				var next = keepPathValues.slice(), added = 0, invalid = [];
 				items.forEach(function(path) {
@@ -309,9 +280,8 @@ return view.extend({
 					message.textContent = _('没有新增路径（可能已存在或输入为空）。');
 					return;
 				}
-				persistKeepPaths(next, _('已添加并保存 ') + added + _(' 个路径。')).then(function(saved) {
-					if (saved) input.value = '';
-				});
+				stageKeepPaths(next, _('已暂存新增 ') + added + _(' 个路径；点击“保存并应用”后生效。'));
+				input.value = '';
 			}
 			function renderBrowser(entries, truncated) {
 				while (browserList.firstChild) browserList.removeChild(browserList.firstChild);
@@ -399,47 +369,10 @@ return view.extend({
 			E('div', { 'class': 'myupdate-progress-track' }, [ progressFill ]),
 			progressLabel
 		]);
-		var downgradeCheckbox = E('input', {
-			'type': 'checkbox',
-			'checked': (cfg.allow_downgrade || '0') == '1',
-			'aria-label': _('允许降级'),
-			change: function(ev) {
-				var control = ev.target, previous = (cfg.allow_downgrade || '0') == '1';
-				var value = control.checked ? '1' : '0';
-				control.disabled = true;
-				callSaveDowngrade(value).catch(function(error) {
-					return { ok: false, error: error && error.message ? error.message : String(error) };
-				}).then(function(result) {
-					var rpcValue = result && result.ok && result.allow_downgrade != null ?
-						String(result.allow_downgrade) : '';
-					if (rpcValue == value)
-						return { allow_downgrade: rpcValue };
-					// The UCI commit may succeed even if rpcd returns an incomplete
-					// response. Confirm the effective value independently before
-					// reporting a save failure or reverting the checkbox.
-					return callConfig().then(function(config) {
-						var saved = config && config.allow_downgrade != null ?
-							String(config.allow_downgrade) : '';
-						if (saved == value)
-							return { allow_downgrade: saved, confirmed_by_readback: true };
-						throw new Error(result && result.error ? result.error : _('降级设置回读不一致，未确认保存成功。'));
-					});
-				}).then(function(result) {
-					var persisted = String(result.allow_downgrade);
-					cfg.allow_downgrade = persisted;
-					control.checked = persisted == '1';
-					notify(value == '1' ? _('已启用降级；设置已写入并回读确认。') : _('已关闭降级；设置已写入并回读确认。'), 'info');
-				}).catch(function(error) {
-					control.checked = previous;
-					notify(error && error.message ? error.message : String(error), 'error');
-				}).then(function() { control.disabled = false; });
-			}
-		});
-		// Set both live and default DOM state explicitly. This also prevents
-		// browsers restoring an old checkbox state after a page reload.
-		downgradeCheckbox.checked = String(cfg.allow_downgrade ?? '0') == '1';
-		downgradeCheckbox.defaultChecked = downgradeCheckbox.checked;
-		var downgradeLabel = E('label', { 'class': 'myupdate-downgrade-toggle' }, [ downgradeCheckbox, E('span', {}, _('允许降级')) ]);
+		var downgrade = s.option(form.Flag, 'allow_downgrade', _('允许降级'));
+		downgrade.default = '0';
+		downgrade.rmempty = false;
+		downgrade.description = _('默认关闭。启用后，执行升级时允许安装低于当前版本的固件；修改仅暂存在当前页面，点击“保存并应用”后生效。');
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [
@@ -468,10 +401,6 @@ return view.extend({
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
 					} }, _('执行升级'))
 				]),
-				E('div', { 'class': 'myupdate-downgrade-row' }, [
-					downgradeLabel,
-					E('span', { 'class': 'myupdate-downgrade-hint' }, _('默认关闭。启用后，执行升级时允许安装低于当前版本的固件。'))
-				])
 			])
 		]);
 		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
@@ -582,7 +511,7 @@ return view.extend({
 				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:6px 8px 6px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 				.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
 				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
-				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;height:26px;min-width:26px;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.25em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
+				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.05em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:767px){
@@ -628,7 +557,7 @@ return view.extend({
 				statusPanel,
 				E('div', { 'class': 'myupdate-settings-intro' }, [
 					E('h3', _('升级设置')),
-					E('p', _('配置更新来源、检查策略和验证密钥后，请使用页面底部的“保存并应用”提交；自定义保留路径在点击“添加”或删除时立即保存。'))
+					E('p', _('配置更新来源、检查策略和验证密钥后，请使用页面底部的“保存并应用”统一提交；添加或删除自定义保留路径、切换“允许降级”均只暂存，不会立即写入配置。'))
 				]),
 				mapNode
 			]);
