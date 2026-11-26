@@ -853,7 +853,14 @@ jobs:
           # Compact local timestamp to the second; keep seconds to distinguish same-minute builds.
           # OTA compares this all-numeric version as a single numeric component.
           # Release tags use the readable "mylede-v<timestamp>" form.
-          VERSION="$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')"
+          BUILD_TIMESTAMP="$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')"
+          VERSION="$BUILD_TIMESTAMP"
+          MYUPDATE_BUILD_TIMESTAMP="${BUILD_TIMESTAMP:2}"
+          [[ "$MYUPDATE_BUILD_TIMESTAMP" =~ ^[0-9]{12}$ ]] || {
+            echo "::error::MyUpdate 包构建时间戳不是 12 位 YYMMDDHHMMSS。"
+            exit 1
+          }
+          echo "MYUPDATE_BUILD_TIMESTAMP=$MYUPDATE_BUILD_TIMESTAMP" >> "$GITHUB_ENV"
           TAG="mylede-v${VERSION}"
           mkdir -p /home/ubuntu/files/etc/myupdate
           printf '%s\n' "$VERSION" > /home/ubuntu/files/etc/myupdate/build-version
