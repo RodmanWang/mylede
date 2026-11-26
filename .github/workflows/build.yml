@@ -60,6 +60,7 @@ jobs:
       actions: read
     outputs:
       lede_commit: ${{ steps.detect.outputs.lede_commit }}
+      lede_ref: ${{ steps.detect.outputs.lede_ref }}
       fingerprint: ${{ steps.detect.outputs.fingerprint }}
       skip_build: ${{ steps.decision.outputs.skip_build }}
       last_kernel_partsize: ${{ steps.last_partition_defaults.outputs.kernel_partsize }}
@@ -92,6 +93,7 @@ jobs:
           for name, value in values.items():
               if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                   raise SystemExit(f"持久化分区配置无效：{name}={value!r}")
+          outputs["lede_ref"] = locked["LEDE"][1]
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in values.items():
                   stream.write(f"{name}={value}\n")
@@ -147,10 +149,15 @@ jobs:
           fi
 
           LEDE_URL='https://github.com/coolsnowwolf/lede.git'
-          LEDE_REF='refs/heads/master'
+          LEDE_REF="$(git ls-remote --symref "$LEDE_URL" HEAD | awk '$1 == "ref:" && $3 == "HEAD" {print $2; exit}')"
+          if [[ ! "$LEDE_REF" =~ ^refs/heads/.+ ]]; then
+            echo '::error::无法从 coolsnowwolf/lede 远程 HEAD 解析默认分支。'
+            exit 1
+          fi
+          LEDE_BRANCH="${LEDE_REF#refs/heads/}"
           LEDE_COMMIT="$(git ls-remote "$LEDE_URL" "$LEDE_REF" | awk -v ref="$LEDE_REF" '$2 == ref {print $1; exit}')"
           if [[ ! "$LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo '::error::无法获取 coolsnowwolf/lede 的 master 分支版本。'
+            echo "::error::无法获取 coolsnowwolf/lede 默认分支版本：$LEDE_REF"
             exit 1
           fi
 
@@ -159,7 +166,7 @@ jobs:
           # The exact commit is pinned even if master moves between ls-remote and clone.
           LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-preflight"
           git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
-            clone --depth=1 --single-branch --branch master "$LEDE_URL" "$LEDE_PREFLIGHT_REPO"
+            clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL" "$LEDE_PREFLIGHT_REPO"
           if [[ "$(git -C "$LEDE_PREFLIGHT_REPO" rev-parse HEAD)" != "$LEDE_COMMIT" ]]; then
             git -C "$LEDE_PREFLIGHT_REPO" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
               fetch --no-tags --depth=1 origin "$LEDE_COMMIT"
@@ -363,6 +370,7 @@ jobs:
           echo "已锁定 LEDE 源码版本：$LEDE_COMMIT"
           echo "源码指纹：$FINGERPRINT"
           echo "lede_commit=$LEDE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "lede_ref=$LEDE_REF" >> "$GITHUB_OUTPUT"
 
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
@@ -473,6 +481,7 @@ jobs:
       - name: 克隆指定版本的 LEDE 源码
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+          LEDE_REF: ${{ needs.source_check.outputs.lede_ref }}
         run: bash .github/ci/clone-pinned-lede.sh
 
       - name: 下载并安装不可变源码版本锁定清单
@@ -1182,6 +1191,7 @@ jobs:
           BUILD_TAG: ${{ steps.build_version.outputs.tag }}
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
           LEDE_COMMIT: ${{ steps.plugin_source_revisions.outputs.lede_commit }}
+          LEDE_REF: ${{ steps.plugin_source_revisions.outputs.lede_ref }}
           SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns }}
           SMARTDNS_WEBUI_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_webui }}
           LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns }}
@@ -1242,6 +1252,7 @@ jobs:
                   'tag': tag,
                   'source_fingerprint': fingerprint,
                   'lede_commit': lede_commit,
+                  'lede_ref': os.environ['LEDE_REF'],
                   'mylede_commit': mylede_commit,
                   'sources': sources,
                   'partition_layout': {
@@ -1464,7 +1475,7 @@ jobs:
               'channel': 'stable',
               'sources': {
                   'coolsnowwolf/lede': {
-                      'ref': 'master (preflight-locked)',
+                      'ref': f"{meta['lede_ref']} (preflight-locked)",
                       'commit': meta['lede_commit'],
                       'short_commit': meta['lede_commit'][:7]
                   },
