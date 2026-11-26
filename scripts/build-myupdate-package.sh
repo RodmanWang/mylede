@@ -9,6 +9,12 @@ MINISIGN_PATH="package/lean/minisign"
 MINISIGN_SRC="${MINISIGN_SRC:-$REPO_ROOT/minisign}"
 OUTPUT_DIR="${OUTPUT_DIR:-$TOPDIR/myupdate-ipk}"
 PACKAGE_CONFIG="CONFIG_PACKAGE_luci-app-myupdate"
+MYUPDATE_BUILD_TIMESTAMP="${MYUPDATE_BUILD_TIMESTAMP:-$(TZ=Asia/Shanghai date +'%y%m%d%H%M%S')}"
+[[ "$MYUPDATE_BUILD_TIMESTAMP" =~ ^[0-9]{12}$ ]] || {
+    echo "错误：MyUpdate 构建时间戳必须是 12 位 YYMMDDHHMMSS 数字：$MYUPDATE_BUILD_TIMESTAMP" >&2
+    exit 1
+}
+export MYUPDATE_BUILD_TIMESTAMP
 
 fail() {
     echo "错误：$*" >&2
@@ -36,6 +42,7 @@ echo "========== 单独编译 luci-app-myupdate =========="
 echo "源码：$TOPDIR/$PACKAGE_PATH"
 echo "minisign：$TOPDIR/$MINISIGN_PATH"
 echo "输出：$OUTPUT_DIR"
+echo "MyUpdate 包版本：0.$MYUPDATE_BUILD_TIMESTAMP"
 
 if [[ ! -f "$TOPDIR/.config" ]]; then
     echo "未找到 .config，先生成默认配置（非交互模式）..."
@@ -85,8 +92,8 @@ make "$PACKAGE_PATH/compile" V=s -j1
 # packages. Users can then install the local IPKs without relying on a matching
 # package feed being configured on the target router.
 required_package_patterns=(
-    'luci-app-myupdate_*.ipk'
-    'luci-i18n-myupdate-zh-cn_*.ipk'
+    "luci-app-myupdate_0.${MYUPDATE_BUILD_TIMESTAMP}*.ipk"
+    "luci-i18n-myupdate-zh-cn_0.${MYUPDATE_BUILD_TIMESTAMP}*.ipk"
     'minisign_*.ipk'
     'libsodium_*.ipk'
     'coreutils_*.ipk'
@@ -101,6 +108,9 @@ for pattern in "${required_package_patterns[@]}"; do
 done
 
 mkdir -p "$OUTPUT_DIR"
+# Do not leave older MyUpdate packages beside the newly built timestamped pair.
+find "$OUTPUT_DIR" -maxdepth 1 -type f \\
+    \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' \) -delete
 for package in "${packages[@]}"; do
     cp -f "$package" "$OUTPUT_DIR/"
     echo "已生成：$OUTPUT_DIR/$(basename "$package")"
