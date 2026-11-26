@@ -53,7 +53,14 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("browserPanel.addEventListener('click', function(ev) { ev.stopPropagation(); });", source)
         self.assertIn("browserPanel.style.display = '';", source)
         self.assertIn("'title': path", source)
-        self.assertIn("width:150px;max-width:100%;box-sizing:border-box", source)
+        self.assertIn("flex:0 0 var(--myupdate-path-chip-width)", source)
+        self.assertIn("width:var(--myupdate-path-chip-width)", source)
+        self.assertIn("path.substring(path.lastIndexOf('/') + 1) || path", source)
+        self.assertIn("row.getBoundingClientRect()", source)
+        self.assertIn("rowRect.left - fieldRect.left", source)
+        self.assertIn("rowRect.width >= 640 ? 5", source)
+        self.assertIn("Math.floor((rowRect.width - gap * (columns - 1)) / columns)", source)
+        self.assertIn("new window.ResizeObserver(syncPathEditorLayout)", source)
         self.assertIn(".myupdate-repo-input{width:min(100%,680px);max-width:680px}", source)
         self.assertIn("repo.renderWidget = function()", source)
         self.assertIn(".myupdate-key-input-row{display:flex;align-items:center", source)
@@ -131,6 +138,15 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("auto_upgrade_time='03:30'", makefile)
         self.assertIn(')" = "04:00"', makefile)
 
+
+    def test_keep_path_chips_align_to_field_title_and_use_five_measured_columns(self):
+        source = VIEW.read_text(encoding="utf-8")
+        self.assertIn("editor.style.width = Math.round(rowRect.width) + 'px';", source)
+        self.assertIn("editor.style.marginLeft = Math.round(rowRect.left - fieldRect.left) + 'px';", source)
+        self.assertIn("var columns = rowRect.width >= 640 ? 5", source)
+        self.assertIn("path.substring(path.lastIndexOf('/') + 1) || path", source)
+        self.assertIn("width:var(--myupdate-path-chip-width)", source)
+        self.assertNotIn("width:150px", source)
 
 
 if __name__ == "__main__":
