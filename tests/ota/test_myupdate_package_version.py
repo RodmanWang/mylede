@@ -21,7 +21,7 @@ class MyUpdatePackageVersionTests(unittest.TestCase):
         self.assertIn("^[0-9]{12}$", source)
         self.assertIn("MYUPDATE_PACKAGE_VERSION must be a 12-digit UTC timestamp", source)
         self.assertIn("export MYUPDATE_PACKAGE_VERSION", source)
-        self.assertIn('"$MYUPDATE_PACKAGE_VERSION"', source)
+        self.assertIn('"${MYUPDATE_PACKAGE_VERSION}"', source)
         self.assertNotIn("'$(MYUPDATE_PACKAGE_VERSION)'", source)
 
     def test_firmware_build_pins_one_timestamp_before_defconfig(self):
