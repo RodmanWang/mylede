@@ -1181,6 +1181,16 @@ jobs:
 
           outputs["lede_url"] = locked["LEDE"][0]
           outputs["lede_ref"] = locked["LEDE"][1]
+          if "MINISIGN_RELEASE" not in locked:
+              raise SystemExit("source lock is missing MINISIGN_RELEASE metadata")
+          minisign_url, minisign_version, minisign_sha256 = locked["MINISIGN_RELEASE"]
+          if not re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\\.(0|[1-9][0-9]*))+(?:\\.(0|[1-9][0-9]*))*", minisign_version):
+              raise SystemExit(f"invalid locked Minisign version: {minisign_version!r}")
+          if not re.fullmatch(r"[0-9a-f]{64}", minisign_sha256):
+              raise SystemExit(f"invalid locked Minisign archive SHA-256: {minisign_sha256!r}")
+          outputs["minisign_url"] = minisign_url
+          outputs["minisign_version"] = minisign_version
+          outputs["minisign_sha256"] = minisign_sha256
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in outputs.items():
                   stream.write(f"{name}={value}\n")
@@ -1207,6 +1217,9 @@ jobs:
           OPENCLASH_COMMIT: ${{ steps.plugin_source_revisions.outputs.openclash_commit }}
           OPENCLASH_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.openclash_commit_url }}
           OPENCLASH_SOURCE_REF: ${{ steps.plugin_source_revisions.outputs.openclash_commit_ref }}
+          MINISIGN_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.minisign_url }}
+          MINISIGN_VERSION: ${{ steps.plugin_source_revisions.outputs.minisign_version }}
+          MINISIGN_SHA256: ${{ steps.plugin_source_revisions.outputs.minisign_sha256 }}
           BUILD_TARGET: x86_64
           KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || needs.source_check.outputs.last_kernel_partsize || '256' }}
           ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || needs.source_check.outputs.last_rootfs_partsize || '4096' }}
@@ -1274,6 +1287,11 @@ jobs:
                   'mylede_commit': mylede_commit,
                   'sources': sources,
                   'source_repositories': source_repositories,
+                  'minisign_release': {
+                      'url': os.environ['MINISIGN_SOURCE_URL'],
+                      'version': os.environ['MINISIGN_VERSION'],
+                      'sha256': os.environ['MINISIGN_SHA256'],
+                  },
                   'partition_layout': {
                       'kernel_partsize_mib': config_values['KERNEL'],
                       'rootfs_partsize_mib': config_values['ROOTFS'],
@@ -1511,6 +1529,7 @@ jobs:
               'channel': 'stable',
               'sources': sources,
               'source_repositories': meta['source_repositories'],
+              'minisign_release': meta['minisign_release'],
               'partition_layout': meta['partition_layout'],
               'compatibility': {
                   'target': target,
@@ -1584,6 +1603,8 @@ jobs:
           SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
           LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
           OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
+          MINISIGN_VERSION="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["minisign_release"]["version"])' <<< "$META")"
+          MINISIGN_SHA256="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["minisign_release"]["sha256"])' <<< "$META")"
           # Read effective partition sizes from the exact manifest that will be signed
           # and published; do not reconstruct them from workflow inputs or defaults.
           mapfile -t PARTITION_VALUES < <(python3 - release-input/manifest.json <<'PY'
@@ -1628,6 +1649,7 @@ jobs:
 
           ### 本次编译使用的源码版本
 
+          - Minisign：${MINISIGN_VERSION}（归档 SHA-256：${MINISIGN_SHA256}）
           - LEDE: [${LEDE_COMMIT:0:7}](https://github.com/${LEDE_REPO}/commit/${LEDE_COMMIT})
           - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/${SMARTDNS_REPO}/commit/${SMARTDNS_COMMIT})
           - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/${SMARTDNS_WEBUI_REPO}/commit/${SMARTDNS_WEBUI_COMMIT})
