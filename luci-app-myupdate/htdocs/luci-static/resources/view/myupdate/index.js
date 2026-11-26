@@ -192,11 +192,15 @@ return view.extend({
 		}, _('识别并转换'));
 
 		addSettingsHeading('_heading_backup', _('配置保留'), _('选择升级后需要恢复的文件或目录；请只添加确实需要跨版本保留的数据。'));
-		var keepPathValues = (cfg.custom_keep_paths || []).slice();
+		var initialKeepPathValues = (cfg.custom_keep_paths || []).slice();
+		var keepPathValues = initialKeepPathValues.slice();
 		var keepPaths = s.option(form.DynamicList, 'custom_keep_paths', _('自定义文件保留路径'));
 		keepPaths.optional = true;
 		keepPaths.rmempty = true;
-		keepPaths.cfgvalue = function() { return keepPathValues.slice(); };
+		// Keep the original UCI value immutable for LuCI's dirty-state comparison.
+		// formvalue() below returns the staged value, while cfgvalue() must keep
+		// returning the value loaded when the page was rendered.
+		keepPaths.cfgvalue = function() { return initialKeepPathValues.slice(); };
 		keepPaths.formvalue = function() { return keepPathValues.slice(); };
 		keepPaths.validate = function(section_id, values) {
 			var paths = Array.isArray(values) ? values : keepPathValues;
