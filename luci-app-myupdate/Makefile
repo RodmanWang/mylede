@@ -27,6 +27,10 @@ ifneq ($(shell printf '%s' '$(MYUPDATE_PACKAGE_VERSION)' | grep -Eq '^[0-9]{12}$
 $(error MYUPDATE_PACKAGE_VERSION must be a 12-digit UTC timestamp (YYMMDDHHMMSS))
 endif
 PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)
+PKG_RELEASE:=1
+# LuCI translation IPKs use PKG_PO_VERSION instead of PKG_VERSION.
+# Keep the zh-cn package version identical to the application package.
+PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
 
 PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=MyUpdate
