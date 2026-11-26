@@ -23,7 +23,10 @@ LUCI_LANG.zh_Hans:=简体中文
 # Use a compact UTC build timestamp (YYMMDDHHMMSS) so OPKG sees every
 # later MyUpdate build as a newer package without a manually bumped release.
 MYUPDATE_PACKAGE_VERSION := $(if $(strip $(MYUPDATE_PACKAGE_VERSION)),$(MYUPDATE_PACKAGE_VERSION),$(shell date -u +%y%m%d%H%M%S))
-ifneq ($(shell printf '%s' '$(MYUPDATE_PACKAGE_VERSION)' | grep -Eq '^[0-9]{12}$' && echo valid),valid)
+# Export the value and read it from the shell environment. Do not interpolate
+# it into shell source: externally supplied values may contain shell quotes.
+export MYUPDATE_PACKAGE_VERSION
+ifneq ($(shell printf '%s' "$MYUPDATE_PACKAGE_VERSION" | grep -Eq '^[0-9]{12}$' && echo valid),valid)
 $(error MYUPDATE_PACKAGE_VERSION must be a 12-digit UTC timestamp (YYMMDDHHMMSS))
 endif
 PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)
