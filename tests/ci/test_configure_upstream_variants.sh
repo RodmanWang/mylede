@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT_DIR="$(cd -- "$(dirname -- "\${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONFIGURE_SCRIPT="$ROOT_DIR/scripts/04-configure.sh"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -21,8 +21,8 @@ EOF
 : > "$TOPDIR/target/linux/x86/config-6.12"
 
 cat > "$TOPDIR/package-config-generate.fixture" <<'EOF'
-lan) ipad=\${ipaddr:-"10.1.2.3"} ;;
-*) ipad=\${ipaddr:-"10.1.$((addr_offset++)).1"} ;;
+lan) ipad=${ipaddr:-"10.1.2.3"} ;;
+*) ipad=${ipaddr:-"10.1.$((addr_offset++)).1"} ;;
 EOF
 mkdir -p "$TOPDIR/package/base-files/files/bin"
 cp "$TOPDIR/package-config-generate.fixture" "$TOPDIR/package/base-files/files/bin/config_generate"
@@ -38,8 +38,8 @@ grep -Fq 'KERNEL_PATCHVER ?= 6.12' "$TOPDIR/target/linux/x86/Makefile"
 ! grep -Fq 'KERNEL_TESTING_PATCHVER' "$TOPDIR/target/linux/x86/Makefile"
 grep -Fq 'DEFAULT_PACKAGES +=' "$TOPDIR/target/linux/x86/Makefile"
 grep -Fq 'luci-app-smartdns' "$TOPDIR/target/linux/x86/Makefile"
-grep -Fq 'lan) ipad=\${ipaddr:-"192.168.77.1"} ;;' "$TOPDIR/package/base-files/files/bin/config_generate"
-grep -Fq '*) ipad=\${ipaddr:-"192.168.$((addr_offset++)).1"} ;;' "$TOPDIR/package/base-files/files/bin/config_generate"
+grep -Fq 'lan) ipad=${ipaddr:-"192.168.77.1"} ;;' "$TOPDIR/package/base-files/files/bin/config_generate"
+grep -Fq '*) ipad=${ipaddr:-"192.168.$((addr_offset++)).1"} ;;' "$TOPDIR/package/base-files/files/bin/config_generate"
 ! grep -Fq 'luci-app-upstream-one' "$TOPDIR/include/target.mk"
 grep -Fq 'luci-app-ddns' "$TOPDIR/include/target.mk"
 
