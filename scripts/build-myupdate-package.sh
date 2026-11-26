@@ -104,6 +104,9 @@ packages=()
 for pattern in "${required_package_patterns[@]}"; do
     mapfile -t matches < <(find "$TOPDIR/bin/packages" -type f -name "$pattern" -print | sort)
     (("${#matches[@]}" > 0)) || fail "缺少运行依赖包：$pattern；请检查 feeds 和编译日志。"
+    if [[ "$pattern" == luci-app-myupdate_* || "$pattern" == luci-i18n-myupdate-zh-cn_* ]]; then
+        (("${#matches[@]}" == 1)) || fail "当前构建时间戳对应的 MyUpdate 包应恰好有一个，实际找到 ${#matches[@]} 个：$pattern"
+    fi
     packages+=("${matches[@]}")
 done
 
