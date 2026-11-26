@@ -21,8 +21,8 @@ VALID_ROOT="$TMP_DIR/valid"
 make_fixture "$VALID_ROOT" "$ANCHOR"
 
 TOPDIR="$VALID_ROOT" bash "$PATCH_SCRIPT"
-grep -Fxq "$DEPENDENCY" "$VALID_ROOT/tools/Makefile"
-[[ "$(grep -Fc "$DEPENDENCY" "$VALID_ROOT/tools/Makefile")" -eq 1 ]]
+grep -Fxq "$DEPENDENCY" <(sed "s/^[[:space:]]*//" "$VALID_ROOT/tools/Makefile")
+[[ "$(grep -Fc "$DEPENDENCY" <(sed "s/^[[:space:]]*//" "$VALID_ROOT/tools/Makefile"))" -eq 1 ]]
 
 # The patch must be idempotent.
 TOPDIR="$VALID_ROOT" bash "$PATCH_SCRIPT"
