@@ -195,7 +195,7 @@ jobs:
           def make_value(relative_path, variable):
               path = repo_root / relative_path
               pattern = re.compile(
-                  rf"^[ \t]*{re.escape(variable)}[ \t]*(?:\+|:|\?)?=[ \t]*([^ \t#]+)",
+                  rf"^[ \t]*{re.escape(variable)}[ \t]*(?:\+|:|\?)?=[ \t]*([^ \t\r\n#]+)",
                   re.MULTILINE,
               )
               matches = pattern.findall(path.read_text(encoding="utf-8"))
