@@ -387,14 +387,17 @@ return view.extend({
 					row = row.parentNode;
 				var label = row && row.querySelector('.cbi-value-title');
 				if (!row || !field || !label) return;
-				var rowRect = row.getBoundingClientRect();
 				var fieldRect = field.getBoundingClientRect();
-				editor.style.width = Math.round(rowRect.width) + 'px';
+				var labelRect = label.getBoundingClientRect();
+				var entryRow = editor.querySelector('.myupdate-path-entry-row');
+				var entryRect = entryRow.getBoundingClientRect();
+				var availableWidth = Math.max(0, entryRect.right - labelRect.left);
+				editor.style.width = Math.round(availableWidth) + 'px';
 				editor.style.maxWidth = 'none';
-				editor.style.marginLeft = Math.round(rowRect.left - fieldRect.left) + 'px';
-				var columns = rowRect.width >= 640 ? 5 : (rowRect.width >= 420 ? 3 : 2);
+				editor.style.marginLeft = Math.round(labelRect.left - fieldRect.left) + 'px';
+				var columns = availableWidth >= 640 ? 5 : (availableWidth >= 420 ? 3 : 2);
 				var gap = 8;
-				var chipWidth = Math.floor((rowRect.width - gap * (columns - 1)) / columns);
+				var chipWidth = Math.floor((availableWidth - gap * (columns - 1)) / columns);
 				chips.style.setProperty('--myupdate-path-chip-width', chipWidth + 'px');
 				chips.style.setProperty('--myupdate-path-chip-columns', columns);
 			}
@@ -545,7 +548,7 @@ return view.extend({
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
 				.myupdate-path-editor{width:100%;max-width:none;box-sizing:border-box}
-				.myupdate-path-entry-row{display:flex;align-items:center;gap:8px;max-width:680px}
+				.myupdate-path-entry-row{display:flex;align-items:center;gap:8px;width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
 				.myupdate-path-manual-add{align-self:center;min-width:0;padding:5px 12px}
 				.myupdate-browser-toggle{margin-top:8px}
