@@ -388,13 +388,15 @@ return view.extend({
 				var label = row && row.querySelector('.cbi-value-title');
 				if (!row || !field || !label) return;
 				var fieldRect = field.getBoundingClientRect();
-				var labelRect = label.getBoundingClientRect();
+				var labelRange = document.createRange();
+				labelRange.selectNodeContents(label);
+				var labelTextRect = labelRange.getBoundingClientRect();
 				var entryRow = editor.querySelector('.myupdate-path-entry-row');
 				var entryRect = entryRow.getBoundingClientRect();
-				var availableWidth = Math.max(0, entryRect.right - labelRect.left);
+				var availableWidth = Math.max(0, entryRect.right - labelTextRect.left);
 				editor.style.width = Math.round(availableWidth) + 'px';
 				editor.style.maxWidth = 'none';
-				editor.style.marginLeft = Math.round(labelRect.left - fieldRect.left) + 'px';
+				editor.style.marginLeft = Math.round(labelTextRect.left - fieldRect.left) + 'px';
 				var columns = availableWidth >= 640 ? 5 : (availableWidth >= 420 ? 3 : 2);
 				var gap = 8;
 				var chipWidth = Math.floor((availableWidth - gap * (columns - 1)) / columns);
