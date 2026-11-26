@@ -94,7 +94,10 @@ for line in tag_output.splitlines():
 if not candidates:
     raise SystemExit("No stable numeric Minisign version tags were found via Git.")
 highest = max(numbers for numbers, _ in candidates)
-minisign_version = max(tag for numbers, tag in candidates if numbers == highest)
+latest_tags = sorted(tag for numbers, tag in candidates if numbers == highest)
+if len(latest_tags) != 1:
+    raise SystemExit(f"Ambiguous Minisign tags for latest version {highest}: {latest_tags!r}")
+minisign_version = latest_tags[0]
 archive_url = minisign_source.replace("$(PKG_VERSION)", minisign_version)
 if archive_url == minisign_source:
     raise SystemExit("minisign/Makefile PKG_SOURCE_URL does not contain $(PKG_VERSION)")
