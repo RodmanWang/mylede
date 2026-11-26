@@ -41,6 +41,7 @@ grep -Fq 'luci-app-smartdns' "$TOPDIR/target/linux/x86/Makefile"
 grep -Fq 'lan) ipad=${ipaddr:-"192.168.77.1"} ;;' "$TOPDIR/package/base-files/files/bin/config_generate"
 grep -Fq '*) ipad=${ipaddr:-"192.168.$((addr_offset++)).1"} ;;' "$TOPDIR/package/base-files/files/bin/config_generate"
 ! grep -Fq 'luci-app-upstream-one' "$TOPDIR/include/target.mk"
+! grep -Fq 'luci-app-upstream-two' "$TOPDIR/include/target.mk"
 grep -Fq 'luci-app-ddns' "$TOPDIR/include/target.mk"
 
 # Running the configuration step twice must not append duplicate package blocks.
