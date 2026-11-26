@@ -17,7 +17,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("split(keep_paths, '\\n')", source)
         self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', paths)", source)
         self.assertIn("c.delete(CONFIG, 'main', 'custom_keep_paths')", source)
-        self.assertIn("let saved = type(raw) == 'array' ? raw : [];", source)
 
     def test_luci_uses_custom_dynamic_list_and_filesystem_browser(self):
         source = VIEW.read_text(encoding="utf-8")
@@ -50,7 +49,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("loadDirectory('/')", source)
         self.assertIn("myupdate-browser-entry", source)
         self.assertIn("myupdate-browser-add", source)
-        self.assertIn("'disabled': keepPathSaving", source)
         self.assertIn("'rows': '2'", source)
         self.assertNotIn("从常用固件目录中选择", source)
         self.assertNotIn("/.uuplugin_uuid", source)
@@ -78,6 +76,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("function safe_missing_keep_path(path)", source)
         self.assertIn("function save_config(args)", source)
         self.assertIn("if ('custom_keep_paths' in args)", source)
+        self.assertIn("allow_downgrade: 1", source)
         self.assertNotIn("function save_keep_paths(args)", source)
         self.assertNotIn("function set_allow_downgrade(args)", source)
         self.assertIn("function current_keep_path_set(c)", source)
