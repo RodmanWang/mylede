@@ -46,7 +46,7 @@ def read(rel):
 path, original = read("include/target.mk")
 lines = original.splitlines(keepends=True)
 starts = [i for i, line in enumerate(lines)
-          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?::|\?)?=", line)]
+          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?:\+|:|\?)?=", line)]
 keep = [b"luci-app-ddns", b"luci-app-upnp", b"luci-app-nlbwmon",
         b"luci-theme-design", b"luci-app-turboacc"]
 # Upstream may split the variable across multiple assignments or change the
@@ -82,7 +82,7 @@ if starts:
     current_blocks = []
     current_starts = [
         i for i, line in enumerate(lines)
-        if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?::|\?)?=", line)
+        if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?:\+|:|\?)?=", line)
     ]
     for start in current_starts:
         end = start + 1
@@ -130,7 +130,7 @@ if not (x86_dir / f"config-{selected}").is_file():
 path, original = read("target/linux/x86/Makefile")
 lines = original.splitlines(keepends=True)
 for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
-    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*(?::|\?)?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
+    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*(?:\+|:|\?)?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
     matches = [i for i, line in enumerate(lines) if pattern.match(line)]
     if not matches and variable == b"KERNEL_TESTING_PATCHVER":
         print("上游未定义 KERNEL_TESTING_PATCHVER，保留其当前内核测试版本设置")
@@ -203,7 +203,7 @@ make_lines = staged[makefile][1].splitlines(keepends=True)
 
 # Read existing DEFAULT_PACKAGES values without assuming a single += line.
 # Upstream has used different assignment operators and continuation layouts.
-assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?::|\?)?=")
+assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?:\+|:|\?)?=")
 existing = set()
 i = 0
 while i < len(make_lines):
@@ -221,7 +221,7 @@ while i < len(make_lines):
     for index, raw in enumerate(block):
         body = raw.strip().rstrip(b"\\").strip()
         if index == 0:
-            body = re.sub(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?::|\?)?=", b"", body).strip()
+            body = re.sub(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?:\+|:|\?)?=", b"", body).strip()
         existing.update(token.decode("ascii") for token in re.findall(rb"[A-Za-z0-9_.+-]+", body))
 
 missing = [package for package in packages if package not in existing]
