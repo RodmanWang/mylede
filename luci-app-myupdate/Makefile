@@ -23,6 +23,11 @@ LUCI_LANG.zh_Hans:=简体中文
 PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=MyUpdate
 
+# Use one build-time timestamp for the app and its generated language package.
+# A single numeric component sorts newer than the legacy YYMMDD.seconds format.
+MYUPDATE_BUILD_TIMESTAMP ?= $(shell TZ=Asia/Shanghai date +'%y%m%d%H%M%S')
+PKG_VERSION:=0.$(MYUPDATE_BUILD_TIMESTAMP)
+
 # Keep administrator settings when this package is upgraded or reinstalled.
 # This is required for opkg to treat the UCI file as a user configuration file.
 define Package/luci-app-myupdate/conffiles
