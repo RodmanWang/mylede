@@ -73,7 +73,11 @@ printf '%s\n' "$MINISIGN_KEY" | grep -Eq '^RW[A-Za-z0-9+/]{54}$' || {
 	exit 1
 }
 write_status running '正在查询 GitHub Release' false false false
-/usr/libexec/myupdate/github-api.sh "$OWNER" "$REPO" "$VIS" "$CHANNEL" || { write_status error '查询 GitHub Release 失败' false false false; exit 1; }
+if ! /usr/libexec/myupdate/github-api.sh "$OWNER" "$REPO" "$VIS" "$CHANNEL"; then
+	API_ERROR="$(cat "$R/api-error" 2>/dev/null || true)"
+	write_status error "${API_ERROR:-查询 GitHub Release 失败}" false false false
+	exit 1
+fi
 REL="$R/release.json"
 TAG="$(jsonfilter -i "$REL" -e '@.tag_name' 2>/dev/null || true)"
 [ -n "$TAG" ] || { write_status error 'Release 中没有可用版本' false false false; exit 1; }
