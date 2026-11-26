@@ -237,9 +237,7 @@ staged[makefile][1] = b"".join(make_lines)
 print("x86 Makefile 软件包检查通过：")
 print(f"  指定软件包总数：{len(packages)}")
 print(f"  本次新增数量：{len(missing)}")
-print(f"  实际新增行数：{added_line_count}")
-print("  续行格式：全部顶格")
-print("  重复追加：已避免")
+print("  上游 DEFAULT_PACKAGES 原有定义未被重写")
 
 
 # 5. 所有上游源码修改均在检查完成后统一写入。
