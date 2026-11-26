@@ -46,68 +46,56 @@ def read(rel):
 path, original = read("include/target.mk")
 lines = original.splitlines(keepends=True)
 starts = [i for i, line in enumerate(lines)
-          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?:\+|:|\?)?=", line)]
+          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*:?=", line)]
+if len(starts) != 1:
+    raise RuntimeError("include/target.mk 的 DEFAULT_PACKAGES.router 定义不唯一")
+start = starts[0]
+end = start + 1
+while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
+    end += 1
 keep = [b"luci-app-ddns", b"luci-app-upnp", b"luci-app-nlbwmon",
         b"luci-theme-design", b"luci-app-turboacc"]
-# Upstream may split the variable across multiple assignments or change the
-# assignment operator. Process every recognized block; if absent, preserve
-# upstream defaults rather than failing because the file layout changed.
-blocks = []
-for start in starts:
-    end = start + 1
-    while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
-        end += 1
-    blocks.append((start, end))
-for start, end in reversed(blocks):
-    for i in range(start, end):
-        body, marker, comment = lines[i].partition(b"#")
-        tokens = list(re.finditer(rb"(?<![A-Za-z0-9_.+-])(?:luci-app-[A-Za-z0-9_.+-]+|coremark)(?![A-Za-z0-9_.+-])", body))
-        for match in reversed(tokens):
-            if match.group() in keep:
-                continue
-            left, right = match.span()
-            if right < len(body) and body[right:right+1] in (b" ", b"\t"):
-                right += 1
-            elif left and body[left-1:left] in (b" ", b"\t"):
-                left -= 1
-            body = body[:left] + body[right:]
-        lines[i] = body + marker + comment
-    for i in range(end - 1, start, -1):
-        if re.fullmatch(rb"[ \t]*\\[ \t]*(?:\r?\n)?", lines[i]):
-            del lines[i]
-
-if starts:
-    # Recalculate ranges after removing empty continuation lines, then append
-    # missing preserved packages once. Never duplicate them per assignment.
-    current_blocks = []
-    current_starts = [
-        i for i, line in enumerate(lines)
-        if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?:\+|:|\?)?=", line)
-    ]
-    for start in current_starts:
-        end = start + 1
-        while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
-            end += 1
-        current_blocks.append((start, end))
-    section = b"\n".join(
-        line.partition(b"#")[0]
-        for start, end in current_blocks
-        for line in lines[start:end]
-    )
-    missing = [
-        package for package in keep
-        if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(package) + rb"(?![A-Za-z0-9_.+-])", section)
-    ]
-    if missing:
-        if lines and not lines[-1].endswith((b"\n", b"\r")):
-            lines[-1] += b"\n"
-        lines.extend([
-            b"\n",
-            b"# MyLEDE preserved router packages; appended independently of upstream layout.\n",
-            b"DEFAULT_PACKAGES.router += " + b" ".join(missing) + b"\n",
-        ])
-if not starts:
-    print("上游已不再定义 DEFAULT_PACKAGES.router，保留上游默认包配置")
+for i in range(start, end):
+    body, marker, comment = lines[i].partition(b"#")
+    tokens = list(re.finditer(rb"(?<![A-Za-z0-9_.+-])(?:luci-app-[A-Za-z0-9_.+-]+|coremark)(?![A-Za-z0-9_.+-])", body))
+    for match in reversed(tokens):
+        if match.group() in keep:
+            continue
+        a, b = match.span()
+        if b < len(body) and body[b:b+1] in (b" ", b"\t"):
+            b += 1
+        elif a and body[a-1:a] in (b" ", b"\t"):
+            a -= 1
+        body = body[:a] + body[b:]
+    lines[i] = body + marker + comment
+for i in range(end - 1, start, -1):
+    if re.fullmatch(rb"[ \t]*\\[ \t]*(?:\r?\n)?", lines[i]):
+        del lines[i]
+        end -= 1
+section = b"\n".join(line.partition(b"#")[0] for line in lines[start:end])
+missing = [p for p in keep if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(p) + rb"(?![A-Za-z0-9_.+-])", section)]
+if missing:
+    idx = end - 1
+    line = lines[idx]
+    ending = b"\r\n" if line.endswith(b"\r\n") else (b"\n" if line.endswith(b"\n") else b"")
+    body = line[:-len(ending)] if ending else line
+    body = body.rstrip()
+    if not ending:
+        ending = b"\n"
+    if not body:
+        if idx > start:
+            previous = lines[idx - 1]
+            previous_ending = b"\r\n" if previous.endswith(b"\r\n") else (b"\n" if previous.endswith(b"\n") else b"")
+            previous_body = previous[:-len(previous_ending)] if previous_ending else previous
+            if not previous_body.rstrip().endswith(b"\\"):
+                previous_body = previous_body.rstrip() + b" \\"
+            lines[idx - 1] = previous_body + (previous_ending or ending)
+        lines[idx] = b"\t" + b" ".join(missing) + ending
+    else:
+        if not body.endswith(b"\\"):
+            body += b" \\"
+        lines[idx] = body + ending
+        lines.insert(end, b"\t" + b" ".join(missing) + ending)
 staged[path][1] = b"".join(lines)
 
 # 2. 保留 x86 Makefile 的内核版本选择逻辑；默认选当前源码最高可用版本。
@@ -130,13 +118,10 @@ if not (x86_dir / f"config-{selected}").is_file():
 path, original = read("target/linux/x86/Makefile")
 lines = original.splitlines(keepends=True)
 for variable in (b"KERNEL_PATCHVER", b"KERNEL_TESTING_PATCHVER"):
-    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*(?:\+|:|\?)?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
+    pattern = re.compile(rb"^([ \t]*" + variable + rb"[ \t]*:?=[ \t]*)[0-9]+(?:\.[0-9]+)+(.*?)(\r?\n)?$")
     matches = [i for i, line in enumerate(lines) if pattern.match(line)]
-    if not matches and variable == b"KERNEL_TESTING_PATCHVER":
-        print("上游未定义 KERNEL_TESTING_PATCHVER，保留其当前内核测试版本设置")
-        continue
     if len(matches) != 1:
-        raise RuntimeError(f"{variable.decode()} 定义数量为 {len(matches)}，无法安全地唯一定位")
+        raise RuntimeError(f"{variable.decode()} 定义数量不是 1，拒绝修改")
     i = matches[0]
     match = pattern.match(lines[i])
     lines[i] = match.group(1) + selected.encode() + match.group(2) + (match.group(3) or b"")
@@ -148,31 +133,29 @@ if change_lan_ip:
     rel = "package/base-files/files/bin/config_generate"
     path, original = read(rel)
     lines = original.splitlines(keepends=True)
-    # Match the LAN address default independently of its current IPv4 value.
-    # Identify the fallback by addr_offset semantics, not a fixed 192.168.x.x literal.
     lan_pattern = re.compile(
-        rb'^([ \t]*lan\) ipad=\$\{ipaddr:-")((?:[0-9]{1,3}\.){3}[0-9]{1,3})("\} ;;[ \t]*)(\r?\n)?$'
+        rb'^[ \t]*lan\) ipad=\$\{ipaddr:-"192\.168\.1\.1"\} ;;[ \t]*(?:\r?\n)?$'
     )
     other_pattern = re.compile(
-        rb'^([ \t]*\*\) ipad=\$\{ipaddr:-")([^"]*\$\(\(addr_offset\+\+\)\)[^"]*)("\} ;;[ \t]*)(\r?\n)?$'
+        rb'^[ \t]*\*\) ipad=\$\{ipaddr:-"192\.168\.\$\(\(addr_offset\+\+\)\)\.1"\} ;;[ \t]*(?:\r?\n)?$'
     )
-    lan_hits = [(i, lan_pattern.match(line)) for i, line in enumerate(lines)]
-    lan_hits = [(i, match) for i, match in lan_hits if match]
-    other_hits = [(i, other_pattern.match(line)) for i, line in enumerate(lines)]
-    other_hits = [(i, match) for i, match in other_hits if match]
+    lan_hits = [i for i, line in enumerate(lines) if lan_pattern.match(line)]
+    other_hits = [i for i, line in enumerate(lines) if other_pattern.match(line)]
     if len(lan_hits) != 1 or len(other_hits) != 1:
         raise RuntimeError(
-            f"{rel} 中无法唯一识别 LAN 默认地址和 addr_offset 回退模板："
-            f"lan 模板 {len(lan_hits)} 处，回退模板 {len(other_hits)} 处；拒绝修改。"
+            f"{rel} 中预期的两条 LAN 地址模板匹配数量异常："
+            f"lan 模板 {len(lan_hits)} 处，其他接口模板 {len(other_hits)} 处；拒绝修改。"
         )
-    a, lan_match = lan_hits[0]
-    b, other_match = other_hits[0]
+    a, b = lan_hits[0], other_hits[0]
     if b <= a:
-        raise RuntimeError(f"{rel} 中 LAN 模板与回退模板顺序异常，拒绝修改")
+        raise RuntimeError(f"{rel} 中两条 LAN 地址模板顺序异常，拒绝修改")
     prefix = ".".join(lan_ip.split(".")[:2])
-    lines[a] = lan_match.group(1) + lan_ip.encode() + lan_match.group(3) + (lan_match.group(4) or b"")
-    fallback = f'{prefix}.$((addr_offset++)).1'.encode()
-    lines[b] = other_match.group(1) + fallback + other_match.group(3) + (other_match.group(4) or b"")
+    nl1 = b"\r\n" if lines[a].endswith(b"\r\n") else b"\n"
+    nl2 = b"\r\n" if lines[b].endswith(b"\r\n") else b"\n"
+    indent1 = re.match(rb"^([ \t]*)", lines[a]).group(1)
+    indent2 = re.match(rb"^([ \t]*)", lines[b]).group(1)
+    lines[a] = indent1 + f'lan) ipad=${{ipaddr:-"{lan_ip}"}} ;;'.encode() + nl1
+    lines[b] = indent2 + f'*) ipad=${{ipaddr:-"{prefix}.$((addr_offset++)).1"}} ;;'.encode() + nl2
     staged[path] = [original, b"".join(lines)]
     print(f"LAN 地址已设置为 {lan_ip}；其他静态接口将使用 {prefix}.<offset>.1")
 else:
@@ -201,51 +184,180 @@ if makefile not in staged:
 
 make_lines = staged[makefile][1].splitlines(keepends=True)
 
-# Read existing DEFAULT_PACKAGES values without assuming a single += line.
-# Upstream has used different assignment operators and continuation layouts.
-assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?:\+|:|\?)?=")
-existing = set()
-i = 0
-while i < len(make_lines):
-    if not assignment.match(make_lines[i]):
-        i += 1
-        continue
-    block = []
-    while i < len(make_lines):
-        raw = make_lines[i].partition(b"#")[0]
-        block.append(raw)
-        continued = raw.rstrip(b"\r\n").rstrip().endswith(b"\\")
-        i += 1
-        if not continued:
-            break
-    for index, raw in enumerate(block):
-        body = raw.strip().rstrip(b"\\").strip()
-        if index == 0:
-            body = re.sub(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?:\+|:|\?)?=", b"", body).strip()
-        existing.update(token.decode("ascii") for token in re.findall(rb"[A-Za-z0-9_.+-]+", body))
+assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*\+=")
+starts = [
+    i for i, line in enumerate(make_lines)
+    if assignment.match(line)
+]
 
-missing = [package for package in packages if package not in existing]
+if len(starts) != 1:
+    raise RuntimeError(
+        f"target/linux/x86/Makefile 中 DEFAULT_PACKAGES += "
+        f"定义数量为 {len(starts)}，拒绝修改"
+    )
+
+start = starts[0]
+end = start + 1
+
+while (
+    end < len(make_lines)
+    and make_lines[end - 1].rstrip(b"\r\n").rstrip().endswith(b"\\")
+):
+    end += 1
+
+# 先统一修正整个 DEFAULT_PACKAGES 区块的续行格式。
+# 所有续行顶格，不允许行首 Tab 或多余空格。
+for i in range(start + 1, end):
+    line = make_lines[i]
+
+    if line.endswith(b"\r\n"):
+        ending = b"\r\n"
+        body = line[:-2]
+    elif line.endswith(b"\n"):
+        ending = b"\n"
+        body = line[:-1]
+    else:
+        ending = b""
+        body = line
+
+    make_lines[i] = body.lstrip(b" \t") + ending
+
+# 提取当前 DEFAULT_PACKAGES 区块中的全部软件包。
+block_lines = make_lines[start:end]
+existing = set()
+
+for i, line in enumerate(block_lines):
+    body = line.partition(b"#")[0].strip()
+
+    if i == 0:
+        if b"+=" not in body:
+            raise RuntimeError("DEFAULT_PACKAGES += 格式异常")
+        body = body.split(b"+=", 1)[1].strip()
+
+    body = body.rstrip(b"\\").strip()
+
+    for token in re.findall(rb"[A-Za-z0-9_.+-]+", body):
+        existing.add(token)
+
+# 只追加尚未存在的软件包。
+missing = [
+    package for package in packages
+    if package.encode("ascii") not in existing
+]
+
+# 统计整个 DEFAULT_PACKAGES 区块的原始软件包行宽。
+# 第一行去掉 DEFAULT_PACKAGES += 前缀后再参与计算。
+valid_lines = []
+
+for i in range(start, end):
+    body = make_lines[i].partition(b"#")[0].strip()
+
+    if i == start:
+        if b"+=" not in body:
+            raise RuntimeError("DEFAULT_PACKAGES += 格式异常")
+        body = body.split(b"+=", 1)[1].strip()
+
+    body = body.rstrip(b"\\").rstrip()
+
+    if body:
+        valid_lines.append(len(body))
+
+max_width = max(valid_lines, default=120)
+
+print(f"x86 软件包原有最大行宽：{max_width} 字符")
+
+# 无论是否有缺失包，都保留格式修正结果。
+added_line_count = 0
+
 if missing:
-    if make_lines and not make_lines[-1].endswith((b"\n", b"\r")):
-        make_lines[-1] += b"\n"
-    make_lines.extend([
-        b"\n",
-        b"# MyLEDE packages; appended independently of upstream DEFAULT_PACKAGES layout.\n",
-        b"DEFAULT_PACKAGES += \\\n",
-    ])
-    for index, package in enumerate(missing):
-        suffix = b" \\\n" if index < len(missing) - 1 else b"\n"
-        make_lines.append(b"\t" + package.encode("ascii") + suffix)
-    print(f"动态追加 x86 软件包：{len(missing)} 个")
+    last = make_lines[end - 1]
+
+    if last.endswith(b"\r\n"):
+        ending = b"\r\n"
+        body = last[:-2]
+    elif last.endswith(b"\n"):
+        ending = b"\n"
+        body = last[:-1]
+    else:
+        ending = b"\n"
+        body = last
+
+    body = body.rstrip()
+
+    if body.endswith(b"\\"):
+        body = body[:-1].rstrip()
+
+    make_lines[end - 1] = body + b" \\" + ending
+
+    # 新增包全部顶格，按照原有行宽排列。
+    new_lines = []
+    current = b""
+
+    for package in missing:
+        token = package.encode("ascii")
+        candidate = token if not current else current + b" " + token
+
+        if current and len(candidate) > max_width:
+            new_lines.append(current + b" \\" + ending)
+            current = token
+        else:
+            current = candidate
+
+    if current:
+        new_lines.append(current + ending)
+
+    # 这里记录实际新增的 Makefile 行数，而不是软件包数量。
+    added_line_count = len(new_lines)
+
+    make_lines[end:end] = new_lines
+
+    print(
+        f"新增 x86 软件包：{len(missing)} 个，"
+        f"新增 Makefile 行数：{added_line_count} 行"
+    )
 else:
-    print(f"{len(packages)} 个指定软件包已包含在上游 DEFAULT_PACKAGES 中")
+    print(f"{len(packages)} 个指定软件包已经全部存在，不重复添加")
+
+# 正确计算最终 DEFAULT_PACKAGES 区块的结束位置。
+final_end = end + added_line_count
+
+# 只检查 DEFAULT_PACKAGES 区块内的续行。
+for i in range(start + 1, final_end):
+    line = make_lines[i]
+
+    if not line.strip() or line.lstrip().startswith(b"#"):
+        continue
+
+    if line.startswith((b" ", b"\t")):
+        raise RuntimeError(
+            f"x86 Makefile 第 {i + 1} 行仍存在行首空格或 Tab"
+        )
+
+# 检查指定软件包是否全部存在。
+final_block = b"".join(make_lines[start:final_end])
+
+final_tokens = set(
+    re.findall(rb"[A-Za-z0-9_.+-]+", final_block)
+)
+
+not_found = [
+    package for package in packages
+    if package.encode("ascii") not in final_tokens
+]
+
+if not_found:
+    raise RuntimeError(
+        "以下软件包写入后仍未找到：" + ", ".join(not_found)
+    )
 
 staged[makefile][1] = b"".join(make_lines)
 
 print("x86 Makefile 软件包检查通过：")
 print(f"  指定软件包总数：{len(packages)}")
 print(f"  本次新增数量：{len(missing)}")
-print("  上游 DEFAULT_PACKAGES 原有定义未被重写")
+print(f"  实际新增行数：{added_line_count}")
+print("  续行格式：全部顶格")
+print("  重复追加：已避免")
 
 
 # 5. 所有上游源码修改均在检查完成后统一写入。
