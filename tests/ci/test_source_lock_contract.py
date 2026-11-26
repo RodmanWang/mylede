@@ -74,13 +74,13 @@ elif args[:2] == ['branch', '--show-current']:
     print('main')
 elif args and args[0] == 'ls-remote':
     if args[1:3] == ['--tags', '--refs']:
-        print('{'b'}' * 40 + '\\trefs/tags/0.11')
-        print('{'c'}' * 40 + '\\trefs/tags/0.12')
+        print('b' * 40 + '\trefs/tags/0.11')
+        print('c' * 40 + '\trefs/tags/0.12')
     else:
         print(sha + '\\t' + args[2])
 else:
     raise SystemExit('unexpected git arguments: ' + repr(args))
-""".replace("{'b'}", "b").replace("{'c'}", "c"), encoding="utf-8")
+""", encoding="utf-8")
             git_script.chmod(0o755)
             curl_script = fake_bin / "curl"
             curl_script.write_text("""#!/usr/bin/env python3
@@ -98,7 +98,7 @@ out.write_bytes(b'fixture minisign archive')
                 ["bash", str(root / "scripts/resolve-local-source-lock.sh"), str(lede), str(output)],
                 check=True, env=env, capture_output=True, text=True,
             )
-            rows = [line.split("\\t") for line in output.read_text(encoding="utf-8").splitlines()]
+            rows = [line.split("\t") for line in output.read_text(encoding="utf-8").splitlines()]
             locked = {row[0]: row[1:] for row in rows}
             self.assertEqual(locked["plugin:smartdns"][1], "HEAD")
             self.assertEqual(locked["plugin:smartdns_webui"][1], "HEAD")
