@@ -29,10 +29,10 @@ path = Path(sys.argv[1])
 anchor, dependency = sys.argv[2:]
 text = path.read_text(encoding="utf-8")
 
-count = text.splitlines().count(anchor)
+count = sum(line.strip() == anchor for line in text.splitlines())
 if text.splitlines().count(dependency) > 1:
     raise SystemExit("tools/Makefile 中 dwarves -> cmake 依赖重复，拒绝继续")
-if dependency in text.splitlines():
+if any(line.strip() == dependency for line in text.splitlines()):
     print("LEDE dwarves -> cmake 构建依赖已存在，无需修改")
 elif count != 1:
     raise SystemExit(
@@ -45,6 +45,6 @@ else:
     print("已补齐 LEDE 依赖：tools/dwarves/compile -> tools/cmake/compile")
 
 lines = path.read_text(encoding="utf-8").splitlines()
-if lines.count(dependency) != 1:
+if sum(line.strip() == dependency for line in lines) != 1:
     raise SystemExit("dwarves -> cmake 依赖写入后校验失败")
 PY
