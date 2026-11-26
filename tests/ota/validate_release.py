@@ -16,9 +16,9 @@ if manifest.get("tag") != f"mylede-v{version}":
 if manifest.get("schema_version") != 2 or manifest.get("channel") != "stable":
     raise SystemExit("unsupported manifest schema or channel")
 minisign = manifest.get("minisign_release") or {}
-if not re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\\.(0|[1-9][0-9]*))+(?:\\.(0|[1-9][0-9]*))*", minisign.get("version", "")):
+if not re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))+(?:\.(0|[1-9][0-9]*))*", minisign.get("version", "")):
     raise SystemExit("invalid Minisign release version metadata")
-if not re.fullmatch(r"https://github\\.com/[^/]+/[^/]+(?:\\.git)?", minisign.get("url", "")):
+if not re.fullmatch(r"https://github\.com/[^/]+/[^/]+(?:\.git)?", minisign.get("url", "")):
     raise SystemExit("invalid Minisign source repository URL metadata")
 if not re.fullmatch(r"[0-9a-f]{64}", minisign.get("sha256", "")):
     raise SystemExit("invalid Minisign source archive SHA-256 metadata")
