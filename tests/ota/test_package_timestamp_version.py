@@ -27,10 +27,10 @@ class PackageTimestampVersionTests(unittest.TestCase):
     def test_firmware_workflow_exports_one_timestamp_to_all_package_build_steps(self):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn(
-            """BUILD_TIMESTAMP="$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')"""",
+            "BUILD_TIMESTAMP=\"$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')\"",
             source,
         )
-        self.assertIn('MYUPDATE_BUILD_TIMESTAMP="\${BUILD_TIMESTAMP:2}"', source)
+        self.assertIn('MYUPDATE_BUILD_TIMESTAMP="' + "$" + '{BUILD_TIMESTAMP:2}"', source)
         self.assertIn(
             'echo "MYUPDATE_BUILD_TIMESTAMP=$MYUPDATE_BUILD_TIMESTAMP" >> "$GITHUB_ENV"',
             source,
@@ -40,10 +40,11 @@ class PackageTimestampVersionTests(unittest.TestCase):
         source = BUILD_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("export MYUPDATE_BUILD_TIMESTAMP", source)
         self.assertIn("^[0-9]{12}$", source)
-        self.assertIn('luci-app-myupdate_0.\${MYUPDATE_BUILD_TIMESTAMP}*.ipk', source)
-        self.assertIn('luci-i18n-myupdate-zh-cn_0.\${MYUPDATE_BUILD_TIMESTAMP}*.ipk', source)
+        self.assertIn('luci-app-myupdate_0.' + "$" + '{MYUPDATE_BUILD_TIMESTAMP}*.ipk', source)
+        self.assertIn('luci-i18n-myupdate-zh-cn_0.' + "$" + '{MYUPDATE_BUILD_TIMESTAMP}*.ipk', source)
         self.assertIn("luci-app-myupdate_*.ipk", source)
         self.assertIn("luci-i18n-myupdate-zh-cn_*.ipk", source)
+        self.assertIn("Do not leave older MyUpdate packages", source)
 
     def test_new_timestamp_version_sorts_after_legacy_version(self):
         old_version = "0.261126.50465"
