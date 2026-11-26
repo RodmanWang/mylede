@@ -193,171 +193,44 @@ if makefile not in staged:
 
 make_lines = staged[makefile][1].splitlines(keepends=True)
 
-assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*\+=")
-starts = [
-    i for i, line in enumerate(make_lines)
-    if assignment.match(line)
-]
-
-if len(starts) != 1:
-    raise RuntimeError(
-        f"target/linux/x86/Makefile 中 DEFAULT_PACKAGES += "
-        f"定义数量为 {len(starts)}，拒绝修改"
-    )
-
-start = starts[0]
-end = start + 1
-
-while (
-    end < len(make_lines)
-    and make_lines[end - 1].rstrip(b"\r\n").rstrip().endswith(b"\\")
-):
-    end += 1
-
-# 先统一修正整个 DEFAULT_PACKAGES 区块的续行格式。
-# 所有续行顶格，不允许行首 Tab 或多余空格。
-for i in range(start + 1, end):
-    line = make_lines[i]
-
-    if line.endswith(b"\r\n"):
-        ending = b"\r\n"
-        body = line[:-2]
-    elif line.endswith(b"\n"):
-        ending = b"\n"
-        body = line[:-1]
-    else:
-        ending = b""
-        body = line
-
-    make_lines[i] = body.lstrip(b" \t") + ending
-
-# 提取当前 DEFAULT_PACKAGES 区块中的全部软件包。
-block_lines = make_lines[start:end]
+# Read existing DEFAULT_PACKAGES values without assuming a single += line.
+# Upstream has used different assignment operators and continuation layouts.
+assignment = re.compile(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?::|\?)?=")
 existing = set()
-
-for i, line in enumerate(block_lines):
-    body = line.partition(b"#")[0].strip()
-
-    if i == 0:
-        if b"+=" not in body:
-            raise RuntimeError("DEFAULT_PACKAGES += 格式异常")
-        body = body.split(b"+=", 1)[1].strip()
-
-    body = body.rstrip(b"\\").strip()
-
-    for token in re.findall(rb"[A-Za-z0-9_.+-]+", body):
-        existing.add(token)
-
-# 只追加尚未存在的软件包。
-missing = [
-    package for package in packages
-    if package.encode("ascii") not in existing
-]
-
-# 统计整个 DEFAULT_PACKAGES 区块的原始软件包行宽。
-# 第一行去掉 DEFAULT_PACKAGES += 前缀后再参与计算。
-valid_lines = []
-
-for i in range(start, end):
-    body = make_lines[i].partition(b"#")[0].strip()
-
-    if i == start:
-        if b"+=" not in body:
-            raise RuntimeError("DEFAULT_PACKAGES += 格式异常")
-        body = body.split(b"+=", 1)[1].strip()
-
-    body = body.rstrip(b"\\").rstrip()
-
-    if body:
-        valid_lines.append(len(body))
-
-max_width = max(valid_lines, default=120)
-
-print(f"x86 软件包原有最大行宽：{max_width} 字符")
-
-# 无论是否有缺失包，都保留格式修正结果。
-added_line_count = 0
-
-if missing:
-    last = make_lines[end - 1]
-
-    if last.endswith(b"\r\n"):
-        ending = b"\r\n"
-        body = last[:-2]
-    elif last.endswith(b"\n"):
-        ending = b"\n"
-        body = last[:-1]
-    else:
-        ending = b"\n"
-        body = last
-
-    body = body.rstrip()
-
-    if body.endswith(b"\\"):
-        body = body[:-1].rstrip()
-
-    make_lines[end - 1] = body + b" \\" + ending
-
-    # 新增包全部顶格，按照原有行宽排列。
-    new_lines = []
-    current = b""
-
-    for package in missing:
-        token = package.encode("ascii")
-        candidate = token if not current else current + b" " + token
-
-        if current and len(candidate) > max_width:
-            new_lines.append(current + b" \\" + ending)
-            current = token
-        else:
-            current = candidate
-
-    if current:
-        new_lines.append(current + ending)
-
-    # 这里记录实际新增的 Makefile 行数，而不是软件包数量。
-    added_line_count = len(new_lines)
-
-    make_lines[end:end] = new_lines
-
-    print(
-        f"新增 x86 软件包：{len(missing)} 个，"
-        f"新增 Makefile 行数：{added_line_count} 行"
-    )
-else:
-    print(f"{len(packages)} 个指定软件包已经全部存在，不重复添加")
-
-# 正确计算最终 DEFAULT_PACKAGES 区块的结束位置。
-final_end = end + added_line_count
-
-# 只检查 DEFAULT_PACKAGES 区块内的续行。
-for i in range(start + 1, final_end):
-    line = make_lines[i]
-
-    if not line.strip() or line.lstrip().startswith(b"#"):
+i = 0
+while i < len(make_lines):
+    if not assignment.match(make_lines[i]):
+        i += 1
         continue
+    block = []
+    while i < len(make_lines):
+        raw = make_lines[i].partition(b"#")[0]
+        block.append(raw)
+        continued = raw.rstrip(b"\r\n").rstrip().endswith(b"\\")
+        i += 1
+        if not continued:
+            break
+    for index, raw in enumerate(block):
+        body = raw.strip().rstrip(b"\\").strip()
+        if index == 0:
+            body = re.sub(rb"^[ \t]*DEFAULT_PACKAGES[ \t]*(?::|\?)?=", b"", body).strip()
+        existing.update(token.decode("ascii") for token in re.findall(rb"[A-Za-z0-9_.+-]+", body))
 
-    if line.startswith((b" ", b"\t")):
-        raise RuntimeError(
-            f"x86 Makefile 第 {i + 1} 行仍存在行首空格或 Tab"
-        )
-
-# 检查指定软件包是否全部存在。
-final_block = b"".join(make_lines[start:final_end])
-
-final_tokens = set(
-    re.findall(rb"[A-Za-z0-9_.+-]+", final_block)
-)
-
-not_found = [
-    package for package in packages
-    if package.encode("ascii") not in final_tokens
-]
-
-if not_found:
-    raise RuntimeError(
-        "以下软件包写入后仍未找到：" + ", ".join(not_found)
-    )
+missing = [package for package in packages if package not in existing]
+if missing:
+    if make_lines and not make_lines[-1].endswith((b"\n", b"\r")):
+        make_lines[-1] += b"\n"
+    make_lines.extend([
+        b"\n",
+        b"# MyLEDE packages; appended independently of upstream DEFAULT_PACKAGES layout.\n",
+        b"DEFAULT_PACKAGES += \\\n",
+    ])
+    for index, package in enumerate(missing):
+        suffix = b" \\\n" if index < len(missing) - 1 else b"\n"
+        make_lines.append(b"\t" + package.encode("ascii") + suffix)
+    print(f"动态追加 x86 软件包：{len(missing)} 个")
+else:
+    print(f"{len(packages)} 个指定软件包已包含在上游 DEFAULT_PACKAGES 中")
 
 staged[makefile][1] = b"".join(make_lines)
 
