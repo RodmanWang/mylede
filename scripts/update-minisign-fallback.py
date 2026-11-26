@@ -44,8 +44,8 @@ def main() -> int:
     # Only the literal standalone-build fallback is mutable. The later
     # PKG_VERSION:=$(MINISIGN_LOCK_VERSION) and PKG_HASH:=$(MINISIGN_LOCK_HASH)
     # assignments are intentional CI overrides and must remain untouched.
-    version_pattern = r"(?m)^(PKG_VERSION:=)(v?(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)\\s*$"
-    hash_pattern = r"(?m)^(PKG_HASH:=)([0-9a-f]{64})\\s*$"
+    version_pattern = r"(?m)^(PKG_VERSION:=)(v?(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)\s*$"
+    hash_pattern = r"(?m)^(PKG_HASH:=)([0-9a-f]{64})\s*$"
     version_matches = re.findall(version_pattern, original)
     hash_matches = re.findall(hash_pattern, original)
     if len(version_matches) != 1 or len(hash_matches) != 1:
