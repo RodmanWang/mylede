@@ -25,7 +25,7 @@ def git(*args, cwd=None):
 def make_value(path, variable):
     text = path.read_text(encoding="utf-8")
     pattern = re.compile(
-        rf"^[ \t]*{re.escape(variable)}[ \t]*(?:\+|:|\?)?=[ \t]*([^ \t#]+)",
+        rf"^[ \t]*{re.escape(variable)}[ \t]*(?:\+|:|\?)?=[ \t]*([^ \t\r\n#]+)",
         re.MULTILINE,
     )
     values = pattern.findall(text)
