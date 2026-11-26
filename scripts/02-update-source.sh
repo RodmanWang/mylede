@@ -83,17 +83,32 @@ ensure_link() {
 echo "========== 2/7 更新 LEDE 主源码 =========="
 
 if ! retry_git git pull; then
-    LEDE_BRANCH="$(git branch --show-current)"
-    [[ -n "$LEDE_BRANCH" ]] || {
-        echo "错误：当前 LEDE 工作树处于 detached HEAD，无法动态识别同步分支。" >&2
+    LEDE_UPSTREAM="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+    if [[ -n "$LEDE_UPSTREAM" ]]; then
+        LEDE_REMOTE="${LEDE_UPSTREAM%%/*}"
+        LEDE_REMOTE_BRANCH="${LEDE_UPSTREAM#*/}"
+    else
+        LEDE_REMOTE="origin"
+        LEDE_REMOTE_HEAD="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+        if [[ -n "$LEDE_REMOTE_HEAD" ]]; then
+            LEDE_REMOTE_BRANCH="${LEDE_REMOTE_HEAD#origin/}"
+        else
+            LEDE_REMOTE_BRANCH="$(git ls-remote --symref "$LEDE_REMOTE" HEAD 2>/dev/null | awk '$1 == "ref:" && $3 == "HEAD" {sub("refs/heads/", "", $2); print $2; exit}')"
+            if [[ -z "$LEDE_REMOTE_BRANCH" ]]; then
+                LEDE_REMOTE_BRANCH="$(git branch --show-current)"
+            fi
+        fi
+    fi
+    [[ -n "$LEDE_REMOTE" && -n "$LEDE_REMOTE_BRANCH" ]] || {
+        echo "错误：无法从配置的上游或远程 HEAD 确定 LEDE 同步分支。" >&2
         exit 1
     }
-    LEDE_REMOTE_REF="origin/$LEDE_BRANCH"
+    LEDE_REMOTE_REF="$LEDE_REMOTE/$LEDE_REMOTE_BRANCH"
     echo "警告：git pull 失败，将尝试同步到 $LEDE_REMOTE_REF。"
     echo "注意：git reset --hard 会丢弃 LEDE Git 跟踪文件中的本地未提交修改。"
     echo "注意：git clean -df 会清理未跟踪文件/目录（指定目录已设置排除项）。"
 
-    if retry_git git fetch origin; then
+    if retry_git git fetch "$LEDE_REMOTE"; then
         :
     else
         FETCH_STATUS=$?
