@@ -149,10 +149,19 @@ jobs:
               else: print(tag)
           PY
           RELEASE_DELETED=0
+          TAG_DELETED=0
           while IFS= read -r tag; do
             [[ -n "$tag" ]] || continue
-            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+
+            # Delete the GitHub Release first, then explicitly delete its Git ref.
+            # Encode the full refs/tags path so tags containing '/' are handled safely.
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+            encoded_ref="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote("tags/" + sys.argv[1], safe=""))' "$tag")"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/$encoded_ref"
+
             RELEASE_DELETED=$((RELEASE_DELETED + 1))
+            TAG_DELETED=$((TAG_DELETED + 1))
+            echo "已删除 Release 及其对应 tag：$tag"
           done < "$RUNNER_TEMP/old-release-tags.txt"
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" --jq '.workflow_runs[] | [.id, .created_at, .status] | @tsv' > "$RUNNER_TEMP/all-workflow-runs.tsv"
           python3 - "$RUNNER_TEMP/all-workflow-runs.tsv" "$CUTOFF" "$KEEP_COUNT" "$CURRENT_RUN_ID" <<'PY' > "$RUNNER_TEMP/old-run-ids.txt"
@@ -182,8 +191,10 @@ jobs:
             echo "- 保留天数：$KEEP_DAYS 天"
             echo "- 最少保留数量：$KEEP_COUNT 条"
             echo "- 删除正式版本发布：$RELEASE_DELETED 个"
+            echo "- 删除对应 Git 标签：$TAG_DELETED 个"
             echo "- 删除全部工作流的已完成运行记录：$RUN_DELETED 条"
             echo '- 保留工具链缓存版本、预发布版本、当前清理任务及尚未完成的工作流运行记录。'
+            echo '- 每个过期正式版本先删除 Release，再通过 Git References API 显式删除同名 refs/tags 标签。'
           } >> "$GITHUB_STEP_SUMMARY"
 
   archive-closed-prs:
