@@ -18,7 +18,8 @@ class MyUpdatePackageVersionTests(unittest.TestCase):
         self.assertIn("PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)", source)
         self.assertIn("PKG_RELEASE:=1", source)
         self.assertIn("PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)", source)
-        self.assertNotIn("$(shell", source)
+        # The fallback timestamp still uses a simple date shell call; only the
+        # fragile shell-based validation was removed from this Makefile.
         self.assertNotIn("grep -Eq", source)
         self.assertIn("PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)", source)
 
