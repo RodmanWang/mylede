@@ -9,11 +9,6 @@ HOST_CMAKE="$TOPDIR/staging_dir/host/bin/cmake"
   echo "::error::LEDE 顶层 Makefile 不存在：$TOPDIR/Makefile"
   exit 1
 }
-[[ -f "$TOPDIR/tools/cmake/Makefile" ]] || {
-  echo "::error::当前 LEDE 源码没有 tools/cmake/Makefile，无法确认 CMake 主机工具构建入口。"
-  exit 1
-}
-
 echo "先独立构建 LEDE CMake 主机工具，避免其与 dwarves 并行竞争。"
 "$MAKE_BIN" -C "$TOPDIR" V=1 tools/cmake/compile
 
