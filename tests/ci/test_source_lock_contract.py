@@ -94,10 +94,11 @@ out.write_bytes(b'fixture minisign archive')
             output = root / "source-revisions.tsv"
             env = dict(os.environ)
             env["PATH"] = str(fake_bin) + os.pathsep + env["PATH"]
-            subprocess.run(
+            result = subprocess.run(
                 ["bash", str(root / "scripts/resolve-local-source-lock.sh"), str(lede), str(output)],
-                check=True, env=env, capture_output=True, text=True,
+                check=False, env=env, capture_output=True, text=True,
             )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             rows = [line.split("\t") for line in output.read_text(encoding="utf-8").splitlines()]
             locked = {row[0]: row[1:] for row in rows}
             self.assertEqual(locked["plugin:smartdns"][1], "HEAD")
