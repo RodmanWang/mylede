@@ -16,7 +16,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("type(keep_paths) == 'array'", source)
         self.assertIn("split(keep_paths, '\\n')", source)
         self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', length(paths) ? paths : '')", source)
-        self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', length(paths) ? paths : '')", source)
 
     def test_luci_uses_custom_dynamic_list_and_filesystem_browser(self):
         source = VIEW.read_text(encoding="utf-8")
@@ -38,6 +37,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("myupdate-path-chip:hover,.myupdate-path-chip:focus-within", source)
         self.assertIn("z-index:2", source)
         self.assertIn("width:18px;height:18px;min-width:18px", source)
+        self.assertIn("min-height:18px;max-height:18px", source)
         self.assertIn("'class': 'btn cbi-button myupdate-path-chip-remove'", source)
         self.assertIn("keepPathValues.indexOf(path) < 0", source)
         self.assertIn("var next = keepPathValues.filter(function(item) { return item != path; });", source)
