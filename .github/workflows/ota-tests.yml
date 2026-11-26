@@ -42,6 +42,9 @@ jobs:
       - name: Validate LuCI JavaScript syntax
         run: node --check luci-app-myupdate/htdocs/luci-static/resources/view/myupdate/index.js
 
+      - name: Test LEDE host tool dependency patch
+        run: bash tests/ci/test_lede_host_tool_dependencies.sh
+
       - name: Validate shell syntax
         shell: bash
         run: |
