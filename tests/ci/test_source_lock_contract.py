@@ -17,7 +17,7 @@ class SourceLockContractTests(unittest.TestCase):
         script = (ROOT / "scripts/resolve-local-source-lock.sh").read_text(encoding="utf-8")
         self.assertIn('"PKG_SOURCE_URL"', script)
         self.assertIn('"SMARTDNS_WEBUI_SOURCE_URL"', script)
-        self.assertIn('"refs/heads/{branch}"', script)
+        self.assertIn('f"refs/heads/{branch}"', script)
         self.assertIn('git", "ls-remote"', script)
 
     def test_lede_sync_fallback_prefers_configured_upstream(self):
