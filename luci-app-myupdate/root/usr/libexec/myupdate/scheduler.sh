@@ -54,10 +54,10 @@ run_notify_check() {
 run_auto_upgrade() {
 	TODAY="$(date +%F)"
 	NOW="$(date +%H%M)"
-	AUTO_TIME="$(uci -q get myupdate.main.auto_upgrade_time || echo 04:00)"
+	AUTO_TIME="$(uci -q get myupdate.main.auto_upgrade_time || echo 03:30)"
 	case "$AUTO_TIME" in
 		[01][0-9]:[0-5][0-9]|2[0-3]:[0-5][0-9]) ;;
-		*) AUTO_TIME=04:00 ;;
+		*) AUTO_TIME=03:30 ;;
 	esac
 	AT="$(printf '%s' "$AUTO_TIME" | tr -d ':')"
 	[ "$(cat "$LAST_RUN" 2>/dev/null || true)" != "$TODAY" ] || return 0

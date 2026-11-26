@@ -47,6 +47,12 @@ chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
 if [ "$(uci -q get myupdate.main.check_interval 2>/dev/null)" = "21600" ]; then
 	uci set myupdate.main.check_interval='86400' && uci commit myupdate || exit 1
 fi
+
+# Move the previous package default (04:00) to the new default (03:30).
+# Preserve any other schedule explicitly selected by the administrator.
+if [ "$(uci -q get myupdate.main.auto_upgrade_time 2>/dev/null)" = "04:00" ]; then
+	uci set myupdate.main.auto_upgrade_time='03:30' && uci commit myupdate || exit 1
+fi
 chmod 0600 /etc/config/myupdate || exit 1
 
 if [ -x /etc/init.d/rpcd ]; then

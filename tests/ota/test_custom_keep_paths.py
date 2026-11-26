@@ -54,6 +54,13 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("browserPanel.style.display = '';", source)
         self.assertIn("'title': path", source)
         self.assertIn("width:150px;max-width:100%;box-sizing:border-box", source)
+        self.assertIn(".myupdate-repo-input{width:min(100%,680px);max-width:680px}", source)
+        self.assertIn("repo.renderWidget = function()", source)
+        self.assertIn(".myupdate-key-input-row{display:flex;align-items:center", source)
+        self.assertIn(".myupdate-key-convert{display:flex;align-items:center;align-self:center", source)
+        self.assertIn(".myupdate-path-entry-row{display:flex;align-items:center", source)
+        self.assertIn(".myupdate-path-manual-add{align-self:center", source)
+        self.assertNotIn(".myupdate-path-manual-add{align-self:flex-end}", source)
         self.assertIn("overflow:hidden;text-overflow:ellipsis;white-space:nowrap", source)
         self.assertIn("myupdate-browser-entry", source)
         self.assertIn("myupdate-browser-add", source)
@@ -108,6 +115,22 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         source = BACKUP.read_text(encoding="utf-8")
         self.assertIn("uci -q get myupdate.main.custom_keep_paths", source)
         self.assertIn("tr ' ' '\\n'", source)
+
+
+    def test_auto_upgrade_default_is_0330_everywhere(self):
+        config = (ROOT / "luci-app-myupdate/root/etc/config/myupdate").read_text(encoding="utf-8")
+        backend = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/ucode/myupdate.uc").read_text(encoding="utf-8")
+        scheduler = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/scheduler.sh").read_text(encoding="utf-8")
+        makefile = (ROOT / "luci-app-myupdate/Makefile").read_text(encoding="utf-8")
+        view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("option auto_upgrade_time '03:30'", config)
+        self.assertIn("autoTime.default = '03:30';", view)
+        self.assertIn("c.get(CONFIG, 'main', 'auto_upgrade_time') ?? '03:30'", backend)
+        self.assertIn("echo 03:30", scheduler)
+        self.assertIn("*) AUTO_TIME=03:30 ;;", scheduler)
+        self.assertIn("auto_upgrade_time='03:30'", makefile)
+        self.assertIn(')" = "04:00"', makefile)
+
 
 
 if __name__ == "__main__":

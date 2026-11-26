@@ -100,6 +100,11 @@ return view.extend({
 				return _('请输入有效的 GitHub 仓库地址，例如 https://github.com/OWNER/REPO');
 			return true;
 		};
+		var originalRepoRender = repo.renderWidget;
+		repo.renderWidget = function() {
+			var inputWidget = originalRepoRender.apply(this, arguments);
+			return E('div', { 'class': 'myupdate-repo-input' }, [ inputWidget ]);
+		};
 
 		var visibility = s.option(form.ListValue, 'repo_visibility', _('仓库可见性'));
 		visibility.value('public', _('公开'));
@@ -148,7 +153,7 @@ return view.extend({
 		interval.description = _('用于定时检查模式；默认 86400 秒（一天）。');
 
 		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('每天自动升级时间（路由器本地时间）'));
-		autoTime.default = '04:00';
+		autoTime.default = '03:30';
 		autoTime.datatype = 'time';
 		autoTime.description = _('仅在选择自动升级模式时生效；每天最多自动执行一次。');
 
@@ -499,14 +504,16 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-key-input-row{display:flex;align-items:stretch;gap:10px;width:min(100%,620px)}
+				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
+				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
+				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
-				.myupdate-key-convert{display:flex;align-items:center;flex:0 0 auto}
+				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
 				.myupdate-path-editor{width:min(100%,680px);max-width:680px}
-				.myupdate-path-entry-row{display:flex;align-items:stretch;gap:8px;max-width:680px}
+				.myupdate-path-entry-row{display:flex;align-items:center;gap:8px;max-width:680px}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
-				.myupdate-path-manual-add{align-self:flex-end;min-width:0;padding:5px 12px}
+				.myupdate-path-manual-add{align-self:center;min-width:0;padding:5px 12px}
 				.myupdate-browser-toggle{margin-top:8px}
 				.myupdate-file-browser{width:100%;max-width:680px;box-sizing:border-box;margin-top:8px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:8px;padding:10px;background:var(--background-color,#fafbfc)}
 				.myupdate-browser-toolbar{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color-low,#e6eaf0);font-size:.9em}
@@ -544,7 +551,7 @@ return view.extend({
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
 					.myupdate-key-convert .btn{width:auto}
-					.myupdate-path-manual-add{align-self:flex-end}
+					.myupdate-path-manual-add{align-self:center}
 					.myupdate-browser-toolbar{align-items:flex-start;flex-direction:column}
 				}
 				@media(max-width:420px){
@@ -553,7 +560,7 @@ return view.extend({
 
 					.myupdate-key-input-row{flex-direction:column}
 					.myupdate-key-convert .btn{width:100%}
-					.myupdate-path-entry-row{align-items:flex-end}
+					.myupdate-path-entry-row{align-items:center}
 					.myupdate-path-batch-input{min-width:0}
 				}
 			`);
