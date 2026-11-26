@@ -32,7 +32,7 @@ fi
 # cachewrtbuild derives its key from git history under tools/ and toolchain/.
 # A blobless unshallow fetch supplies history without downloading old file blobs.
 if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
-  git fetch --filter=blob:none --unshallow origin master
+  git fetch --filter=blob:none --unshallow origin "$LEDE_BRANCH"
 fi
 
 # The original 02-update-source.sh calls git pull. Pin its origin to this exact
