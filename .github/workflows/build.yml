@@ -162,7 +162,7 @@ jobs:
 
           # Clone the complete LEDE source tree first. All subsequent feed/plugin
           # discovery and upstream revision checks are based on this checkout.
-          # The exact commit is pinned even if master moves between ls-remote and clone.
+          # The exact commit is pinned even if the default branch moves between ls-remote and clone.
           LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-preflight"
           git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
             clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL" "$LEDE_PREFLIGHT_REPO"
@@ -1490,7 +1490,7 @@ jobs:
           sources = {}
           for source in meta['source_repositories'].values():
               url = source['url']
-              match = re.fullmatch(r'https://github\\.com/([^/]+/[^/]+?)(?:\\.git)?', url)
+              match = re.fullmatch(r'https://github\.com/([^/]+/[^/]+?)(?:\.git)?', url)
               if not match:
                   raise SystemExit(f'Invalid locked GitHub repository URL in build metadata: {url!r}')
               repository = match.group(1)
