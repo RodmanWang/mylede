@@ -7,11 +7,10 @@ MINISIGN_LOCK_FILE ?= /home/ubuntu/source-revisions.tsv
 MINISIGN_LOCK_VERSION := $(shell awk -F '\t' '$$1 == "MINISIGN_RELEASE" { print $$3; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
 MINISIGN_LOCK_HASH := $(shell awk -F '\t' '$$1 == "MINISIGN_RELEASE" { print $$4; exit }' "$(MINISIGN_LOCK_FILE)" 2>/dev/null)
 
-PKG_VERSION:=0.11
+PKG_VERSION:=0.12
 PKG_RELEASE:=1
 # Fallback digest for local builds without an Actions source lock.
-PKG_HASH:=74c2c78a1cd51a43a6c98f46a4eabefbc8668074ca9aa14115544276b663fc55
-
+PKG_HASH:=3f271db96b421911b1a3bf2c9f54489d71167870f3b657631e7d24e2b6f89bc0
 # Apply the immutable preflight lock before deriving the source filename and URL.
 ifneq ($(strip $(MINISIGN_LOCK_VERSION)),)
 ifeq ($(strip $(MINISIGN_LOCK_HASH)),)
