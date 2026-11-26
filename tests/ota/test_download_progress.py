@@ -232,7 +232,9 @@ class DownloadProgressContractTests(unittest.TestCase):
     def test_minisign_repository_is_initialized_and_origin_added_only_once(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         self.assertEqual(workflow.count('git init "$MINISIGN_REPO"'), 1)
-        self.assertEqual(workflow.count('git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git'), 1)
+        self.assertEqual(workflow.count('git -C "$MINISIGN_REPO" remote add origin "$MINISIGN_REPO_URL"'), 1)
+        self.assertIn('MINISIGN_REPO_URL="$(cat "$RUNNER_TEMP/minisign-repository.txt")"', workflow)
+        self.assertIn('github_git_url(minisign_source, "minisign")', workflow)
         self.assertIn('git -C "$MINISIGN_REPO" fetch --no-tags --depth=1 origin "refs/tags/${MINISIGN_VERSION}"', workflow)
 
     def test_minisign_archive_validator_accepts_git_archive_root_directory_entry(self):
@@ -288,11 +290,36 @@ class DownloadProgressContractTests(unittest.TestCase):
 
     def test_build_reads_pinned_feeds_config_from_git_not_raw_cdn(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('LEDE_REF="$(git ls-remote --symref "$LEDE_URL" HEAD', workflow)
+        self.assertIn('LEDE_BRANCH="${LEDE_REF#refs/heads/}"', workflow)
+        self.assertIn('clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL"', workflow)
+        self.assertIn('FEEDS_FILE="$LEDE_PREFLIGHT_REPO/feeds.conf.default"', workflow)
         self.assertIn('fetch --no-tags --depth=1 origin "$LEDE_COMMIT"', workflow)
-        self.assertIn('git -C "$LEDE_PREFLIGHT_REPO" show FETCH_HEAD:feeds.conf.default', workflow)
         self.assertNotIn('https://raw.githubusercontent.com/coolsnowwolf/lede/', workflow)
         self.assertIn("LEDE_PREFLIGHT_REPO", workflow)
+        self.assertLess(workflow.index('clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL"'), workflow.index('git ls-remote "$repo_url" "$repo_ref"'))
+
+    def test_upstream_plugin_repositories_are_derived_from_package_recipes(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('make_value("smartdns/Makefile", "PKG_SOURCE_URL")', workflow)
+        self.assertIn('make_value("smartdns/Makefile", "SMARTDNS_WEBUI_SOURCE_URL")', workflow)
+        self.assertIn('make_value("luci-app-smartdns/Makefile", "PKG_SOURCE_URL")', workflow)
+        self.assertIn('scripts/03-update-feeds.sh', workflow)
+        self.assertNotIn("add('plugin:smartdns', 'https://github.com/", workflow)
 
 
+    def test_release_metadata_uses_locked_repository_urls_and_refs(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('outputs[f"{output_name}_url"] = url', workflow)
+        self.assertIn('outputs[f"{output_name}_ref"] = ref', workflow)
+        self.assertIn('outputs["lede_url"] = locked["LEDE"][0]', workflow)
+        self.assertIn("'source_repositories': source_repositories", workflow)
+        self.assertIn("meta['source_repositories'].values()", workflow)
+        self.assertIn("OPENCLASH_SOURCE_REF", workflow)
+        self.assertIn("SMARTDNS_SOURCE_REF", workflow)
+        self.assertNotIn("'coolsnowwolf/lede': {", workflow)
+        self.assertNotIn("'pymumu/smartdns': {", workflow)
+        self.assertNotIn("'dev (preflight-locked)'", workflow)
+        self.assertNotIn("https://github.com/vernesong/OpenClash/commit/", workflow)
 if __name__ == "__main__":
     unittest.main()

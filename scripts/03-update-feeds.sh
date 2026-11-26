@@ -7,6 +7,7 @@ set -Eeuo pipefail
 # ============================================================
 
 TOPDIR="${TOPDIR:-/home/ubuntu/lede}"
+SCRIPT_DIR="${SCRIPT_DIR:-/home/ubuntu/scripts}"
 
 OPENCLASH_FEED='src-git OpenClash https://github.com/vernesong/OpenClash.git;dev'
 OPENCLASH_DIR="$TOPDIR/feeds/OpenClash"
@@ -437,27 +438,30 @@ fi
 SOURCE_LOCK="${MYLEDE_SOURCE_LOCK:-/home/ubuntu/source-revisions.tsv}"
 if [[ -n "${MYLEDE_SOURCE_LOCK:-}" ]]; then
     [[ -s "$SOURCE_LOCK" ]] || {
-        echo "错误：源码锁定文件不存在或为空：$SOURCE_LOCK" >&2
+        echo "错误：CI 提供的源码锁定文件不存在或为空：$SOURCE_LOCK" >&2
         exit 1
     }
-
-    echo
-    echo "========== 按预检 SHA 固定 feeds 源码 =========="
-    while IFS=$'\t' read -r source_name source_url source_ref source_commit; do
-        [[ "$source_name" == feed:* || "$source_name" == OpenClash ]] || continue
-        [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "错误：无效的锁定 SHA：$source_name" >&2; exit 1; }
-        feed_name="${source_name#feed:}"
-        feed_dir="$TOPDIR/feeds/$feed_name"
-        [[ -d "$feed_dir" ]] || { echo "错误：预检 feed 不存在：$feed_dir" >&2; exit 1; }
-        actual_url="$(git -C "$feed_dir" remote get-url origin)"
-        normalize_url() { printf '%s' "$1" | sed -E 's#^https?://github.com/#https://github.com/#; s#\.git$##'; }
-        [[ "$(normalize_url "$actual_url")" == "$(normalize_url "$source_url")" ]] || { echo "错误：$feed_name 的 origin 与预检地址不一致：$actual_url" >&2; exit 1; }
-        echo "固定 $feed_name -> $source_commit"
-        git -C "$feed_dir" fetch --no-tags origin "$source_commit"
-        git -C "$feed_dir" reset --hard "$source_commit"
-        [[ "$(git -C "$feed_dir" rev-parse HEAD)" == "$source_commit" ]] || { echo "错误：$feed_name 未固定到预检 SHA" >&2; exit 1; }
-    done < "$SOURCE_LOCK"
+else
+    # 本地 bd.sh 没有 Actions 预检产物，在 feeds 更新后生成同格式锁文件。
+    bash "$SCRIPT_DIR/resolve-local-source-lock.sh" "$TOPDIR" "$SOURCE_LOCK"
 fi
+
+echo
+echo "========== 按源码锁定 SHA 固定 feeds 源码 =========="
+while IFS=$'\t' read -r source_name source_url source_ref source_commit; do
+    [[ "$source_name" == feed:* || "$source_name" == OpenClash ]] || continue
+    [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "错误：无效的锁定 SHA：$source_name" >&2; exit 1; }
+    feed_name="${source_name#feed:}"
+    feed_dir="$TOPDIR/feeds/$feed_name"
+    [[ -d "$feed_dir" ]] || { echo "错误：锁定 feed 不存在：$feed_dir" >&2; exit 1; }
+    actual_url="$(git -C "$feed_dir" remote get-url origin)"
+    normalize_url() { printf '%s' "$1" | sed -E 's#^https?://github.com/#https://github.com/#; s#\.git$##'; }
+    [[ "$(normalize_url "$actual_url")" == "$(normalize_url "$source_url")" ]] || { echo "错误：$feed_name 的 origin 与锁定地址不一致：$actual_url" >&2; exit 1; }
+    echo "固定 $feed_name -> $source_commit"
+    git -C "$feed_dir" fetch --no-tags origin "$source_commit"
+    git -C "$feed_dir" reset --hard "$source_commit"
+    [[ "$(git -C "$feed_dir" rev-parse HEAD)" == "$source_commit" ]] || { echo "错误：$feed_name 未固定到锁定 SHA" >&2; exit 1; }
+done < "$SOURCE_LOCK"
 
 # ============================================================
 

@@ -60,6 +60,7 @@ jobs:
       actions: read
     outputs:
       lede_commit: ${{ steps.detect.outputs.lede_commit }}
+      lede_ref: ${{ steps.detect.outputs.lede_ref }}
       fingerprint: ${{ steps.detect.outputs.fingerprint }}
       skip_build: ${{ steps.decision.outputs.skip_build }}
       last_kernel_partsize: ${{ steps.last_partition_defaults.outputs.kernel_partsize }}
@@ -147,37 +148,73 @@ jobs:
           fi
 
           LEDE_URL='https://github.com/coolsnowwolf/lede.git'
-          LEDE_REF='refs/heads/master'
+          LEDE_REF="$(git ls-remote --symref "$LEDE_URL" HEAD | awk '$1 == "ref:" && $3 == "HEAD" {print $2; exit}')"
+          if [[ ! "$LEDE_REF" =~ ^refs/heads/.+ ]]; then
+            echo '::error::无法从 coolsnowwolf/lede 远程 HEAD 解析默认分支。'
+            exit 1
+          fi
+          LEDE_BRANCH="${LEDE_REF#refs/heads/}"
           LEDE_COMMIT="$(git ls-remote "$LEDE_URL" "$LEDE_REF" | awk -v ref="$LEDE_REF" '$2 == ref {print $1; exit}')"
           if [[ ! "$LEDE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo '::error::无法获取 coolsnowwolf/lede 的 master 分支版本。'
+            echo "::error::无法获取 coolsnowwolf/lede 默认分支版本：$LEDE_REF"
             exit 1
           fi
 
-          # Fetch the exact pinned Git object instead of relying on
-          # raw.githubusercontent.com, which returned HTTP 403 on this runner.
-          FEEDS_FILE="$RUNNER_TEMP/feeds.conf.default"
-          LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-feeds-preflight"
-          git init "$LEDE_PREFLIGHT_REPO"
-          git -C "$LEDE_PREFLIGHT_REPO" remote add origin "$LEDE_URL"
-          git -C "$LEDE_PREFLIGHT_REPO" \
-            -c http.lowSpeedLimit=1000 \
-            -c http.lowSpeedTime=30 \
-            fetch --no-tags --depth=1 origin "$LEDE_COMMIT"
-          git -C "$LEDE_PREFLIGHT_REPO" show FETCH_HEAD:feeds.conf.default > "$FEEDS_FILE"
-          [[ -s "$FEEDS_FILE" ]] || { echo '::error::从锁定的 LEDE Git 提交读取 feeds.conf.default 失败或文件为空。'; exit 1; }
+          # Clone the complete LEDE source tree first. All subsequent feed/plugin
+          # discovery and upstream revision checks are based on this checkout.
+          # The exact commit is pinned even if the default branch moves between ls-remote and clone.
+          LEDE_PREFLIGHT_REPO="$RUNNER_TEMP/lede-preflight"
+          git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
+            clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL" "$LEDE_PREFLIGHT_REPO"
+          if [[ "$(git -C "$LEDE_PREFLIGHT_REPO" rev-parse HEAD)" != "$LEDE_COMMIT" ]]; then
+            git -C "$LEDE_PREFLIGHT_REPO" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
+              fetch --no-tags --depth=1 origin "$LEDE_COMMIT"
+            git -C "$LEDE_PREFLIGHT_REPO" reset --hard "$LEDE_COMMIT"
+          fi
+          [[ "$(git -C "$LEDE_PREFLIGHT_REPO" rev-parse HEAD)" == "$LEDE_COMMIT" ]] || {
+            echo '::error::完整 LEDE 源码未能固定到预检提交。'
+            exit 1
+          }
+          FEEDS_FILE="$LEDE_PREFLIGHT_REPO/feeds.conf.default"
+          [[ -s "$FEEDS_FILE" ]] || { echo '::error::锁定的 LEDE 工作树中 feeds.conf.default 不存在或为空。'; exit 1; }
           FEEDS_SHA256="$(sha256sum "$FEEDS_FILE" | awk '{print $1}')"
 
-          python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" <<'PY'
-          import sys
+          python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/minisign-repository.txt" <<'PY'
+          import re, sys
           from pathlib import Path
 
           feeds_file = Path(sys.argv[1])
           output_file = Path(sys.argv[2])
-          repositories = {}
+          repo_root = Path(sys.argv[3])
+          minisign_repo_output = Path(sys.argv[4])
+          repositories = set()
 
           def add(name, url, ref):
-              repositories[(url, ref)] = name
+              repositories.add((name, url, ref))
+
+          def make_value(relative_path, variable):
+              path = repo_root / relative_path
+              pattern = re.compile(
+                  rf"^[ \t]*{re.escape(variable)}[ \t]*(?:\+|:|\?)?=[ \t]*([^ \t\r\n#]+)",
+                  re.MULTILINE,
+              )
+              matches = pattern.findall(path.read_text(encoding="utf-8"))
+              if len(matches) != 1:
+                  raise SystemExit(
+                      f"{relative_path}: expected exactly one {variable} assignment, found {len(matches)}"
+                  )
+              return matches[0]
+
+          def github_git_url(source_url, source_name):
+              match = re.match(
+                  r"^https://github\.com/([^/]+/[^/]+?)(?:\.git)?(?:/archive/.*)?$",
+                  source_url,
+              )
+              if not match:
+                  raise SystemExit(
+                      f"{source_name} source URL is not a supported GitHub repository URL: {source_url}"
+                  )
+              return f"https://github.com/{match.group(1)}.git"
 
           for raw_line in feeds_file.read_text(encoding='utf-8', errors='replace').splitlines():
               line = raw_line.strip()
@@ -195,19 +232,44 @@ jobs:
               if url:
                   add(f'feed:{name}', url, ref)
 
+          # Derive all custom upstream URLs from the same package recipes used
+          # by LEDE. Changing a Makefile source URL automatically changes locking.
+          add('plugin:smartdns',
+              github_git_url(make_value("smartdns/Makefile", "PKG_SOURCE_URL"), "smartdns"),
+              'HEAD')
+          add('plugin:smartdns_webui',
+              github_git_url(make_value("smartdns/Makefile", "SMARTDNS_WEBUI_SOURCE_URL"), "smartdns webui"),
+              'HEAD')
+          add('plugin:luci_app_smartdns',
+              github_git_url(make_value("luci-app-smartdns/Makefile", "PKG_SOURCE_URL"), "LuCI SmartDNS"),
+              'HEAD')
 
-          # Resolve the exact plugin sources used by the custom package Makefiles.
-          # These are locked before either build job starts; do not infer commits
-          # later from shortened download archive filenames.
-          add('plugin:smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
-          add('plugin:smartdns_webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
-          add('plugin:luci_app_smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
-          add('feed:OpenClash', 'https://github.com/vernesong/OpenClash.git', 'refs/heads/dev')
+          # Use the feed declaration consumed by scripts/03-update-feeds.sh.
+          feeds_script = (repo_root / "scripts/03-update-feeds.sh").read_text(encoding="utf-8")
+          feed_match = re.search(
+              r"""OPENCLASH_FEED=['"]src-git[ \t]+([^ \t'"]+)[ \t]+([^'"]+)['"]""",
+              feeds_script,
+          )
+          if not feed_match:
+              raise SystemExit("Cannot discover OPENCLASH_FEED declaration in scripts/03-update-feeds.sh")
+          openclash_name, openclash_source = feed_match.groups()
+          if ';' in openclash_source:
+              openclash_url, openclash_branch = openclash_source.rsplit(';', 1)
+              openclash_ref = f'refs/heads/{openclash_branch}'
+          else:
+              openclash_url, openclash_ref = openclash_source, 'HEAD'
+          add(f'feed:{openclash_name}', openclash_url, openclash_ref)
+
+          minisign_source = make_value("minisign/Makefile", "PKG_SOURCE_URL")
+          minisign_repo_output.write_text(
+              github_git_url(minisign_source, "minisign") + "\n",
+              encoding="utf-8",
+          )
 
           with output_file.open('w', encoding='utf-8') as stream:
-              for (url, ref), name in sorted(repositories.items()):
+              for name, url, ref in sorted(repositories):
                   stream.write(f'{name}\t{url}\t{ref}\n')
-          print(f'Found {len(repositories)} unique source references, including the three custom plugin repositories.')
+          print(f'Found {len(repositories)} unique source references from checked-out LEDE feeds and MyLEDE package recipes.')
           PY
 
           : > "$RUNNER_TEMP/source-revisions.tsv"
@@ -233,7 +295,8 @@ jobs:
           MINISIGN_REPO="$RUNNER_TEMP/minisign-git"
           MINISIGN_TAGS="$RUNNER_TEMP/minisign-tags.txt"
           git init "$MINISIGN_REPO"
-          git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git
+          MINISIGN_REPO_URL="$(cat "$RUNNER_TEMP/minisign-repository.txt")"
+          git -C "$MINISIGN_REPO" remote add origin "$MINISIGN_REPO_URL"
           git -C "$MINISIGN_REPO" ls-remote --tags --refs origin > "$MINISIGN_TAGS"
           MINISIGN_VERSION="$(python3 - "$MINISIGN_TAGS" <<'PY'
           import re, sys
@@ -277,7 +340,7 @@ jobs:
             echo '::error::无法计算 minisign 源码归档 SHA-256。'
             exit 1
           }
-          printf 'MINISIGN_RELEASE\thttps://github.com/jedisct1/minisign\t%s\t%s\n' \
+          printf 'MINISIGN_RELEASE\t%s\t%s\t%s\n' "$MINISIGN_REPO_URL" \
             "$MINISIGN_VERSION" "$MINISIGN_SHA256" >> "$RUNNER_TEMP/source-revisions.tsv"
           echo "已锁定 minisign 最新正式 Release：$MINISIGN_VERSION（SHA-256: $MINISIGN_SHA256）"
 
@@ -306,6 +369,7 @@ jobs:
           echo "已锁定 LEDE 源码版本：$LEDE_COMMIT"
           echo "源码指纹：$FINGERPRINT"
           echo "lede_commit=$LEDE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "lede_ref=$LEDE_REF" >> "$GITHUB_OUTPUT"
 
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
 
@@ -416,6 +480,7 @@ jobs:
       - name: 克隆指定版本的 LEDE 源码
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+          LEDE_REF: ${{ needs.source_check.outputs.lede_ref }}
         run: bash .github/ci/clone-pinned-lede.sh
 
       - name: 下载并安装不可变源码版本锁定清单
@@ -720,6 +785,7 @@ jobs:
       - name: 克隆指定版本的 LEDE 源码
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+          LEDE_REF: ${{ needs.source_check.outputs.lede_ref }}
         run: bash .github/ci/clone-pinned-lede.sh
 
       - name: 下载并安装不可变源码版本锁定清单
@@ -1095,24 +1161,36 @@ jobs:
               locked[name] = (url, ref, commit)
 
           expected = {
-              "lede_commit": ("LEDE", "https://github.com/coolsnowwolf/lede.git"),
-              "smartdns": ("plugin:smartdns", "https://github.com/pymumu/smartdns.git"),
-              "smartdns_webui": ("plugin:smartdns_webui", "https://github.com/pymumu/smartdns-webui.git"),
-              "luci_app_smartdns": ("plugin:luci_app_smartdns", "https://github.com/pymumu/luci-app-smartdns.git"),
-              "openclash_commit": ("feed:OpenClash", "https://github.com/vernesong/OpenClash.git"),
+              "lede_commit": "LEDE",
+              "smartdns": "plugin:smartdns",
+              "smartdns_webui": "plugin:smartdns_webui",
+              "luci_app_smartdns": "plugin:luci_app_smartdns",
+              "openclash_commit": "feed:OpenClash",
           }
           outputs = {}
-          for output_name, (lock_name, expected_url) in expected.items():
+          for output_name, lock_name in expected.items():
               if lock_name not in locked:
                   raise SystemExit(f"source lock is missing required entry: {lock_name}")
               url, ref, commit = locked[lock_name]
-              normalized_url = url.removesuffix(".git").rstrip("/")
-              normalized_expected = expected_url.removesuffix(".git").rstrip("/")
-              if normalized_url.lower() != normalized_expected.lower():
-                  raise SystemExit(f"unexpected source URL for {lock_name}: {url}")
+              if not url.startswith("https://github.com/"):
+                  raise SystemExit(f"unexpected non-GitHub source URL for {lock_name}: {url}")
               outputs[output_name] = commit
-              print(f"{output_name}: {commit} (locked ref: {ref})")
+              outputs[f"{output_name}_url"] = url
+              outputs[f"{output_name}_ref"] = ref
+              print(f"{output_name}: {commit} ({url}, locked ref: {ref})")
 
+          outputs["lede_url"] = locked["LEDE"][0]
+          outputs["lede_ref"] = locked["LEDE"][1]
+          if "MINISIGN_RELEASE" not in locked:
+              raise SystemExit("source lock is missing MINISIGN_RELEASE metadata")
+          minisign_url, minisign_version, minisign_sha256 = locked["MINISIGN_RELEASE"]
+          if not re.fullmatch(r"v?(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))+(?:\.(0|[1-9][0-9]*))*", minisign_version):
+              raise SystemExit(f"invalid locked Minisign version: {minisign_version!r}")
+          if not re.fullmatch(r"[0-9a-f]{64}", minisign_sha256):
+              raise SystemExit(f"invalid locked Minisign archive SHA-256: {minisign_sha256!r}")
+          outputs["minisign_url"] = minisign_url
+          outputs["minisign_version"] = minisign_version
+          outputs["minisign_sha256"] = minisign_sha256
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in outputs.items():
                   stream.write(f"{name}={value}\n")
@@ -1125,10 +1203,23 @@ jobs:
           BUILD_TAG: ${{ steps.build_version.outputs.tag }}
           SOURCE_FINGERPRINT: ${{ needs.source_check.outputs.fingerprint }}
           LEDE_COMMIT: ${{ steps.plugin_source_revisions.outputs.lede_commit }}
+          LEDE_REF: ${{ steps.plugin_source_revisions.outputs.lede_ref }}
+          LEDE_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.lede_url }}
           SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns }}
+          SMARTDNS_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.smartdns_url }}
+          SMARTDNS_SOURCE_REF: ${{ steps.plugin_source_revisions.outputs.smartdns_ref }}
           SMARTDNS_WEBUI_COMMIT: ${{ steps.plugin_source_revisions.outputs.smartdns_webui }}
+          SMARTDNS_WEBUI_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.smartdns_webui_url }}
+          SMARTDNS_WEBUI_SOURCE_REF: ${{ steps.plugin_source_revisions.outputs.smartdns_webui_ref }}
           LUCI_APP_SMARTDNS_COMMIT: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns }}
+          LUCI_APP_SMARTDNS_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns_url }}
+          LUCI_APP_SMARTDNS_SOURCE_REF: ${{ steps.plugin_source_revisions.outputs.luci_app_smartdns_ref }}
           OPENCLASH_COMMIT: ${{ steps.plugin_source_revisions.outputs.openclash_commit }}
+          OPENCLASH_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.openclash_commit_url }}
+          OPENCLASH_SOURCE_REF: ${{ steps.plugin_source_revisions.outputs.openclash_commit_ref }}
+          MINISIGN_SOURCE_URL: ${{ steps.plugin_source_revisions.outputs.minisign_url }}
+          MINISIGN_VERSION: ${{ steps.plugin_source_revisions.outputs.minisign_version }}
+          MINISIGN_SHA256: ${{ steps.plugin_source_revisions.outputs.minisign_sha256 }}
           BUILD_TARGET: x86_64
           KERNEL_PARTSIZE: ${{ inputs.kernel_partsize || needs.source_check.outputs.last_kernel_partsize || '256' }}
           ROOTFS_PARTSIZE: ${{ inputs.rootfs_partsize || needs.source_check.outputs.last_rootfs_partsize || '4096' }}
@@ -1174,6 +1265,13 @@ jobs:
               'luci_app_smartdns': os.environ['LUCI_APP_SMARTDNS_COMMIT'],
               'openclash': os.environ['OPENCLASH_COMMIT'],
           }
+          source_repositories = {
+              'lede': {'url': os.environ['LEDE_SOURCE_URL'], 'ref': os.environ['LEDE_REF'], 'commit': lede_commit},
+              'smartdns': {'url': os.environ['SMARTDNS_SOURCE_URL'], 'ref': os.environ['SMARTDNS_SOURCE_REF'], 'commit': sources['smartdns']},
+              'smartdns_webui': {'url': os.environ['SMARTDNS_WEBUI_SOURCE_URL'], 'ref': os.environ['SMARTDNS_WEBUI_SOURCE_REF'], 'commit': sources['smartdns_webui']},
+              'luci_app_smartdns': {'url': os.environ['LUCI_APP_SMARTDNS_SOURCE_URL'], 'ref': os.environ['LUCI_APP_SMARTDNS_SOURCE_REF'], 'commit': sources['luci_app_smartdns']},
+              'openclash': {'url': os.environ['OPENCLASH_SOURCE_URL'], 'ref': os.environ['OPENCLASH_SOURCE_REF'], 'commit': sources['openclash']},
+          }
           for name, commit in sources.items():
               if not re.fullmatch(r'[0-9a-f]{40}', commit):
                   raise SystemExit(f'Invalid full source commit SHA for {name}: {commit!r}')
@@ -1185,8 +1283,15 @@ jobs:
                   'tag': tag,
                   'source_fingerprint': fingerprint,
                   'lede_commit': lede_commit,
+                  'lede_ref': os.environ['LEDE_REF'],
                   'mylede_commit': mylede_commit,
                   'sources': sources,
+                  'source_repositories': source_repositories,
+                  'minisign_release': {
+                      'url': os.environ['MINISIGN_SOURCE_URL'],
+                      'version': os.environ['MINISIGN_VERSION'],
+                      'sha256': os.environ['MINISIGN_SHA256'],
+                  },
                   'partition_layout': {
                       'kernel_partsize_mib': config_values['KERNEL'],
                       'rootfs_partsize_mib': config_values['ROOTFS'],
@@ -1400,38 +1505,31 @@ jobs:
               for chunk in iter(lambda: stream.read(1024 * 1024), b''):
                   digest.update(chunk)
 
+          sources = {}
+          for source in meta['source_repositories'].values():
+              url = source['url']
+              match = re.fullmatch(r'https://github\.com/([^/]+/[^/]+?)(?:\.git)?', url)
+              if not match:
+                  raise SystemExit(f'Invalid locked GitHub repository URL in build metadata: {url!r}')
+              repository = match.group(1)
+              commit = source['commit']
+              ref = source['ref']
+              if not re.fullmatch(r'[0-9a-f]{40}', commit):
+                  raise SystemExit(f'Invalid full source commit SHA for {repository}: {commit!r}')
+              display_ref = ref.removeprefix('refs/heads/') if ref.startswith('refs/heads/') else ref
+              sources[repository] = {
+                  'ref': f'{display_ref} (preflight-locked)',
+                  'commit': commit,
+                  'short_commit': commit[:7],
+              }
           manifest = {
               'schema_version': 2,
               'version': meta['version'],
               'tag': meta['tag'],
               'channel': 'stable',
-              'sources': {
-                  'coolsnowwolf/lede': {
-                      'ref': 'master (preflight-locked)',
-                      'commit': meta['lede_commit'],
-                      'short_commit': meta['lede_commit'][:7]
-                  },
-                  'pymumu/smartdns': {
-                      'ref': 'HEAD (preflight-locked)',
-                      'commit': meta['sources']['smartdns'],
-                      'short_commit': meta['sources']['smartdns'][:7]
-                  },
-                  'pymumu/smartdns-webui': {
-                      'ref': 'HEAD (preflight-locked)',
-                      'commit': meta['sources']['smartdns_webui'],
-                      'short_commit': meta['sources']['smartdns_webui'][:7]
-                  },
-                  'pymumu/luci-app-smartdns': {
-                      'ref': 'HEAD (preflight-locked)',
-                      'commit': meta['sources']['luci_app_smartdns'],
-                      'short_commit': meta['sources']['luci_app_smartdns'][:7]
-                  },
-                  'vernesong/OpenClash': {
-                      'ref': 'dev (preflight-locked)',
-                      'commit': meta['sources']['openclash'],
-                      'short_commit': meta['sources']['openclash'][:7]
-                  }
-              },
+              'sources': sources,
+              'source_repositories': meta['source_repositories'],
+              'minisign_release': meta['minisign_release'],
               'partition_layout': meta['partition_layout'],
               'compatibility': {
                   'target': target,
@@ -1496,10 +1594,17 @@ jobs:
           [[ -n "$IMAGE" ]] || { echo '::error::发布文件中缺少固件镜像。'; exit 1; }
           META="$(cat release-input/build-meta.json)"
           LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
+          LEDE_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["lede"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          SMARTDNS_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["smartdns"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          SMARTDNS_WEBUI_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["smartdns_webui"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          LUCI_APP_SMARTDNS_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["luci_app_smartdns"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          OPENCLASH_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["openclash"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
           SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
           SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
           LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
           OPENCLASH_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["openclash"])' <<< "$META")"
+          MINISIGN_VERSION="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["minisign_release"]["version"])' <<< "$META")"
+          MINISIGN_SHA256="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["minisign_release"]["sha256"])' <<< "$META")"
           # Read effective partition sizes from the exact manifest that will be signed
           # and published; do not reconstruct them from workflow inputs or defaults.
           mapfile -t PARTITION_VALUES < <(python3 - release-input/manifest.json <<'PY'
@@ -1544,11 +1649,12 @@ jobs:
 
           ### 本次编译使用的源码版本
 
-          - LEDE: [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
-          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
-          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
-          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
-          - OpenClash: [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          - Minisign：${MINISIGN_VERSION}（归档 SHA-256：${MINISIGN_SHA256}）
+          - LEDE: [${LEDE_COMMIT:0:7}](https://github.com/${LEDE_REPO}/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/${SMARTDNS_REPO}/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/${SMARTDNS_WEBUI_REPO}/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/${LUCI_APP_SMARTDNS_REPO}/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash: [${OPENCLASH_COMMIT:0:7}](https://github.com/${OPENCLASH_REPO}/commit/${OPENCLASH_COMMIT})
           EOF
           # The GITHUB_TOKEN cannot create a release tag targeting a commit
           # that changes workflow files relative to the default branch. Ensure
