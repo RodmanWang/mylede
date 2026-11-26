@@ -16,7 +16,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("type(keep_paths) == 'array'", source)
         self.assertIn("split(keep_paths, '\\n')", source)
         self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', paths)", source)
-        self.assertIn("c.delete(CONFIG, 'main', 'custom_keep_paths')", source)
+        self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', length(paths) ? paths : '')", source)
 
     def test_luci_uses_custom_dynamic_list_and_filesystem_browser(self):
         source = VIEW.read_text(encoding="utf-8")
