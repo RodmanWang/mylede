@@ -495,13 +495,12 @@ package_patterns = {
 }
 
 matches = {name: [] for name in targets}
-for makefile in feeds_root.rglob("Makefile"):
-    if not makefile.is_file():
+for current_root, directories, filenames in os.walk(feeds_root, followlinks=False):
+    directories[:] = [name for name in directories if name != ".git"]
+    if "Makefile" not in filenames:
         continue
-    try:
-        relative = makefile.relative_to(feeds_root)
-    except ValueError:
-        continue
+    makefile = Path(current_root) / "Makefile"
+    relative = makefile.relative_to(feeds_root)
     if not relative.parts:
         continue
     feed_name = relative.parts[0]
