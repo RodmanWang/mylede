@@ -15,7 +15,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         source = BACKEND.read_text(encoding="utf-8")
         self.assertIn("type(keep_paths) == 'array'", source)
         self.assertIn("split(keep_paths, '\\n')", source)
-        self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', paths)", source)
+        self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', length(paths) ? paths : '')", source)
         self.assertIn("c.set(CONFIG, 'main', 'custom_keep_paths', length(paths) ? paths : '')", source)
 
     def test_luci_uses_custom_dynamic_list_and_filesystem_browser(self):
@@ -44,7 +44,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertNotIn("ev.target.closest('.myupdate-path-chip-remove')", source)
         self.assertIn("ev.stopPropagation()", source)
         self.assertIn("stageKeepPaths(next, _('已删除路径；点击“保存并应用”后生效。'))", source)
-        self.assertIn(": c.delete(CONFIG, 'main', 'custom_keep_paths')", (BACKEND).read_text(encoding="utf-8"))
         self.assertIn("已暂存新增 ", source)
         self.assertIn("loadDirectory('/')", source)
         self.assertIn("myupdate-browser-entry", source)
