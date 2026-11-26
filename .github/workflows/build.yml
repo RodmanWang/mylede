@@ -1179,6 +1179,7 @@ jobs:
               outputs[f"{output_name}_ref"] = ref
               print(f"{output_name}: {commit} ({url}, locked ref: {ref})")
 
+          outputs["lede_url"] = locked["LEDE"][0]
           outputs["lede_ref"] = locked["LEDE"][1]
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
               for name, value in outputs.items():
