@@ -1636,6 +1636,7 @@ jobs:
 
           - 固件版本：${RELEASE_VERSION}
           - 固件文件：$(basename "$IMAGE")
+
           ### 本次固件分区布局
 
           - 本次固件内核分区大小：${KERNEL_PARTSIZE} MiB
