@@ -41,15 +41,20 @@ def main() -> int:
         raise ValueError(f"invalid Minisign archive SHA-256 in manifest: {new_sha256!r}")
 
     original = makefile_path.read_text(encoding="utf-8")
-    version_matches = re.findall(r"(?m)^PKG_VERSION:=(.*)$", original)
-    hash_matches = re.findall(r"(?m)^PKG_HASH:=(.*)$", original)
+    # Only the literal standalone-build fallback is mutable. The later
+    # PKG_VERSION:=$(MINISIGN_LOCK_VERSION) and PKG_HASH:=$(MINISIGN_LOCK_HASH)
+    # assignments are intentional CI overrides and must remain untouched.
+    version_pattern = r"(?m)^(PKG_VERSION:=)(v?(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))+)\\s*$"
+    hash_pattern = r"(?m)^(PKG_HASH:=)([0-9a-f]{64})\\s*$"
+    version_matches = re.findall(version_pattern, original)
+    hash_matches = re.findall(hash_pattern, original)
     if len(version_matches) != 1 or len(hash_matches) != 1:
         raise ValueError(
-            "minisign/Makefile must contain exactly one PKG_VERSION:= and one PKG_HASH:= fallback"
+            "minisign/Makefile must contain exactly one literal PKG_VERSION and PKG_HASH fallback"
         )
 
-    current_version = version_matches[0].strip()
-    current_hash = hash_matches[0].strip()
+    current_version = version_matches[0][1].strip()
+    current_hash = hash_matches[0][1].strip()
     current_key = version_key(current_version)
     new_key = version_key(new_version)
 
@@ -66,7 +71,7 @@ def main() -> int:
             )
         if current_version != new_version:
             updated = replace_once(
-                original, r"(?m)^(PKG_VERSION:=).*$", rf"\g<1>{new_version}", "PKG_VERSION"
+                original, version_pattern, rf"\g<1>{new_version}", "PKG_VERSION"
             )
             makefile_path.write_text(updated, encoding="utf-8")
             print(f"已规范化 Minisign 托底版本标签：{current_version} -> {new_version}")
@@ -78,7 +83,7 @@ def main() -> int:
         original, r"(?m)^(PKG_VERSION:=).*$", rf"\g<1>{new_version}", "PKG_VERSION"
     )
     updated = replace_once(
-        updated, r"(?m)^(PKG_HASH:=).*$", rf"\g<1>{new_sha256}", "PKG_HASH"
+        updated, hash_pattern, rf"\g<1>{new_sha256}", "PKG_HASH"
     )
     makefile_path.write_text(updated, encoding="utf-8")
     print(
