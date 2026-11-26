@@ -164,13 +164,14 @@ function save_config(args) {
 		if (!(key in args)) continue;
 		let value = args[key];
 		if (!valid_string(value, max)) return { ok: false, error: '配置字段格式错误：' + key };
+		if (key == 'repo_url' && value == '') {
+			c.delete(CONFIG, 'main', key);
+			continue;
+		}
 		c.set(CONFIG, 'main', key, value);
 	}
 	if ('allow_downgrade' in args && args.allow_downgrade != '0' && args.allow_downgrade != '1')
 		return { ok: false, error: '允许降级设置无效，只能为 0 或 1' };
-	if ('repo_url' in args && args.repo_url != '' &&
-	    !match(args.repo_url, /^https:\/\/github[.]com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+([.]git)?\/?$/))
-		return { ok: false, error: 'GitHub 仓库地址无效，请填写 https://github.com/所有者/仓库名' };
 	if ('custom_keep_paths' in args) {
 		let paths = parse_keep_paths(args.custom_keep_paths, current_keep_path_set(c));
 		if (paths == null)
@@ -199,8 +200,8 @@ function save_config(args) {
 }
 function set_token(args) {
 	let token = args.token;
-	if (!valid_string(token, 512) || !/^(github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]+)$/.test(token))
-		return { ok: false, error: 'Token 格式无效' };
+	if (!valid_string(token, 512) || token == '')
+		return { ok: false, error: 'Token 内容为空或包含不允许的换行字符' };
 	fs.mkdir('/etc/myupdate', 0o700);
 	if (fs.writefile(TOKEN, token + '\n') == null) return { ok: false, error: '无法写入 Token' };
 	fs.chmod(TOKEN, 0o600);
