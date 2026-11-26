@@ -16,6 +16,8 @@ class MyUpdatePackageVersionTests(unittest.TestCase):
         source = MAKEFILE.read_text(encoding="utf-8")
         self.assertIn("date -u +%y%m%d%H%M%S", source)
         self.assertIn("PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)", source)
+        self.assertIn("PKG_RELEASE:=1", source)
+        self.assertIn("PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)", source)
         self.assertIn("^[0-9]{12}$$", source)
         self.assertIn("MYUPDATE_PACKAGE_VERSION must be a 12-digit UTC timestamp", source)
 
