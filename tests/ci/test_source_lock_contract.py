@@ -18,6 +18,10 @@ class SourceLockContractTests(unittest.TestCase):
         self.assertIn('"PKG_SOURCE_URL"', script)
         self.assertIn('"SMARTDNS_WEBUI_SOURCE_URL"', script)
         self.assertIn('f"refs/heads/{branch}"', script)
+        self.assertIn('"MINISIGN_RELEASE"', script)
+        self.assertIn('"--tags", "--refs"', script)
+        self.assertIn('"sha256sum"', script)
+        self.assertIn('"$(PKG_VERSION)"', script)
         self.assertIn('git", "ls-remote"', script)
 
     def test_lede_sync_fallback_prefers_configured_upstream(self):
