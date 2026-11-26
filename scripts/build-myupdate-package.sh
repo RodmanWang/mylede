@@ -109,8 +109,7 @@ done
 
 mkdir -p "$OUTPUT_DIR"
 # Do not leave older MyUpdate packages beside the newly built timestamped pair.
-find "$OUTPUT_DIR" -maxdepth 1 -type f \\
-    \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' \) -delete
+find "$OUTPUT_DIR" -maxdepth 1 -type f \( -name 'luci-app-myupdate_*.ipk' -o -name 'luci-i18n-myupdate-zh-cn_*.ipk' \) -delete
 for package in "${packages[@]}"; do
     cp -f "$package" "$OUTPUT_DIR/"
     echo "已生成：$OUTPUT_DIR/$(basename "$package")"
