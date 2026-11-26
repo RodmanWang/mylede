@@ -26,7 +26,7 @@ MYUPDATE_PACKAGE_VERSION := $(if $(strip $(MYUPDATE_PACKAGE_VERSION)),$(MYUPDATE
 # Export the value and read it from the shell environment. Do not interpolate
 # it into shell source: externally supplied values may contain shell quotes.
 export MYUPDATE_PACKAGE_VERSION
-ifneq ($(shell printf '%s' "$MYUPDATE_PACKAGE_VERSION" | grep -Eq '^[0-9]{12}$' && echo valid),valid)
+ifneq ($(shell printf '%s' "${MYUPDATE_PACKAGE_VERSION}" | grep -Eq '^[0-9]{12}$' && echo valid),valid)
 $(error MYUPDATE_PACKAGE_VERSION must be a 12-digit UTC timestamp (YYMMDDHHMMSS))
 endif
 PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)
