@@ -141,9 +141,11 @@ class CustomKeepPathsContractTests(unittest.TestCase):
 
     def test_keep_path_chips_align_to_field_title_and_use_five_measured_columns(self):
         source = VIEW.read_text(encoding="utf-8")
-        self.assertIn("editor.style.width = Math.round(rowRect.width) + 'px';", source)
-        self.assertIn("editor.style.marginLeft = Math.round(rowRect.left - fieldRect.left) + 'px';", source)
-        self.assertIn("var columns = rowRect.width >= 640 ? 5", source)
+        self.assertIn("var availableWidth = Math.max(0, entryRect.right - labelRect.left);", source)
+        self.assertIn("editor.style.width = Math.round(availableWidth) + 'px';", source)
+        self.assertIn("editor.style.marginLeft = Math.round(labelRect.left - fieldRect.left) + 'px';", source)
+        self.assertIn("var columns = availableWidth >= 640 ? 5", source)
+        self.assertIn(".myupdate-path-entry-row{display:flex;align-items:center;gap:8px;width:100%;max-width:none;box-sizing:border-box}", source)
         self.assertIn("path.substring(path.lastIndexOf('/') + 1) || path", source)
         self.assertIn("width:var(--myupdate-path-chip-width)", source)
         self.assertNotIn("width:150px", source)
