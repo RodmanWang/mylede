@@ -20,6 +20,18 @@ LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +curl +ca-bundle +jsonfilter +coreutils
 LUCI_PKGARCH:=all
 LUCI_LANG.zh_Hans:=简体中文
 
+# Use a compact UTC build timestamp (YYMMDDHHMMSS) so OPKG sees every
+# later MyUpdate build as a newer package without a manually bumped release.
+MYUPDATE_PACKAGE_VERSION := $(if $(strip $(MYUPDATE_PACKAGE_VERSION)),$(MYUPDATE_PACKAGE_VERSION),$(shell date -u +%y%m%d%H%M%S))
+ifneq ($(shell printf '%s' '$(MYUPDATE_PACKAGE_VERSION)' | grep -Eq '^[0-9]{12}$' && echo valid),valid)
+$(error MYUPDATE_PACKAGE_VERSION must be a 12-digit UTC timestamp (YYMMDDHHMMSS))
+endif
+PKG_VERSION:=$(MYUPDATE_PACKAGE_VERSION)
+PKG_RELEASE:=1
+# LuCI translation IPKs use PKG_PO_VERSION instead of PKG_VERSION.
+# Keep the zh-cn package version identical to the application package.
+PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
+
 PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=MyUpdate
 
