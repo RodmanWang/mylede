@@ -107,6 +107,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 -m unittest discover -s tests/ota -p 'test_*.py' -v
+          python3 tests/ci/test_minisign_fallback.py -v
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/task.sh
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh
           sh -n luci-app-myupdate/root/usr/libexec/myupdate/check-partition-layout.sh
