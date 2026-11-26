@@ -1,68 +1,55 @@
-#
-# Copyright (c) 2026 RodmanWang
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-#
-include $(TOPDIR)/rules.mk
+#!/usr/bin/env python3
+"""Regression tests for preserving the MyUpdate UCI config as an opkg conffile."""
 
-LUCI_TITLE:=LuCI MyUpdate Firmware Manager
-LUCI_DESCRIPTION:=GitHub Release based firmware update manager
-LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +curl +ca-bundle +jsonfilter +coreutils +coreutils-sha256sum +minisign
-LUCI_PKGARCH:=all
-LUCI_LANG.zh_Hans:=简体中文
+import re
+import unittest
+from pathlib import Path
 
-PKG_LICENSE:=GPL-2.0-only
-PKG_MAINTAINER:=MyUpdate
+ROOT = Path(__file__).resolve().parents[2]
+MAKEFILE = ROOT / "luci-app-myupdate" / "Makefile"
 
-# Keep administrator settings when this package is upgraded or reinstalled.
-# This is required for opkg to treat the UCI file as a user configuration file.
-define Package/luci-app-myupdate/conffiles
-/etc/config/myupdate
-endef
 
-# Normalize package-owned file modes after live installation. Some generated
-# IPKs have arrived with world-writable files, which is unsafe and can break
-# services that enforce strict file permissions.
-define Package/luci-app-myupdate/postinst
-#!/bin/sh
-[ -n "$${IPKG_INSTROOT}" ] && exit 0
+class PackageConfigPreservationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.makefile = MAKEFILE.read_text(encoding="utf-8")
 
-chmod 0755 /etc/init.d/myupdate || exit 1
-chmod 0644 /usr/share/rpcd/ucode/myupdate.uc || exit 1
-chmod 0600 /etc/config/myupdate || exit 1
-chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
-[ ! -e /etc/myupdate/token ] || chmod 0600 /etc/myupdate/token || exit 1
+    def test_uci_config_is_declared_as_package_conffile(self):
+        match = re.search(
+            r"(?ms)^define Package/luci-app-myupdate/conffiles\s*\n(.*?)\nendef\s*$",
+            self.makefile,
+        )
+        self.assertIsNotNone(
+            match,
+            "Package/luci-app-myupdate must declare its conffiles block",
+        )
+        paths = [
+            line.strip()
+            for line in match.group(1).splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(paths, ["/etc/config/myupdate"])
 
-# Migrate the previous package default (6 hours) to the new default (1 day).
-# Preserve any non-default interval explicitly chosen by the administrator.
-if [ "$(uci -q get myupdate.main.check_interval 2>/dev/null)" = "21600" ]; then
-	uci set myupdate.main.check_interval='86400' && uci commit myupdate || exit 1
-fi
-chmod 0600 /etc/config/myupdate || exit 1
+    def test_conffile_declaration_is_scoped_to_myupdate_package(self):
+        self.assertIn(
+            "define Package/luci-app-myupdate/conffiles",
+            self.makefile,
+        )
+        self.assertNotIn(
+            "define Package/luci-app-myupdate/files",
+            self.makefile,
+        )
 
-if [ -x /etc/init.d/rpcd ]; then
-	/etc/init.d/rpcd restart
-fi
+    def test_runtime_data_and_secrets_are_not_declared_as_conffiles(self):
+        match = re.search(
+            r"(?ms)^define Package/luci-app-myupdate/conffiles\s*\n(.*?)\nendef\s*$",
+            self.makefile,
+        )
+        self.assertIsNotNone(match)
+        declared = match.group(1)
+        self.assertNotIn("/etc/myupdate", declared)
+        self.assertNotIn("token", declared)
 
-# MyUpdate's resident scheduler also consumes queued LuCI task requests.
-if [ -x /etc/init.d/myupdate ]; then
-	/etc/init.d/myupdate enable || exit 1
-	/etc/init.d/myupdate restart || exit 1
-fi
-exit 0
-endef
 
-# This package is kept under package/lean rather than feeds/luci/applications.
-# Use TOPDIR so the include resolves correctly from the local package directory.
-include $(TOPDIR)/feeds/luci/luci.mk
-
-# call BuildPackage - OpenWrt buildroot signature
+if __name__ == "__main__":
+    unittest.main()
