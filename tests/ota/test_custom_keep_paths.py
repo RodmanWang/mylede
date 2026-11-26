@@ -88,6 +88,13 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn('Refusing special custom sysupgrade path', backup)
 
 
+    def test_luci_standard_form_has_uci_read_and_write_permissions(self):
+        acl = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/acl.d/luci-app-myupdate.json").read_text(encoding="utf-8")
+        import json
+        permissions = json.loads(acl)["luci-app-myupdate"]
+        self.assertIn("myupdate", permissions["read"]["uci"])
+        self.assertIn("myupdate", permissions["write"]["uci"])
+
     def test_sysupgrade_backup_reader_handles_space_separated_uci_lists(self):
         source = BACKUP.read_text(encoding="utf-8")
         self.assertIn("uci -q get myupdate.main.custom_keep_paths", source)
