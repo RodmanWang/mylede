@@ -26,7 +26,7 @@ grep -Fxq "$DEPENDENCY" <(sed "s/^[[:space:]]*//" "$VALID_ROOT/tools/Makefile")
 
 # The patch must be idempotent.
 TOPDIR="$VALID_ROOT" bash "$PATCH_SCRIPT"
-[[ "$(grep -Fc "$DEPENDENCY" "$VALID_ROOT/tools/Makefile")" -eq 1 ]]
+[[ "$(grep -Fc "$DEPENDENCY" <(sed "s/^[[:space:]]*//" "$VALID_ROOT/tools/Makefile"))" -eq 1 ]]
 
 # Unknown upstream layouts must fail closed and remain untouched.
 UNKNOWN_ROOT="$TMP_DIR/unknown"
