@@ -246,7 +246,7 @@ return view.extend({
 						'data-keep-path': path,
 					}, '×');
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
-						E('span', { 'class': 'myupdate-path-chip-text', 'title': path }, path),
+						E('span', { 'class': 'myupdate-path-chip-text', 'title': path }, path.substring(path.lastIndexOf('/') + 1) || path),
 						remove
 					]));
 				});
@@ -374,10 +374,44 @@ return view.extend({
 			browserPanel.appendChild(browserList);
 			browserPanel.appendChild(browserHint);
 			renderChips();
-			return E('div', { 'class': 'myupdate-path-editor' }, [
+			var editor = E('div', { 'class': 'myupdate-path-editor' }, [
 				E('div', { 'class': 'myupdate-path-entry-row' }, [ input, addButton ]),
 				browserToggle, browserPanel, chips, message
 			]);
+			function syncPathEditorLayout() {
+				var field = editor.parentNode;
+				while (field && !(field.classList && field.classList.contains('cbi-value-field')))
+					field = field.parentNode;
+				var row = field && field.parentNode;
+				while (row && !(row.classList && row.classList.contains('cbi-value')))
+					row = row.parentNode;
+				var label = row && row.querySelector('.cbi-value-title');
+				if (!row || !field || !label) return;
+				var rowRect = row.getBoundingClientRect();
+				var fieldRect = field.getBoundingClientRect();
+				editor.style.width = Math.round(rowRect.width) + 'px';
+				editor.style.maxWidth = 'none';
+				editor.style.marginLeft = Math.round(rowRect.left - fieldRect.left) + 'px';
+				var columns = rowRect.width >= 640 ? 5 : (rowRect.width >= 420 ? 3 : 2);
+				var gap = 8;
+				var chipWidth = Math.floor((rowRect.width - gap * (columns - 1)) / columns);
+				chips.style.setProperty('--myupdate-path-chip-width', chipWidth + 'px');
+				chips.style.setProperty('--myupdate-path-chip-columns', columns);
+			}
+			if (window.ResizeObserver) {
+				var pathEditorObserver = new window.ResizeObserver(syncPathEditorLayout);
+				window.requestAnimationFrame(function() {
+					var node = editor.parentNode;
+					while (node && !(node.classList && node.classList.contains('cbi-value'))) node = node.parentNode;
+					if (node) pathEditorObserver.observe(node);
+					syncPathEditorLayout();
+				});
+			}
+			else {
+				window.addEventListener('resize', syncPathEditorLayout);
+				window.requestAnimationFrame(syncPathEditorLayout);
+			}
+			return editor;
 		};
 
 		var statusText = E('div', { id: 'myupdate-status', 'class': 'myupdate-status-message' });
@@ -510,7 +544,7 @@ return view.extend({
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
-				.myupdate-path-editor{width:min(100%,680px);max-width:680px}
+				.myupdate-path-editor{width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-path-entry-row{display:flex;align-items:center;gap:8px;max-width:680px}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
 				.myupdate-path-manual-add{align-self:center;min-width:0;padding:5px 12px}
@@ -526,9 +560,9 @@ return view.extend({
 				.myupdate-browser-add{flex:0 0 auto;min-width:0;padding:4px 10px;border-radius:5px}
 				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#778397)}
 				.myupdate-browser-hint{padding-top:6px}
-				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;width:100%;box-sizing:border-box}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
-				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:7px;width:150px;max-width:100%;box-sizing:border-box;padding:6px 8px 6px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:7px;flex:0 0 var(--myupdate-path-chip-width);width:var(--myupdate-path-chip-width);max-width:none;box-sizing:border-box;padding:6px 8px 6px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 				.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
 				.myupdate-path-chip-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92em}
 				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;min-height:18px;max-height:18px;box-sizing:border-box;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.05em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
