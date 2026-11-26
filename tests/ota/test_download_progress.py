@@ -90,14 +90,14 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn('readlink -f "$path"', backup)
         self.assertIn('Refusing special custom sysupgrade path', backup)
 
-    def test_downgrade_is_a_persisted_checkbox_next_to_upgrade_action(self):
+    def test_downgrade_is_staged_as_a_standard_form_flag(self):
         rpc = RPC.read_text(encoding="utf-8")
         view = VIEW.read_text(encoding="utf-8")
+        self.assertIn("allow_downgrade: 1", rpc)
         self.assertIn("args.allow_downgrade != '0' && args.allow_downgrade != '1'", rpc)
-        self.assertIn("method: 'set_allow_downgrade'", view)
-        self.assertIn("'type': 'checkbox'", view)
-        self.assertIn("downgradeLabel", view)
-        self.assertNotIn("form.ListValue, 'allow_downgrade'", view)
+        self.assertIn("s.option(form.Flag, 'allow_downgrade'", view)
+        self.assertIn("点击“保存并应用”后生效", view)
+        self.assertNotIn("set_allow_downgrade", view)
 
     def test_keep_path_input_is_two_rows_and_uses_filesystem_browser(self):
         view = VIEW.read_text(encoding="utf-8")
@@ -109,26 +109,17 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertNotIn("/.uuplugin_uuid", view)
 
 
-    def test_downgrade_has_a_dedicated_persisted_rpc_and_safe_default(self):
+    def test_downgrade_has_no_immediate_commit_rpc_and_uses_unified_save(self):
         rpc = RPC.read_text(encoding="utf-8")
         view = VIEW.read_text(encoding="utf-8")
         acl = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/acl.d/luci-app-myupdate.json").read_text(encoding="utf-8")
-        self.assertIn("if (c.load(CONFIG) !== true)", rpc.split("function get_config()", 1)[1].split("function valid_string", 1)[0])
         self.assertIn("out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';", rpc)
-        self.assertIn("function set_allow_downgrade(args)", rpc)
-        self.assertIn("c.commit(CONFIG) !== true", rpc)
-        self.assertIn("let verify = cursor();", rpc)
-        self.assertIn("String(saved) != value", rpc)
-        self.assertIn("verify.load(CONFIG)", rpc)
-        self.assertIn("method: 'set_allow_downgrade'", view)
-        self.assertIn("result.allow_downgrade", view)
-        self.assertIn("return callConfig().then(function(config)", view)
-        self.assertIn("confirmed_by_readback", view)
-        self.assertNotIn("return callConfig();", view)
-        self.assertIn("降级设置回读不一致", view)
-        self.assertIn('"set_allow_downgrade"', acl)
-        self.assertIn("'checked': (cfg.allow_downgrade || '0') == '1'", view)
-        self.assertIn("myupdate-downgrade-row", view)
+        self.assertIn("allow_downgrade: 1", rpc)
+        self.assertNotIn("function set_allow_downgrade(args)", rpc)
+        self.assertNotIn("set_allow_downgrade", view)
+        self.assertNotIn('"set_allow_downgrade"', acl)
+        self.assertIn("s.option(form.Flag, 'allow_downgrade'", view)
+        self.assertNotIn("downgradeLabel", view)
 
     def test_luci_compacts_key_and_keep_path_controls_without_inserting_newlines(self):
         view = VIEW.read_text(encoding="utf-8")
