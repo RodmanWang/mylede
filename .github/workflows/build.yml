@@ -418,9 +418,6 @@ jobs:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
 
-      - name: 补齐 LEDE dwarves 对 CMake 的显式构建依赖
-        run: bash .github/ci/patch-lede-host-tool-dependencies.sh
-
       - name: 下载并安装不可变源码版本锁定清单
         uses: actions/download-artifact@v7
         with:
@@ -439,7 +436,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          CONFIG_HASH="$(sha256sum scripts/04-configure.sh .github/ci/install-build-deps.sh .github/ci/patch-lede-host-tool-dependencies.sh | sha256sum | awk '{print $1}')"
+          CONFIG_HASH="$(sha256sum scripts/04-configure.sh .github/ci/install-build-deps.sh .github/ci/build-lede-cmake-host-tool.sh | sha256sum | awk '{print $1}')"
           MIXKEY="ubuntu-24.04-x86_64-${CONFIG_HASH}"
           if [[ "$REBUILD_TOOLCHAIN" == 'true' ]]; then
             MIXKEY="${MIXKEY}-forced-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -531,6 +528,7 @@ jobs:
           cd /home/ubuntu/lede
           rm -rf tmp .config
           make defconfig
+          bash "$GITHUB_WORKSPACE/.github/ci/build-lede-cmake-host-tool.sh"
           BUILD_LOG="$RUNNER_TEMP/lede-toolchain-build.log"
           setsid bash -o pipefail -c \
             'timeout --signal=INT --kill-after=30s 315m make V=1 -j"$(nproc)" tools/install toolchain/install 2>&1 | tee "$1"' \
@@ -723,9 +721,6 @@ jobs:
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
         run: bash .github/ci/clone-pinned-lede.sh
-
-      - name: 补齐 LEDE dwarves 对 CMake 的显式构建依赖
-        run: bash .github/ci/patch-lede-host-tool-dependencies.sh
 
       - name: 下载并安装不可变源码版本锁定清单
         uses: actions/download-artifact@v7
@@ -921,7 +916,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          CONFIG_HASH="$(sha256sum scripts/04-configure.sh .github/ci/install-build-deps.sh .github/ci/patch-lede-host-tool-dependencies.sh | sha256sum | awk '{print $1}')"
+          CONFIG_HASH="$(sha256sum scripts/04-configure.sh .github/ci/install-build-deps.sh .github/ci/build-lede-cmake-host-tool.sh | sha256sum | awk '{print $1}')"
           MIXKEY="ubuntu-24.04-x86_64-${CONFIG_HASH}"
           if [[ "$REBUILD_TOOLCHAIN" == 'true' ]]; then
             MIXKEY="${MIXKEY}-forced-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -1000,6 +995,8 @@ jobs:
           set -Eeuo pipefail
           cd /home/ubuntu/lede
           make defconfig
+          # Build CMake serially before tools/install can schedule dwarves in parallel.
+          bash "$GITHUB_WORKSPACE/.github/ci/build-lede-cmake-host-tool.sh"
           # The cached host/toolchain tree may not contain every config-dependent host utility.
           make V=1 -j"$(nproc)" tools/install
           # Keep the original script's semantics: it removes tmp/.config, runs defconfig, then builds.
