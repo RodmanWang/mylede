@@ -46,56 +46,62 @@ def read(rel):
 path, original = read("include/target.mk")
 lines = original.splitlines(keepends=True)
 starts = [i for i, line in enumerate(lines)
-          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*:?=", line)]
-if len(starts) != 1:
-    raise RuntimeError("include/target.mk 的 DEFAULT_PACKAGES.router 定义不唯一")
-start = starts[0]
-end = start + 1
-while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
-    end += 1
+          if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?::|\?)?=", line)]
 keep = [b"luci-app-ddns", b"luci-app-upnp", b"luci-app-nlbwmon",
         b"luci-theme-design", b"luci-app-turboacc"]
-for i in range(start, end):
-    body, marker, comment = lines[i].partition(b"#")
-    tokens = list(re.finditer(rb"(?<![A-Za-z0-9_.+-])(?:luci-app-[A-Za-z0-9_.+-]+|coremark)(?![A-Za-z0-9_.+-])", body))
-    for match in reversed(tokens):
-        if match.group() in keep:
-            continue
-        a, b = match.span()
-        if b < len(body) and body[b:b+1] in (b" ", b"\t"):
-            b += 1
-        elif a and body[a-1:a] in (b" ", b"\t"):
-            a -= 1
-        body = body[:a] + body[b:]
-    lines[i] = body + marker + comment
-for i in range(end - 1, start, -1):
-    if re.fullmatch(rb"[ \t]*\\[ \t]*(?:\r?\n)?", lines[i]):
-        del lines[i]
-        end -= 1
-section = b"\n".join(line.partition(b"#")[0] for line in lines[start:end])
-missing = [p for p in keep if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(p) + rb"(?![A-Za-z0-9_.+-])", section)]
-if missing:
-    idx = end - 1
-    line = lines[idx]
-    ending = b"\r\n" if line.endswith(b"\r\n") else (b"\n" if line.endswith(b"\n") else b"")
-    body = line[:-len(ending)] if ending else line
-    body = body.rstrip()
-    if not ending:
-        ending = b"\n"
-    if not body:
-        if idx > start:
-            previous = lines[idx - 1]
-            previous_ending = b"\r\n" if previous.endswith(b"\r\n") else (b"\n" if previous.endswith(b"\n") else b"")
-            previous_body = previous[:-len(previous_ending)] if previous_ending else previous
-            if not previous_body.rstrip().endswith(b"\\"):
-                previous_body = previous_body.rstrip() + b" \\"
-            lines[idx - 1] = previous_body + (previous_ending or ending)
-        lines[idx] = b"\t" + b" ".join(missing) + ending
-    else:
-        if not body.endswith(b"\\"):
-            body += b" \\"
-        lines[idx] = body + ending
-        lines.insert(end, b"\t" + b" ".join(missing) + ending)
+# Upstream may split the variable across multiple assignments or change the
+# assignment operator. Process every recognized block; if absent, preserve
+# upstream defaults rather than failing because the file layout changed.
+blocks = []
+for start in starts:
+    end = start + 1
+    while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
+        end += 1
+    blocks.append((start, end))
+for start, end in reversed(blocks):
+    for i in range(start, end):
+        body, marker, comment = lines[i].partition(b"#")
+        tokens = list(re.finditer(rb"(?<![A-Za-z0-9_.+-])(?:luci-app-[A-Za-z0-9_.+-]+|coremark)(?![A-Za-z0-9_.+-])", body))
+        for match in reversed(tokens):
+            if match.group() in keep:
+                continue
+            a, b = match.span()
+            if b < len(body) and body[b:b+1] in (b" ", b"\t"):
+                b += 1
+            elif a and body[a-1:a] in (b" ", b"\t"):
+                a -= 1
+            body = body[:a] + body[b:]
+        lines[i] = body + marker + comment
+    for i in range(end - 1, start, -1):
+        if re.fullmatch(rb"[ \t]*\\[ \t]*(?:\r?\n)?", lines[i]):
+            del lines[i]
+            end -= 1
+    section = b"\n".join(line.partition(b"#")[0] for line in lines[start:end])
+    missing = [p for p in keep if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(p) + rb"(?![A-Za-z0-9_.+-])", section)]
+    if missing:
+        idx = end - 1
+        line = lines[idx]
+        ending = b"\r\n" if line.endswith(b"\r\n") else (b"\n" if line.endswith(b"\n") else b"")
+        body = line[:-len(ending)] if ending else line
+        body = body.rstrip()
+        if not ending:
+            ending = b"\n"
+        if not body:
+            if idx > start:
+                previous = lines[idx - 1]
+                previous_ending = b"\r\n" if previous.endswith(b"\r\n") else (b"\n" if previous.endswith(b"\n") else b"")
+                previous_body = previous[:-len(previous_ending)] if previous_ending else previous
+                if not previous_body.rstrip().endswith(b"\\"):
+                    previous_body = previous_body.rstrip() + b" \\"
+                lines[idx - 1] = previous_body + (previous_ending or ending)
+            lines[idx] = b"\t" + b" ".join(missing) + ending
+        else:
+            if not body.endswith(b"\\"):
+                body += b" \\"
+            lines[idx] = body + ending
+            lines.insert(end, b"\t" + b" ".join(missing) + ending)
+if not starts:
+    print("上游已不再定义 DEFAULT_PACKAGES.router，保留上游默认包配置")
 staged[path][1] = b"".join(lines)
 
 # 2. 保留 x86 Makefile 的内核版本选择逻辑；默认选当前源码最高可用版本。
