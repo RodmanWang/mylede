@@ -34,7 +34,7 @@ def make_value(path, variable):
     return values[0]
 
 def github_repo_url(url, label):
-    match = re.fullmatch(r"https://github\\.com/([^/]+/[^/]+?)(?:\\.git)?(?:/archive/.*)?", url)
+    match = re.fullmatch(r"https://github\.com/([^/]+/[^/]+?)(?:\.git)?(?:/archive/.*)?", url)
     if not match:
         raise SystemExit(f"{label}: unsupported GitHub repository URL: {url}")
     return f"https://github.com/{match.group(1)}.git"
