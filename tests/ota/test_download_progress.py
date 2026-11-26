@@ -290,12 +290,14 @@ class DownloadProgressContractTests(unittest.TestCase):
 
     def test_build_reads_pinned_feeds_config_from_git_not_raw_cdn(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
-        self.assertIn('clone --depth=1 --single-branch --branch master "$LEDE_URL"', workflow)
+        self.assertIn('LEDE_REF="$(git ls-remote --symref "$LEDE_URL" HEAD', workflow)
+        self.assertIn('LEDE_BRANCH="${LEDE_REF#refs/heads/}"', workflow)
+        self.assertIn('clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL"', workflow)
         self.assertIn('FEEDS_FILE="$LEDE_PREFLIGHT_REPO/feeds.conf.default"', workflow)
         self.assertIn('fetch --no-tags --depth=1 origin "$LEDE_COMMIT"', workflow)
         self.assertNotIn('https://raw.githubusercontent.com/coolsnowwolf/lede/', workflow)
         self.assertIn("LEDE_PREFLIGHT_REPO", workflow)
-        self.assertLess(workflow.index('clone --depth=1 --single-branch --branch master "$LEDE_URL"'), workflow.index('git ls-remote "$repo_url" "$repo_ref"'))
+        self.assertLess(workflow.index('clone --depth=1 --single-branch --branch "$LEDE_BRANCH" "$LEDE_URL"'), workflow.index('git ls-remote "$repo_url" "$repo_ref"'))
 
     def test_upstream_plugin_repositories_are_derived_from_package_recipes(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
