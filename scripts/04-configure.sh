@@ -142,29 +142,31 @@ if change_lan_ip:
     rel = "package/base-files/files/bin/config_generate"
     path, original = read(rel)
     lines = original.splitlines(keepends=True)
+    # Match the LAN address default independently of its current IPv4 value.
+    # Identify the fallback by addr_offset semantics, not a fixed 192.168.x.x literal.
     lan_pattern = re.compile(
-        rb'^[ \t]*lan\) ipad=\$\{ipaddr:-"192\.168\.1\.1"\} ;;[ \t]*(?:\r?\n)?$'
+        rb'^([ \t]*lan\) ipad=\$\{ipaddr:-")((?:[0-9]{1,3}\.){3}[0-9]{1,3})("\} ;;[ \t]*)(\r?\n)?$'
     )
     other_pattern = re.compile(
-        rb'^[ \t]*\*\) ipad=\$\{ipaddr:-"192\.168\.\$\(\(addr_offset\+\+\)\)\.1"\} ;;[ \t]*(?:\r?\n)?$'
+        rb'^([ \t]*\*\) ipad=\$\{ipaddr:-")([^"]*\$\(\(addr_offset\+\+\)\)[^"]*)("\} ;;[ \t]*)(\r?\n)?$'
     )
-    lan_hits = [i for i, line in enumerate(lines) if lan_pattern.match(line)]
-    other_hits = [i for i, line in enumerate(lines) if other_pattern.match(line)]
+    lan_hits = [(i, lan_pattern.match(line)) for i, line in enumerate(lines)]
+    lan_hits = [(i, match) for i, match in lan_hits if match]
+    other_hits = [(i, other_pattern.match(line)) for i, line in enumerate(lines)]
+    other_hits = [(i, match) for i, match in other_hits if match]
     if len(lan_hits) != 1 or len(other_hits) != 1:
         raise RuntimeError(
-            f"{rel} 中预期的两条 LAN 地址模板匹配数量异常："
-            f"lan 模板 {len(lan_hits)} 处，其他接口模板 {len(other_hits)} 处；拒绝修改。"
+            f"{rel} 中无法唯一识别 LAN 默认地址和 addr_offset 回退模板："
+            f"lan 模板 {len(lan_hits)} 处，回退模板 {len(other_hits)} 处；拒绝修改。"
         )
-    a, b = lan_hits[0], other_hits[0]
+    a, lan_match = lan_hits[0]
+    b, other_match = other_hits[0]
     if b <= a:
-        raise RuntimeError(f"{rel} 中两条 LAN 地址模板顺序异常，拒绝修改")
+        raise RuntimeError(f"{rel} 中 LAN 模板与回退模板顺序异常，拒绝修改")
     prefix = ".".join(lan_ip.split(".")[:2])
-    nl1 = b"\r\n" if lines[a].endswith(b"\r\n") else b"\n"
-    nl2 = b"\r\n" if lines[b].endswith(b"\r\n") else b"\n"
-    indent1 = re.match(rb"^([ \t]*)", lines[a]).group(1)
-    indent2 = re.match(rb"^([ \t]*)", lines[b]).group(1)
-    lines[a] = indent1 + f'lan) ipad=${{ipaddr:-"{lan_ip}"}} ;;'.encode() + nl1
-    lines[b] = indent2 + f'*) ipad=${{ipaddr:-"{prefix}.$((addr_offset++)).1"}} ;;'.encode() + nl2
+    lines[a] = lan_match.group(1) + lan_ip.encode() + lan_match.group(3) + (lan_match.group(4) or b"")
+    fallback = f'{prefix}.$((addr_offset++)).1'.encode()
+    lines[b] = other_match.group(1) + fallback + other_match.group(3) + (other_match.group(4) or b"")
     staged[path] = [original, b"".join(lines)]
     print(f"LAN 地址已设置为 {lan_ip}；其他静态接口将使用 {prefix}.<offset>.1")
 else:
