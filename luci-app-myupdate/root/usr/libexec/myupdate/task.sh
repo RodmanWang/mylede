@@ -44,9 +44,40 @@ else
 fi
 CURRENT_VERSION="$(cat /etc/myupdate/build-version 2>/dev/null || true)"
 [ -n "$CURRENT_VERSION" ] || CURRENT_VERSION="${DISTRIB_RELEASE:-unknown}"
-[ -n "$OWNER" ] && [ -n "$REPO" ] || { write_status error '请先填写有效的 GitHub 仓库完整地址' false false false; exit 1; }
+[ -n "$OWNER" ] && [ -n "$REPO" ] || {
+	write_status error '未配置有效的 GitHub 仓库地址。请填写 https://github.com/OWNER/REPO 后再检查。' false false false
+	exit 1
+}
+if [ "$VIS" = private ]; then
+	[ -s /etc/myupdate/token ] || {
+		write_status error '当前选择的是私有仓库，但尚未配置 GitHub Token。请填写 Token 并保存后再检查。' false false false
+		exit 1
+	}
+	TOKEN_VALUE="$(cat /etc/myupdate/token)"
+	case "$TOKEN_VALUE" in
+		github_pat_?*|ghp_?*|gho_?*|ghu_?*|ghs_?*|ghr_?*) ;;
+		*) write_status error 'GitHub Token 格式无效。请检查 Token 类型和内容。' false false false; exit 1;;
+	esac
+	case "$TOKEN_VALUE" in
+		*[!A-Za-z0-9_]*) write_status error 'GitHub Token 含有无效字符，请检查是否粘贴了空格或其他多余内容。' false false false; exit 1;;
+	esac
+	unset TOKEN_VALUE
+fi
+MINISIGN_KEY="$(uci -q get myupdate.main.minisign_public_key 2>/dev/null || true)"
+[ -n "$MINISIGN_KEY" ] || {
+	write_status error '尚未配置 Minisign 公钥。请填写与发布签名密钥配对的公钥后再检查。' false false false
+	exit 1
+}
+printf '%s\n' "$MINISIGN_KEY" | grep -Eq '^RW[A-Za-z0-9+/]{54}$' || {
+	write_status error 'Minisign 公钥格式无效。请填写 56 位 Base64 公钥主体，或使用“识别并转换”处理 minisign.pub。' false false false
+	exit 1
+}
 write_status running '正在查询 GitHub Release' false false false
-/usr/libexec/myupdate/github-api.sh "$OWNER" "$REPO" "$VIS" "$CHANNEL" || { write_status error '查询 GitHub Release 失败' false false false; exit 1; }
+if ! /usr/libexec/myupdate/github-api.sh "$OWNER" "$REPO" "$VIS" "$CHANNEL"; then
+	API_ERROR="$(cat "$R/api-error" 2>/dev/null || true)"
+	write_status error "${API_ERROR:-查询 GitHub Release 失败}" false false false
+	exit 1
+fi
 REL="$R/release.json"
 TAG="$(jsonfilter -i "$REL" -e '@.tag_name' 2>/dev/null || true)"
 [ -n "$TAG" ] || { write_status error 'Release 中没有可用版本' false false false; exit 1; }

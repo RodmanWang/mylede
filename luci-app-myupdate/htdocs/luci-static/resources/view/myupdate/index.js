@@ -90,15 +90,11 @@ return view.extend({
 
 		var repo = s.option(form.Value, 'repo_url', _('GitHub 仓库地址'));
 		repo.placeholder = 'https://github.com/OWNER/REPO';
-		repo.description = _('填写仓库完整 HTTPS 地址，例如 https://github.com/OWNER/REPO。不要填写 Release 页面或其他子路径。');
-		repo.rmempty = false;
+		repo.description = _('可留空；留空时不会保存仓库地址。点击“检查更新”时才检查地址是否有效；需要填写仓库完整 HTTPS 地址，例如 https://github.com/OWNER/REPO。');
+		repo.optional = true;
+		repo.rmempty = true;
 		repo.cfgvalue = function() {
 			return cfg.repo_url || '';
-		};
-		repo.validate = function(section_id, value) {
-			if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(value || ''))
-				return _('请输入有效的 GitHub 仓库地址，例如 https://github.com/OWNER/REPO');
-			return true;
 		};
 		var originalRepoRender = repo.renderWidget;
 		repo.renderWidget = function() {
@@ -118,13 +114,8 @@ return view.extend({
 		token.optional = true;
 		token.depends('repo_visibility', 'private');
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置。');
+		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置；留空保持已有 Token。格式和访问权限在检查私有仓库时验证，不影响保存其他设置。');
 		token.cfgvalue = function() { return ''; };
-		token.validate = function(section_id, value) {
-			if (visibility.formvalue(section_id) == 'private' && !value && !cfg.token_configured)
-				return _('私有仓库尚未配置 GitHub Token，请在此输入 Token。');
-			return true;
-		};
 		token.write = function(section_id, value) {
 			if (!value) return Promise.resolve();
 			return callToken(value).then(function(result) {
@@ -161,13 +152,9 @@ return view.extend({
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
 		pubkey.monospace = true;
-		pubkey.description = _('公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对。支持粘贴 minisign.pub 完整两行内容，或直接填写 Base64 公钥主体。');
-		pubkey.validate = function(section_id, value) {
-			var key = (value || '').trim();
-			if (!/^RW[A-Za-z0-9+/]{54}$/.test(key))
-				return _('公钥格式不正确。请填写 56 位 Base64 公钥主体；若使用 minisign.pub 两行格式，请先点击“识别并转换”。');
-			return true;
-		};
+		pubkey.optional = true;
+		pubkey.rmempty = true;
+		pubkey.description = _('可留空并先保存其他设置。公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对；检查更新时会验证 56 位 Base64 公钥主体格式及实际签名，不正确时会在“更新状态”中提示。支持粘贴 minisign.pub 完整两行内容，点击“识别并转换”后再保存。');
 
 		var convertKey = E('button', {
 			'class': 'btn cbi-button cbi-button-action',
