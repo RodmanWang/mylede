@@ -1574,6 +1574,11 @@ jobs:
           [[ -n "$IMAGE" ]] || { echo '::error::发布文件中缺少固件镜像。'; exit 1; }
           META="$(cat release-input/build-meta.json)"
           LEDE_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["lede_commit"])' <<< "$META")"
+          LEDE_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["lede"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          SMARTDNS_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["smartdns"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          SMARTDNS_WEBUI_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["smartdns_webui"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          LUCI_APP_SMARTDNS_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["luci_app_smartdns"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
+          OPENCLASH_REPO="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["source_repositories"]["openclash"]["url"].removeprefix("https://github.com/").removesuffix(".git"))' <<< "$META")"
           SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns"])' <<< "$META")"
           SMARTDNS_WEBUI_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["smartdns_webui"])' <<< "$META")"
           LUCI_APP_SMARTDNS_COMMIT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["sources"]["luci_app_smartdns"])' <<< "$META")"
@@ -1622,11 +1627,11 @@ jobs:
 
           ### 本次编译使用的源码版本
 
-          - LEDE: [${LEDE_COMMIT:0:7}](https://github.com/coolsnowwolf/lede/commit/${LEDE_COMMIT})
-          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/smartdns/commit/${SMARTDNS_COMMIT})
-          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/pymumu/smartdns-webui/commit/${SMARTDNS_WEBUI_COMMIT})
-          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/pymumu/luci-app-smartdns/commit/${LUCI_APP_SMARTDNS_COMMIT})
-          - OpenClash: [${OPENCLASH_COMMIT:0:7}](https://github.com/vernesong/OpenClash/commit/${OPENCLASH_COMMIT})
+          - LEDE: [${LEDE_COMMIT:0:7}](https://github.com/${LEDE_REPO}/commit/${LEDE_COMMIT})
+          - SmartDNS: [${SMARTDNS_COMMIT:0:7}](https://github.com/${SMARTDNS_REPO}/commit/${SMARTDNS_COMMIT})
+          - SmartDNS WebUI: [${SMARTDNS_WEBUI_COMMIT:0:7}](https://github.com/${SMARTDNS_WEBUI_REPO}/commit/${SMARTDNS_WEBUI_COMMIT})
+          - LuCI App SmartDNS: [${LUCI_APP_SMARTDNS_COMMIT:0:7}](https://github.com/${LUCI_APP_SMARTDNS_REPO}/commit/${LUCI_APP_SMARTDNS_COMMIT})
+          - OpenClash: [${OPENCLASH_COMMIT:0:7}](https://github.com/${OPENCLASH_REPO}/commit/${OPENCLASH_COMMIT})
           EOF
           # The GITHUB_TOKEN cannot create a release tag targeting a commit
           # that changes workflow files relative to the default branch. Ensure
