@@ -785,6 +785,7 @@ jobs:
       - name: 克隆指定版本的 LEDE 源码
         env:
           LEDE_COMMIT: ${{ needs.source_check.outputs.lede_commit }}
+          LEDE_REF: ${{ needs.source_check.outputs.lede_ref }}
         run: bash .github/ci/clone-pinned-lede.sh
 
       - name: 下载并安装不可变源码版本锁定清单
