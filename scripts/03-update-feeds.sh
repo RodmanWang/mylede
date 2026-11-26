@@ -435,8 +435,8 @@ fi
 # 将所有 feed 固定到 source_check 预检得到的精确 commit
 # ============================================================
 
-SOURCE_LOCK="\${MYLEDE_SOURCE_LOCK:-/home/ubuntu/source-revisions.tsv}"
-if [[ -n "\${MYLEDE_SOURCE_LOCK:-}" ]]; then
+SOURCE_LOCK="${MYLEDE_SOURCE_LOCK:-/home/ubuntu/source-revisions.tsv}"
+if [[ -n "${MYLEDE_SOURCE_LOCK:-}" ]]; then
     [[ -s "$SOURCE_LOCK" ]] || {
         echo "错误：CI 提供的源码锁定文件不存在或为空：$SOURCE_LOCK" >&2
         exit 1
@@ -451,7 +451,7 @@ echo "========== 按源码锁定 SHA 固定 feeds 源码 =========="
 while IFS=$'\t' read -r source_name source_url source_ref source_commit; do
     [[ "$source_name" == feed:* || "$source_name" == OpenClash ]] || continue
     [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "错误：无效的锁定 SHA：$source_name" >&2; exit 1; }
-    feed_name="\${source_name#feed:}"
+    feed_name="${source_name#feed:}"
     feed_dir="$TOPDIR/feeds/$feed_name"
     [[ -d "$feed_dir" ]] || { echo "错误：锁定 feed 不存在：$feed_dir" >&2; exit 1; }
     actual_url="$(git -C "$feed_dir" remote get-url origin)"
