@@ -1,68 +1,39 @@
-#
-# Copyright (c) 2026 RodmanWang
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-#
-include $(TOPDIR)/rules.mk
+#!/usr/bin/env python3
+"""Contract tests for preserving MyUpdate's administrator UCI configuration."""
+from pathlib import Path
+import unittest
 
-LUCI_TITLE:=LuCI MyUpdate Firmware Manager
-LUCI_DESCRIPTION:=GitHub Release based firmware update manager
-LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +curl +ca-bundle +jsonfilter +coreutils +coreutils-sha256sum +minisign
-LUCI_PKGARCH:=all
-LUCI_LANG.zh_Hans:=简体中文
 
-PKG_LICENSE:=GPL-2.0-only
-PKG_MAINTAINER:=MyUpdate
+ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_MAKEFILE = ROOT / "luci-app-myupdate/Makefile"
 
-# Keep administrator settings when this package is upgraded or reinstalled.
-# This is required for opkg to treat the UCI file as a user configuration file.
-define Package/luci-app-myupdate/conffiles
-/etc/config/myupdate
-endef
 
-# Normalize package-owned file modes after live installation. Some generated
-# IPKs have arrived with world-writable files, which is unsafe and can break
-# services that enforce strict file permissions.
-define Package/luci-app-myupdate/postinst
-#!/bin/sh
-[ -n "$${IPKG_INSTROOT}" ] && exit 0
+class PackageConfigPreservationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = PACKAGE_MAKEFILE.read_text(encoding="utf-8")
 
-chmod 0755 /etc/init.d/myupdate || exit 1
-chmod 0644 /usr/share/rpcd/ucode/myupdate.uc || exit 1
-chmod 0600 /etc/config/myupdate || exit 1
-chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
-[ ! -e /etc/myupdate/token ] || chmod 0600 /etc/myupdate/token || exit 1
+    def test_main_uci_file_is_declared_as_a_package_conffile(self):
+        self.assertIn(
+            "define Package/luci-app-myupdate/conffiles\n"
+            "/etc/config/myupdate\n"
+            "endef",
+            self.source,
+        )
 
-# Migrate the previous package default (6 hours) to the new default (1 day).
-# Preserve any non-default interval explicitly chosen by the administrator.
-if [ "$(uci -q get myupdate.main.check_interval 2>/dev/null)" = "21600" ]; then
-	uci set myupdate.main.check_interval='86400' && uci commit myupdate || exit 1
-fi
-chmod 0600 /etc/config/myupdate || exit 1
+    def test_postinst_skips_actions_for_offline_install_root(self):
+        postinst = self.source.split(
+            "define Package/luci-app-myupdate/postinst\n", 1
+        )[1].split("\nendef", 1)[0]
+        self.assertIn('[ -n "$${IPKG_INSTROOT}" ] && exit 0', postinst)
 
-if [ -x /etc/init.d/rpcd ]; then
-	/etc/init.d/rpcd restart
-fi
+    def test_postinst_does_not_replace_the_uci_configuration(self):
+        postinst = self.source.split(
+            "define Package/luci-app-myupdate/postinst\n", 1
+        )[1].split("\nendef", 1)[0]
+        self.assertNotIn("cat > /etc/config/myupdate", postinst)
+        self.assertNotIn("uci import myupdate", postinst)
 
-# MyUpdate's resident scheduler also consumes queued LuCI task requests.
-if [ -x /etc/init.d/myupdate ]; then
-	/etc/init.d/myupdate enable || exit 1
-	/etc/init.d/myupdate restart || exit 1
-fi
-exit 0
-endef
 
-# This package is kept under package/lean rather than feeds/luci/applications.
-# Use TOPDIR so the include resolves correctly from the local package directory.
-include $(TOPDIR)/feeds/luci/luci.mk
-
-# call BuildPackage - OpenWrt buildroot signature
+if __name__ == "__main__":
+    unittest.main()
