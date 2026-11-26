@@ -181,10 +181,10 @@ jobs:
           output_file = Path(sys.argv[2])
           repo_root = Path(sys.argv[3])
           minisign_repo_output = Path(sys.argv[4])
-          repositories = {}
+          repositories = set()
 
           def add(name, url, ref):
-              repositories[(url, ref)] = name
+              repositories.add((name, url, ref))
 
           def make_value(relative_path, variable):
               path = repo_root / relative_path
@@ -261,7 +261,7 @@ jobs:
           )
 
           with output_file.open('w', encoding='utf-8') as stream:
-              for (url, ref), name in sorted(repositories.items()):
+              for name, url, ref in sorted(repositories):
                   stream.write(f'{name}\t{url}\t{ref}\n')
           print(f'Found {len(repositories)} unique source references from checked-out LEDE feeds and MyLEDE package recipes.')
           PY
