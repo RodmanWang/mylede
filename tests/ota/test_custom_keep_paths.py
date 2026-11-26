@@ -53,7 +53,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("browserPanel.addEventListener('click', function(ev) { ev.stopPropagation(); });", source)
         self.assertIn("browserPanel.style.display = '';", source)
         self.assertIn("'title': path", source)
-        self.assertIn("width:360px;max-width:100%;box-sizing:border-box", source)
+        self.assertIn("width:150px;max-width:100%;box-sizing:border-box", source)
         self.assertIn("overflow:hidden;text-overflow:ellipsis;white-space:nowrap", source)
         self.assertIn("myupdate-browser-entry", source)
         self.assertIn("myupdate-browser-add", source)
