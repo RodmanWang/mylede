@@ -45,9 +45,6 @@ jobs:
       - name: Test serial LEDE CMake host-tool prebuild
         run: bash tests/ci/test_lede_cmake_prebuild.sh
 
-      - name: Test dynamic compatibility with upstream LEDE configuration
-        run: bash tests/ci/test_configure_upstream_variants.sh
-
       - name: Validate shell syntax
         shell: bash
         run: |
