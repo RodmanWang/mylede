@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+umask 077
+mkdir -p /etc/myupdate/backups /tmp/myupdate
+chmod 700 /etc/myupdate /etc/myupdate/backups /tmp/myupdate
+[ -e /etc/myupdate/token ] || : > /etc/myupdate/token
+[ -f /etc/myupdate/token ] || exit 1
+chmod 600 /etc/myupdate/token
+# Start periodic checks after the first boot. This service never flashes automatically.
+/etc/init.d/myupdate enable
+exit 0
