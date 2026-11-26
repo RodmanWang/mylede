@@ -173,16 +173,42 @@ jobs:
           [[ -s "$FEEDS_FILE" ]] || { echo '::error::锁定的 LEDE 工作树中 feeds.conf.default 不存在或为空。'; exit 1; }
           FEEDS_SHA256="$(sha256sum "$FEEDS_FILE" | awk '{print $1}')"
 
-          python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" <<'PY'
-          import sys
+          python3 - "$FEEDS_FILE" "$RUNNER_TEMP/source-repositories.tsv" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/minisign-repository.txt" <<'PY'
+          import re, sys
           from pathlib import Path
 
           feeds_file = Path(sys.argv[1])
           output_file = Path(sys.argv[2])
+          repo_root = Path(sys.argv[3])
+          minisign_repo_output = Path(sys.argv[4])
           repositories = {}
 
           def add(name, url, ref):
               repositories[(url, ref)] = name
+
+          def make_value(relative_path, variable):
+              path = repo_root / relative_path
+              pattern = re.compile(
+                  rf"^[ \t]*{re.escape(variable)}[ \t]*(?:\+|:|\?)?=[ \t]*([^ \t#]+)",
+                  re.MULTILINE,
+              )
+              matches = pattern.findall(path.read_text(encoding="utf-8"))
+              if len(matches) != 1:
+                  raise SystemExit(
+                      f"{relative_path}: expected exactly one {variable} assignment, found {len(matches)}"
+                  )
+              return matches[0]
+
+          def github_git_url(source_url, source_name):
+              match = re.match(
+                  r"^https://github\.com/([^/]+/[^/]+?)(?:\.git)?(?:/archive/.*)?$",
+                  source_url,
+              )
+              if not match:
+                  raise SystemExit(
+                      f"{source_name} source URL is not a supported GitHub repository URL: {source_url}"
+                  )
+              return f"https://github.com/{match.group(1)}.git"
 
           for raw_line in feeds_file.read_text(encoding='utf-8', errors='replace').splitlines():
               line = raw_line.strip()
@@ -200,19 +226,44 @@ jobs:
               if url:
                   add(f'feed:{name}', url, ref)
 
+          # Derive all custom upstream URLs from the same package recipes used
+          # by LEDE. Changing a Makefile source URL automatically changes locking.
+          add('plugin:smartdns',
+              github_git_url(make_value("smartdns/Makefile", "PKG_SOURCE_URL"), "smartdns"),
+              'HEAD')
+          add('plugin:smartdns_webui',
+              github_git_url(make_value("smartdns/Makefile", "SMARTDNS_WEBUI_SOURCE_URL"), "smartdns webui"),
+              'HEAD')
+          add('plugin:luci_app_smartdns',
+              github_git_url(make_value("luci-app-smartdns/Makefile", "PKG_SOURCE_URL"), "LuCI SmartDNS"),
+              'HEAD')
 
-          # Resolve the exact plugin sources used by the custom package Makefiles.
-          # These are locked before either build job starts; do not infer commits
-          # later from shortened download archive filenames.
-          add('plugin:smartdns', 'https://github.com/pymumu/smartdns.git', 'HEAD')
-          add('plugin:smartdns_webui', 'https://github.com/pymumu/smartdns-webui.git', 'HEAD')
-          add('plugin:luci_app_smartdns', 'https://github.com/pymumu/luci-app-smartdns.git', 'HEAD')
-          add('feed:OpenClash', 'https://github.com/vernesong/OpenClash.git', 'refs/heads/dev')
+          # Use the feed declaration consumed by scripts/03-update-feeds.sh.
+          feeds_script = (repo_root / "scripts/03-update-feeds.sh").read_text(encoding="utf-8")
+          feed_match = re.search(
+              r"""OPENCLASH_FEED=['"]src-git[ \t]+([^ \t'"]+)[ \t]+([^'"]+)['"]""",
+              feeds_script,
+          )
+          if not feed_match:
+              raise SystemExit("Cannot discover OPENCLASH_FEED declaration in scripts/03-update-feeds.sh")
+          openclash_name, openclash_source = feed_match.groups()
+          if ';' in openclash_source:
+              openclash_url, openclash_branch = openclash_source.rsplit(';', 1)
+              openclash_ref = f'refs/heads/{openclash_branch}'
+          else:
+              openclash_url, openclash_ref = openclash_source, 'HEAD'
+          add(f'feed:{openclash_name}', openclash_url, openclash_ref)
+
+          minisign_source = make_value("minisign/Makefile", "PKG_SOURCE_URL")
+          minisign_repo_output.write_text(
+              github_git_url(minisign_source, "minisign") + "\n",
+              encoding="utf-8",
+          )
 
           with output_file.open('w', encoding='utf-8') as stream:
               for (url, ref), name in sorted(repositories.items()):
                   stream.write(f'{name}\t{url}\t{ref}\n')
-          print(f'Found {len(repositories)} unique source references, including the three custom plugin repositories.')
+          print(f'Found {len(repositories)} unique source references from checked-out LEDE feeds and MyLEDE package recipes.')
           PY
 
           : > "$RUNNER_TEMP/source-revisions.tsv"
@@ -238,7 +289,8 @@ jobs:
           MINISIGN_REPO="$RUNNER_TEMP/minisign-git"
           MINISIGN_TAGS="$RUNNER_TEMP/minisign-tags.txt"
           git init "$MINISIGN_REPO"
-          git -C "$MINISIGN_REPO" remote add origin https://github.com/jedisct1/minisign.git
+          MINISIGN_REPO_URL="$(cat "$RUNNER_TEMP/minisign-repository.txt")"
+          git -C "$MINISIGN_REPO" remote add origin "$MINISIGN_REPO_URL"
           git -C "$MINISIGN_REPO" ls-remote --tags --refs origin > "$MINISIGN_TAGS"
           MINISIGN_VERSION="$(python3 - "$MINISIGN_TAGS" <<'PY'
           import re, sys
@@ -282,7 +334,7 @@ jobs:
             echo '::error::无法计算 minisign 源码归档 SHA-256。'
             exit 1
           }
-          printf 'MINISIGN_RELEASE\thttps://github.com/jedisct1/minisign\t%s\t%s\n' \
+          printf 'MINISIGN_RELEASE\t%s\t%s\t%s\n' "$MINISIGN_REPO_URL" \
             "$MINISIGN_VERSION" "$MINISIGN_SHA256" >> "$RUNNER_TEMP/source-revisions.tsv"
           echo "已锁定 minisign 最新正式 Release：$MINISIGN_VERSION（SHA-256: $MINISIGN_SHA256）"
 
