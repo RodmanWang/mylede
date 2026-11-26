@@ -257,16 +257,8 @@ return view.extend({
 						'type': 'button',
 						'class': 'btn cbi-button myupdate-path-chip-remove',
 						'aria-label': _('删除 ') + path,
-					'disabled': keepPathSaving,
-					'click': function(ev) {
-						if (ev) {
-							ev.preventDefault();
-							ev.stopPropagation();
-						}
-						if (keepPathSaving || keepPathValues.indexOf(path) < 0) return;
-						var next = keepPathValues.filter(function(item) { return item != path; });
-						persistKeepPaths(next, _('已删除路径，配置已保存。'));
-					}
+						'data-keep-path': path,
+						'disabled': keepPathSaving
 					}, '×');
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
 						E('span', { 'class': 'myupdate-path-chip-text' }, path),
@@ -274,6 +266,28 @@ return view.extend({
 					]));
 				});
 			}
+			// Capture the click on the chip container instead of relying on LuCI's
+			// dynamically-created button event binding.
+			chips.addEventListener('click', function(ev) {
+				var chip = ev.target;
+				while (chip && chip != chips && !(chip.classList && chip.classList.contains('myupdate-path-chip')))
+					chip = chip.parentNode;
+				if (!chip || chip == chips) return;
+				var remove = chip.querySelector('.myupdate-path-chip-remove');
+				if (!remove) return;
+				var hitRemove = ev.target == remove || remove.contains(ev.target);
+				if (!hitRemove && ev.clientX) {
+					var rect = chip.getBoundingClientRect();
+					hitRemove = ev.clientX >= rect.right - 38 && ev.clientY >= rect.top && ev.clientY <= rect.bottom;
+				}
+				if (!hitRemove) return;
+				ev.preventDefault();
+				ev.stopPropagation();
+				var path = remove.getAttribute('data-keep-path');
+				if (!path || keepPathSaving || keepPathValues.indexOf(path) < 0) return;
+				var next = keepPathValues.filter(function(item) { return item != path; });
+				persistKeepPaths(next, _('已删除路径，配置已保存。'));
+			}, true);
 			function allowedPath(path) {
 				return /^\/[A-Za-z0-9._/@+-]+$/.test(path) && path != '/' &&
 					!/(^|\/)\.\.?($|\/)/.test(path) &&
