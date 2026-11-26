@@ -312,5 +312,30 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertNotIn("'pymumu/smartdns': {", workflow)
         self.assertNotIn("'dev (preflight-locked)'", workflow)
         self.assertNotIn("https://github.com/vernesong/OpenClash/commit/", workflow)
+
+    def test_repository_and_credentials_do_not_block_save_but_are_checked_before_update(self):
+        view = VIEW.read_text(encoding="utf-8")
+        rpc = RPC.read_text(encoding="utf-8")
+        task = TASK.read_text(encoding="utf-8")
+
+        self.assertIn("repo.optional = true;", view)
+        self.assertIn("repo.rmempty = true;", view)
+        self.assertNotIn("repo.validate =", view)
+        self.assertNotIn("token.validate =", view)
+        self.assertIn("token.optional = true;", view)
+        self.assertNotIn("pubkey.validate =", view)
+        self.assertIn("pubkey.optional = true;", view)
+        self.assertIn("pubkey.rmempty = true;", view)
+
+        self.assertIn("c.delete(CONFIG, 'main', key);", rpc)
+        self.assertNotIn("Token 格式无效", rpc)
+        self.assertIn("未配置有效的 GitHub 仓库地址", task)
+        self.assertIn("GitHub Token 格式无效", task)
+        self.assertIn("GitHub Token 含有无效字符", task)
+        self.assertIn("尚未配置 Minisign 公钥", task)
+        self.assertIn("Minisign 公钥格式无效", task)
+        self.assertLess(task.index("未配置有效的 GitHub 仓库地址"), task.index("正在查询 GitHub Release"))
+        self.assertLess(task.index("Minisign 公钥格式无效"), task.index("正在查询 GitHub Release"))
+
 if __name__ == "__main__":
     unittest.main()
