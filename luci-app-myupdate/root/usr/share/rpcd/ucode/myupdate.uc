@@ -183,7 +183,7 @@ function save_config(args) {
 	let channel = args.release_channel ?? c.get(CONFIG, 'main', 'release_channel');
 	let mode = args.upgrade_mode ?? c.get(CONFIG, 'main', 'upgrade_mode');
 	let interval = int(args.check_interval ?? c.get(CONFIG, 'main', 'check_interval'));
-	let auto_time = args.auto_upgrade_time ?? c.get(CONFIG, 'main', 'auto_upgrade_time') ?? '04:00';
+	let auto_time = args.auto_upgrade_time ?? c.get(CONFIG, 'main', 'auto_upgrade_time') ?? '03:30';
 	if (visibility != 'public' && visibility != 'private') return { ok: false, error: '仓库可见性无效' };
 	if (channel != 'stable') return { ok: false, error: '更新通道无效' };
 	if (!valid_string(auto_time, 5) || !match(auto_time, /^([01][0-9]|2[0-3]):[0-5][0-9]$/))
