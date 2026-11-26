@@ -65,41 +65,47 @@ for start, end in reversed(blocks):
         for match in reversed(tokens):
             if match.group() in keep:
                 continue
-            a, b = match.span()
-            if b < len(body) and body[b:b+1] in (b" ", b"\t"):
-                b += 1
-            elif a and body[a-1:a] in (b" ", b"\t"):
-                a -= 1
-            body = body[:a] + body[b:]
+            left, right = match.span()
+            if right < len(body) and body[right:right+1] in (b" ", b"\t"):
+                right += 1
+            elif left and body[left-1:left] in (b" ", b"\t"):
+                left -= 1
+            body = body[:left] + body[right:]
         lines[i] = body + marker + comment
     for i in range(end - 1, start, -1):
         if re.fullmatch(rb"[ \t]*\\[ \t]*(?:\r?\n)?", lines[i]):
             del lines[i]
-            end -= 1
-    section = b"\n".join(line.partition(b"#")[0] for line in lines[start:end])
-    missing = [p for p in keep if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(p) + rb"(?![A-Za-z0-9_.+-])", section)]
+
+if starts:
+    # Recalculate ranges after removing empty continuation lines, then append
+    # missing preserved packages once. Never duplicate them per assignment.
+    current_blocks = []
+    current_starts = [
+        i for i, line in enumerate(lines)
+        if re.match(rb"^[ \t]*DEFAULT_PACKAGES\.router[ \t]*(?::|\?)?=", line)
+    ]
+    for start in current_starts:
+        end = start + 1
+        while end < len(lines) and lines[end - 1].rstrip(b"\r\n").endswith(b"\\"):
+            end += 1
+        current_blocks.append((start, end))
+    section = b"\n".join(
+        line.partition(b"#")[0]
+        for start, end in current_blocks
+        for line in lines[start:end]
+    )
+    missing = [
+        package for package in keep
+        if not re.search(rb"(?<![A-Za-z0-9_.+-])" + re.escape(package) + rb"(?![A-Za-z0-9_.+-])", section)
+    ]
     if missing:
-        idx = end - 1
-        line = lines[idx]
-        ending = b"\r\n" if line.endswith(b"\r\n") else (b"\n" if line.endswith(b"\n") else b"")
-        body = line[:-len(ending)] if ending else line
-        body = body.rstrip()
-        if not ending:
-            ending = b"\n"
-        if not body:
-            if idx > start:
-                previous = lines[idx - 1]
-                previous_ending = b"\r\n" if previous.endswith(b"\r\n") else (b"\n" if previous.endswith(b"\n") else b"")
-                previous_body = previous[:-len(previous_ending)] if previous_ending else previous
-                if not previous_body.rstrip().endswith(b"\\"):
-                    previous_body = previous_body.rstrip() + b" \\"
-                lines[idx - 1] = previous_body + (previous_ending or ending)
-            lines[idx] = b"\t" + b" ".join(missing) + ending
-        else:
-            if not body.endswith(b"\\"):
-                body += b" \\"
-            lines[idx] = body + ending
-            lines.insert(end, b"\t" + b" ".join(missing) + ending)
+        if lines and not lines[-1].endswith((b"\n", b"\r")):
+            lines[-1] += b"\n"
+        lines.extend([
+            b"\n",
+            b"# MyLEDE preserved router packages; appended independently of upstream layout.\n",
+            b"DEFAULT_PACKAGES.router += " + b" ".join(missing) + b"\n",
+        ])
 if not starts:
     print("上游已不再定义 DEFAULT_PACKAGES.router，保留上游默认包配置")
 staged[path][1] = b"".join(lines)
