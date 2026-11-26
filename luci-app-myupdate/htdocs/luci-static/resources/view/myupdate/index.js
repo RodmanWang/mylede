@@ -565,7 +565,7 @@ return view.extend({
 				.myupdate-browser-hint{padding-top:6px}
 				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
-				.myupdate-path-chip{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:7px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9)}
+				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:6px 8px 6px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}\n\t\t\t\t.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
 				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
 				.myupdate-path-chip-remove{border:0;background:transparent;color:var(--gray-color-high,#555);font-size:1.25em;line-height:1;cursor:pointer;padding:0 1px}
 				.myupdate-path-chip-remove:hover{color:#dc2626}
