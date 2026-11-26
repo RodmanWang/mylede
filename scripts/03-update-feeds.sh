@@ -448,14 +448,112 @@ fi
 
 echo
 echo "========== 按源码锁定 SHA 固定 feeds 源码 =========="
-while IFS=$'\\t' read -r source_name source_url source_ref source_commit; do
+while IFS= read -r source_name source_url source_ref source_commit; do
     [[ "$source_name" == feed:* || "$source_name" == OpenClash ]] || continue
     [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "错误：无效的锁定 SHA：$source_name" >&2; exit 1; }
     feed_name="${source_name#feed:}"
     feed_dir="$TOPDIR/feeds/$feed_name"
     [[ -d "$feed_dir" ]] || { echo "错误：锁定 feed 不存在：$feed_dir" >&2; exit 1; }
     actual_url="$(git -C "$feed_dir" remote get-url origin)"
-    normalize_url() { printf '%s' "$1" | sed -E 's#^https?://github.com/#https://github.com/#; s#\\.git$##'; }
+    normalize_url() { printf '%s' "$1" | sed -E 's#^https?://github.com/#https://github.com/#; s#\.git$##'; }
+    [[ "$(normalize_url "$actual_url")" == "$(normalize_url "$source_url")" ]] || { echo "错误：$feed_name 的 origin 与锁定地址不一致：$actual_url" >&2; exit 1; }
+    echo "固定 $feed_name -> $source_commit"
+    git -C "$feed_dir" fetch --no-tags origin "$source_commit"
+    git -C "$feed_dir" reset --hard "$source_commit"
+    [[ "$(git -C "$feed_dir" rev-parse HEAD)" == "$source_commit" ]] || { echo "错误：$feed_name 未固定到锁定 SHA" >&2; exit 1; }
+done < "$SOURCE_LOCK"
+
+# ============================================================
+
+echo
+echo "========== 移除官方 OpenClash 和 SmartDNS 重复源码及安装链接 =========="
+
+# 官方重复源码目录
+UPSTREAM_OC="$TOPDIR/feeds/luci/applications/luci-app-openclash"
+UPSTREAM_SMARTDNS_LUCI="$TOPDIR/feeds/luci/applications/luci-app-smartdns"
+UPSTREAM_SMARTDNS="$TOPDIR/feeds/packages/net/smartdns"
+
+# 官方软件包安装链接
+UPSTREAM_OC_LINK="$TOPDIR/package/feeds/luci/luci-app-openclash"
+UPSTREAM_SMARTDNS_LUCI_LINK="$TOPDIR/package/feeds/luci/luci-app-smartdns"
+UPSTREAM_SMARTDNS_LINK="$TOPDIR/package/feeds/packages/smartdns"
+
+# 删除官方重复源码目录
+for path in \
+    "$UPSTREAM_OC" \
+    "$UPSTREAM_SMARTDNS_LUCI" \
+    "$UPSTREAM_SMARTDNS"; do
+
+    if [[ -L "$path" ]]; then
+
+        echo "移除官方源码软链接：$path"
+        rm -- "$path"
+
+    elif [[ -d "$path" ]]; then
+
+        echo "删除官方重复源码目录：$path"
+        rm -rf -- "$path"
+
+    elif [[ -e "$path" ]]; then
+
+        echo "错误：官方源码路径不是目录：$path" >&2
+        exit 1
+
+    fi
+
+done
+
+# 删除官方软件包安装链接
+for path in \
+    "$UPSTREAM_OC_LINK" \
+    "$UPSTREAM_SMARTDNS_LUCI_LINK" \
+    "$UPSTREAM_SMARTDNS_LINK"; do
+
+    if [[ -L "$path" ]]; then
+
+        echo "移除官方安装链接：$path"
+        rm -- "$path"
+
+    elif [[ -e "$path" ]]; then
+
+        echo "错误：官方安装路径不是软链接，为避免误删停止操作：$path" >&2
+        exit 1
+
+    fi
+
+done
+
+# ============================================================
+# 安装所有 feeds 软件包
+# ============================================================
+
+echo
+echo "========== 安装所有 feeds 软件包 =========="
+
+echo "提示：开始安装所有 feeds 中的软件包链接。"
+
+./scripts/feeds install -a
+
+echo
+echo "提示：确保从 OpenClash feed 安装 luci-app-openclash。"
+
+./scripts/feeds install -p OpenClash luci-app-openclash
+
+# ============================================================
+# 完成
+# ============================================================
+
+echo
+echo "============================================================"
+echo "       3/7 feeds 更新及软件包安装全部完成"
+\t' read -r source_name source_url source_ref source_commit; do
+    [[ "$source_name" == feed:* || "$source_name" == OpenClash ]] || continue
+    [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "错误：无效的锁定 SHA：$source_name" >&2; exit 1; }
+    feed_name="${source_name#feed:}"
+    feed_dir="$TOPDIR/feeds/$feed_name"
+    [[ -d "$feed_dir" ]] || { echo "错误：锁定 feed 不存在：$feed_dir" >&2; exit 1; }
+    actual_url="$(git -C "$feed_dir" remote get-url origin)"
+    normalize_url() { printf '%s' "$1" | sed -E 's#^https?://github.com/#https://github.com/#; s#\.git$##'; }
     [[ "$(normalize_url "$actual_url")" == "$(normalize_url "$source_url")" ]] || { echo "错误：$feed_name 的 origin 与锁定地址不一致：$actual_url" >&2; exit 1; }
     echo "固定 $feed_name -> $source_commit"
     git -C "$feed_dir" fetch --no-tags origin "$source_commit"
