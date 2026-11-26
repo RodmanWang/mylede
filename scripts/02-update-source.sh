@@ -83,7 +83,13 @@ ensure_link() {
 echo "========== 2/7 更新 LEDE 主源码 =========="
 
 if ! retry_git git pull; then
-    echo "警告：git pull 失败，将尝试同步到 origin/master。"
+    LEDE_BRANCH="$(git branch --show-current)"
+    [[ -n "$LEDE_BRANCH" ]] || {
+        echo "错误：当前 LEDE 工作树处于 detached HEAD，无法动态识别同步分支。" >&2
+        exit 1
+    }
+    LEDE_REMOTE_REF="origin/$LEDE_BRANCH"
+    echo "警告：git pull 失败，将尝试同步到 $LEDE_REMOTE_REF。"
     echo "注意：git reset --hard 会丢弃 LEDE Git 跟踪文件中的本地未提交修改。"
     echo "注意：git clean -df 会清理未跟踪文件/目录（指定目录已设置排除项）。"
 
@@ -95,12 +101,12 @@ if ! retry_git git pull; then
         exit "$FETCH_STATUS"
     fi
 
-    git rev-parse --verify origin/master >/dev/null || {
-        echo "错误：找不到 origin/master，停止操作。" >&2
+    git rev-parse --verify "$LEDE_REMOTE_REF" >/dev/null || {
+        echo "错误：找不到 $LEDE_REMOTE_REF，停止操作。" >&2
         exit 1
     }
 
-    git reset --hard origin/master
+    git reset --hard "$LEDE_REMOTE_REF"
 
     git clean -df \
         -e /files \
