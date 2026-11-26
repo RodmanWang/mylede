@@ -1175,6 +1175,8 @@ jobs:
               if not url.startswith("https://github.com/"):
                   raise SystemExit(f"unexpected non-GitHub source URL for {lock_name}: {url}")
               outputs[output_name] = commit
+              outputs[f"{output_name}_url"] = url
+              outputs[f"{output_name}_ref"] = ref
               print(f"{output_name}: {commit} ({url}, locked ref: {ref})")
 
           outputs["lede_ref"] = locked["LEDE"][1]
@@ -1240,6 +1242,13 @@ jobs:
               'luci_app_smartdns': os.environ['LUCI_APP_SMARTDNS_COMMIT'],
               'openclash': os.environ['OPENCLASH_COMMIT'],
           }
+          source_repositories = {
+              'lede': {'url': os.environ['LEDE_SOURCE_URL'], 'ref': os.environ['LEDE_REF'], 'commit': lede_commit},
+              'smartdns': {'url': os.environ['SMARTDNS_SOURCE_URL'], 'ref': os.environ['SMARTDNS_SOURCE_REF'], 'commit': sources['smartdns']},
+              'smartdns_webui': {'url': os.environ['SMARTDNS_WEBUI_SOURCE_URL'], 'ref': os.environ['SMARTDNS_WEBUI_SOURCE_REF'], 'commit': sources['smartdns_webui']},
+              'luci_app_smartdns': {'url': os.environ['LUCI_APP_SMARTDNS_SOURCE_URL'], 'ref': os.environ['LUCI_APP_SMARTDNS_SOURCE_REF'], 'commit': sources['luci_app_smartdns']},
+              'openclash': {'url': os.environ['OPENCLASH_SOURCE_URL'], 'ref': os.environ['OPENCLASH_SOURCE_REF'], 'commit': sources['openclash']},
+          }
           for name, commit in sources.items():
               if not re.fullmatch(r'[0-9a-f]{40}', commit):
                   raise SystemExit(f'Invalid full source commit SHA for {name}: {commit!r}')
@@ -1254,6 +1263,7 @@ jobs:
                   'lede_ref': os.environ['LEDE_REF'],
                   'mylede_commit': mylede_commit,
                   'sources': sources,
+                  'source_repositories': source_repositories,
                   'partition_layout': {
                       'kernel_partsize_mib': config_values['KERNEL'],
                       'rootfs_partsize_mib': config_values['ROOTFS'],
