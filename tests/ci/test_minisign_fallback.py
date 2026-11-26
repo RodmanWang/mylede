@@ -81,6 +81,7 @@ class MinisignFallbackTests(unittest.TestCase):
         self.assertIn("git add build-config/last-successful-partition-layout.json .github/workflows/build.yml minisign/Makefile", workflow)
 
     def test_release_notes_hide_internal_manifest_and_minisign_metadata(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
         release_step = workflow.split("      - name: 发布固件版本", 1)[1].split(
             "      - name: 保存成功构建元数据并更新 Minisign 托底版本", 1
         )[0]
