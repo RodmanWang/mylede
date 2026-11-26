@@ -510,7 +510,7 @@ for makefile in feeds_root.rglob("Makefile"):
         if feed_name in settings["exclude_feeds"]:
             continue
         if package_patterns[package_name].search(content):
-            matches[package_name].append(makefile.parent.resolve())
+            matches[package_name].append(makefile.parent.absolute())
 
 for package_name, directories in matches.items():
     unique = sorted(set(directories))
@@ -521,7 +521,7 @@ for package_name, directories in matches.items():
             for link in installed_root.rglob(package_name):
                 if not link.is_symlink():
                     continue
-                if Path(os.path.realpath(link)).resolve() == package_dir:
+                if os.path.realpath(link) == os.path.realpath(package_dir):
                     print(f"移除 feed 安装链接：{link}")
                     link.unlink()
         if package_dir.is_symlink():
