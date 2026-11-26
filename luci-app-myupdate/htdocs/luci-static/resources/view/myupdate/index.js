@@ -241,7 +241,7 @@ return view.extend({
 						'data-keep-path': path,
 					}, '×');
 					chips.appendChild(E('span', { 'class': 'myupdate-path-chip' }, [
-						E('span', { 'class': 'myupdate-path-chip-text' }, path),
+						E('span', { 'class': 'myupdate-path-chip-text', 'title': path }, path),
 						remove
 					]));
 				});
@@ -296,7 +296,13 @@ return view.extend({
 				entries.forEach(function(entry) {
 					var nameNode = entry.type == 'directory' && entry.can_open ?
 						E('button', { 'type': 'button', 'class': 'myupdate-browser-name myupdate-browser-directory',
-							click: function() { loadDirectory(entry.path); } }, [
+							click: function(ev) {
+								ev.preventDefault();
+								ev.stopPropagation();
+								browserPanel.style.display = '';
+								browserToggle.textContent = _('收起文件浏览器');
+								loadDirectory(entry.path);
+							} }, [
 							E('span', { 'class': 'myupdate-browser-icon', 'aria-hidden': 'true' }, '📁'),
 							E('span', {}, entry.name)
 						]) :
@@ -314,6 +320,8 @@ return view.extend({
 			}
 			function loadDirectory(path) {
 				if (browserBusy) return;
+				browserPanel.style.display = '';
+				browserToggle.textContent = _('收起文件浏览器');
 				browserBusy = true;
 				browserPath.textContent = path;
 				browserList.textContent = _('正在读取目录…');
@@ -334,6 +342,7 @@ return view.extend({
 					if (currentPath == '/') return;
 					loadDirectory(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/');
 				} }, _('上一级'));
+			browserPanel.addEventListener('click', function(ev) { ev.stopPropagation(); });
 			function closeBrowser() {
 				browserPanel.style.display = 'none';
 				browserToggle.textContent = _('浏览设备文件…');
@@ -512,9 +521,9 @@ return view.extend({
 				.myupdate-browser-hint{padding-top:6px}
 				.myupdate-path-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
-				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:6px 8px 6px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:7px;width:360px;max-width:100%;box-sizing:border-box;padding:6px 8px 6px 10px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 				.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
-				.myupdate-path-chip-text{overflow-wrap:anywhere;font-size:.92em}
+				.myupdate-path-chip-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92em}
 				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;min-height:18px;max-height:18px;box-sizing:border-box;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.05em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
