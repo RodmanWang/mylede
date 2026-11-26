@@ -42,7 +42,7 @@ jobs:
       - name: Validate LuCI JavaScript syntax
         run: node --check luci-app-myupdate/htdocs/luci-static/resources/view/myupdate/index.js
 
-      - name: Test LEDE host tool dependency patch
+      - name: Test serial LEDE CMake host-tool prebuild
         run: bash tests/ci/test_lede_cmake_prebuild.sh
 
       - name: Validate shell syntax
