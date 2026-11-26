@@ -20,7 +20,11 @@ class CustomKeepPathsContractTests(unittest.TestCase):
     def test_luci_uses_custom_dynamic_list_and_filesystem_browser(self):
         source = VIEW.read_text(encoding="utf-8")
         self.assertIn("s.option(form.DynamicList, 'custom_keep_paths'", source)
+        self.assertIn("var initialKeepPathValues = (cfg.custom_keep_paths || []).slice();", source)
+        self.assertIn("var keepPathValues = initialKeepPathValues.slice();", source)
+        self.assertIn("keepPaths.cfgvalue = function() { return initialKeepPathValues.slice(); };", source)
         self.assertIn("keepPaths.formvalue = function() { return keepPathValues.slice(); };", source)
+        self.assertNotIn("keepPaths.cfgvalue = function() { return keepPathValues.slice(); };", source)
         self.assertIn("keepPaths.renderWidget = function(section_id)", source)
         self.assertNotIn("keepPaths.write =", source)
         self.assertIn("function stageKeepPaths(paths, successMessage)", source)
