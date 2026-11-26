@@ -60,6 +60,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-key-convert{display:flex;align-items:center;align-self:center", source)
         self.assertIn(".myupdate-path-entry-row{display:flex;align-items:center", source)
         self.assertIn(".myupdate-path-manual-add{align-self:center", source)
+        self.assertNotIn(".myupdate-path-manual-add{align-self:flex-end}", source)
         self.assertIn("overflow:hidden;text-overflow:ellipsis;white-space:nowrap", source)
         self.assertIn("myupdate-browser-entry", source)
         self.assertIn("myupdate-browser-add", source)
@@ -116,9 +117,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("tr ' ' '\\n'", source)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_auto_upgrade_default_is_0330_everywhere(self):
         config = (ROOT / "luci-app-myupdate/root/etc/config/myupdate").read_text(encoding="utf-8")
         backend = (ROOT / "luci-app-myupdate/root/usr/share/rpcd/ucode/myupdate.uc").read_text(encoding="utf-8")
@@ -132,3 +130,8 @@ if __name__ == "__main__":
         self.assertIn("*) AUTO_TIME=03:30 ;;", scheduler)
         self.assertIn("auto_upgrade_time='03:30'", makefile)
         self.assertIn(')" = "04:00"', makefile)
+
+
+
+if __name__ == "__main__":
+    unittest.main()
