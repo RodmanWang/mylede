@@ -308,5 +308,18 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertNotIn("add('plugin:smartdns', 'https://github.com/", workflow)
 
 
+    def test_release_metadata_uses_locked_repository_urls_and_refs(self):
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn('outputs[f"{output_name}_url"] = url', workflow)
+        self.assertIn('outputs[f"{output_name}_ref"] = ref', workflow)
+        self.assertIn('outputs["lede_url"] = locked["LEDE"][0]', workflow)
+        self.assertIn("'source_repositories': source_repositories", workflow)
+        self.assertIn("meta['source_repositories'].values()", workflow)
+        self.assertIn("OPENCLASH_SOURCE_REF", workflow)
+        self.assertIn("SMARTDNS_SOURCE_REF", workflow)
+        self.assertNotIn("'coolsnowwolf/lede': {", workflow)
+        self.assertNotIn("'pymumu/smartdns': {", workflow)
+        self.assertNotIn("'dev (preflight-locked)'", workflow)
+        self.assertNotIn("https://github.com/vernesong/OpenClash/commit/", workflow)
 if __name__ == "__main__":
     unittest.main()
