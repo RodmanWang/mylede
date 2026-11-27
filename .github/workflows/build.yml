@@ -38,6 +38,7 @@ on:
         type: boolean
         required: false
         default: false
+
   schedule:
     - cron: '0 1 * * *'
     timezone: 'Asia/Shanghai'
