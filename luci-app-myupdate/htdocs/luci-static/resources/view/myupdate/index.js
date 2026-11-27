@@ -201,7 +201,7 @@ return view.extend({
 			}
 			return true;
 		};
-		keepPaths.description = _('输入绝对路径后添加，或使用设备文件浏览器选择。📁 为目录，📄 为文件；悬停可查看完整路径。增删操作先暂存，最后点击底部“保存并应用”生效。');
+		keepPaths.description = _('输入绝对路径后添加，或使用设备文件浏览器选择。📁 为目录，📄 为文件；悬停标签可查看完整路径。增删操作先暂存，最后点击底部“保存并应用”生效。');
 		keepPaths.renderWidget = function(section_id) {
 			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
 			var chipsHeading = E('div', { 'class': 'myupdate-path-chips-heading' }, _('已添加保留项'));
@@ -613,7 +613,7 @@ return view.extend({
 				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#778397)}
 				.myupdate-browser-hint{padding-top:6px}
 				.myupdate-path-chips-heading{margin:0 0 8px;font-weight:650;color:var(--text-color-high,#344054)}
-				.myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,136px);align-content:start;justify-content:start;gap:7px;margin:0;width:100%;box-sizing:border-box}
+				.myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,136px);align-content:flex-start;justify-content:start;gap:7px;margin:0;width:100%;box-sizing:border-box}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
 				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:5px;flex:0 0 136px;width:136px;min-width:136px;max-width:136px;box-sizing:border-box;padding:5px 7px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 				.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
