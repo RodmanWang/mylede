@@ -79,7 +79,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertNotIn("downgradeWidget.closest('.cbi-value')", source)
         self.assertIn("var mapForm = mapNode.tagName == 'FORM' ? mapNode : mapNode.querySelector('form');", source)
         self.assertIn("formContainer.insertBefore(statusPanel, firstSection)", source)
-        self.assertIn("if (!row || !formContainer.contains(row)) return;", source)
+        self.assertNotIn("if (!row || !formContainer.contains(row)) return;", source)
         returned_view = source.split("return E('div', { 'class': 'cbi-map myupdate-page' }, [", 1)[1].split("]);", 1)[0]
         self.assertNotIn("statusPanel,", returned_view)
         self.assertIn("tokenRow.classList.toggle('myupdate-token-hidden', !isPrivate)", source)
