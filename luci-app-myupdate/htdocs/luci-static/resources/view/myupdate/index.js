@@ -673,7 +673,6 @@ return view.extend({
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
 					.myupdate-field-token input{width:100%;max-width:100%}
-					.myupdate-action-settings{gap:8px 12px}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
 					.myupdate-key-convert .btn{width:auto}
 					.myupdate-path-manual-add{align-self:center}
