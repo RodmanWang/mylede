@@ -106,7 +106,6 @@ return view.extend({
 		visibility.value('public', _('公开'));
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
-		visibility.description = _('公开无需 Token；私有仓库需填写。');
 		var originalVisibilityRender = visibility.renderWidget;
 		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
@@ -116,7 +115,7 @@ return view.extend({
 		token.optional = true;
 		// Token visibility is managed by the fixed three-column layout.
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。');
+		token.description = _('私有仓库需要 Token。建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。');
 		token.cfgvalue = function() { return ''; };
 		var originalTokenRender = token.renderWidget;
 		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
@@ -501,9 +500,12 @@ return view.extend({
 			if (visibilitySelect && tokenRow) {
 				var syncTokenVisibility = function() {
 					var isPrivate = visibilitySelect.value == 'private';
+					var tokenDescription = tokenRow.querySelector('.cbi-value-description');
 					tokenRow.classList.toggle('myupdate-token-visible', isPrivate);
 					tokenRow.classList.toggle('myupdate-token-hidden', !isPrivate);
 					tokenRow.setAttribute('aria-hidden', isPrivate ? 'false' : 'true');
+					if (tokenDescription)
+						tokenDescription.style.display = isPrivate ? '' : 'none';
 				};
 				visibilitySelect.addEventListener('change', syncTokenVisibility);
 				visibilitySelect.addEventListener('input', syncTokenVisibility);
