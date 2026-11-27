@@ -114,7 +114,7 @@ return view.extend({
 		token.password = true;
 		token.rmempty = true;
 		token.optional = true;
-		// Token visibility is managed by the fixed three-column layout.
+		// Token visibility is managed independently of the repository row.
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
 		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。');
 		token.cfgvalue = function() { return ''; };
@@ -472,7 +472,7 @@ return view.extend({
 
             // Keep upgrade settings in LuCI's native CBI form flow. The
             // targeted CSS below formats their title, field and description
-            // without detaching rows from the section or status panel.
+            // without detaching rows from the native CBI section.
 			var repoRow = mapNode.querySelector('.cbi-value:has(.myupdate-repo-input)');
 			var visibilityRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-visibility)');
 			var tokenRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-token)');
