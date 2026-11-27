@@ -537,10 +537,10 @@ return view.extend({
 				.myupdate-inline-notice.notice-info{background:var(--info-bg,#eff6ff);color:var(--info-color,#1d4ed8);border:1px solid rgba(59,130,246,.22)}
 				.myupdate-inline-notice.notice-error{background:var(--error-bg,#fef2f2);color:var(--error-color,#b91c1c);border:1px solid rgba(220,38,38,.22)}
 				.myupdate-actions{display:block;margin-top:9px;padding-top:8px;border-top:1px solid var(--border-color-low,#e6eaf0)}
-				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}
+				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px}
 				.myupdate-actions-final{display:flex;justify-content:flex-end}
 				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:38px;padding:6px 13px;border:0;border-radius:7px;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.12)}.myupdate-actions-primary>.cbi-button-action{background:#1673e6!important;color:#fff!important}.myupdate-actions-primary>.cbi-button-positive{background:#16a34a!important;color:#fff!important}.myupdate-actions-primary>.myupdate-upgrade-button{background:#ef5548!important;color:#fff!important}
-				.myupdate-action-controls{display:flex;flex:1 1 100%;flex-direction:column;align-items:stretch;min-width:0;gap:8px;margin-left:8px}
+				.myupdate-action-controls{display:flex;flex:1 1 100%;flex-direction:column;align-items:stretch;min-width:0;gap:8px;margin:8px 0 0}
 				.myupdate-downgrade-controls{display:block;width:100%;padding:2px 0 5px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-downgrade-row{display:flex!important;align-items:center;gap:10px;width:100%;margin:0!important;padding:0!important;border:0!important}
 				.myupdate-downgrade-row .cbi-value-title{display:block!important;float:none!important;flex:0 0 auto;width:auto!important;margin:0!important;padding:0!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.3;white-space:nowrap}
