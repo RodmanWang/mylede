@@ -6,7 +6,7 @@
     "kernel_partsize": 64,
     "rootfs_partsize": 448
   },
-  "manifest_tag": "mylede-v20261127003108",
-  "manifest_version": "20261127003108",
+  "manifest_tag": "mylede-v20261127100812",
+  "manifest_version": "20261127100812",
   "manifest_schema_version": 2
 }
