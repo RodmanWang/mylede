@@ -58,11 +58,11 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("keepPathTypes[entry.path] = entry.type", source)
         self.assertIn("keepPathTypes[path] == 'directory' ? '📁' : '📄'", source)
         self.assertIn("callListKeepPaths(parent)", source)
-        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.32fr) minmax(0,0.68fr)", source)
+        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.31fr) minmax(0,0.69fr)", source)
         self.assertIn(".myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,168px)", source)
         self.assertIn("width:168px;min-width:168px;max-width:168px", source)
         self.assertIn("grid-template-columns:repeat(auto-fill,168px)", source)
-        self.assertIn("grid-template-columns:minmax(0,0.32fr) minmax(0,0.68fr)", source)
+        self.assertIn("grid-template-columns:minmax(0,0.31fr) minmax(0,0.69fr)", source)
         self.assertIn("flex:1 1 auto;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", source)
         self.assertIn("悬停标签查看完整路径", source)
         self.assertNotIn(".myupdate-page .cbi-section{display:grid", source)
@@ -173,7 +173,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
 
     def test_keep_path_chips_use_split_layout_and_detect_file_types(self):
         source = VIEW.read_text(encoding="utf-8")
-        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.32fr) minmax(0,0.68fr)", source)
+        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.31fr) minmax(0,0.69fr)", source)
         self.assertIn(".myupdate-path-entry-row{display:flex;align-items:center;gap:8px;width:100%;max-width:none;box-sizing:border-box}", source)
         self.assertIn("path.substring(path.lastIndexOf('/') + 1) || path", source)
         self.assertIn("已添加保留项", source)
