@@ -87,9 +87,10 @@ return view.extend({
 		var noticeNode = E('div', { 'class': 'myupdate-inline-notice', role: 'status', 'aria-live': 'polite', style: 'display:none' });
 		var notify = createInlineNotifier(noticeNode);
 
+		addSettingsHeading('_heading_repo', _('仓库与访问设置'), _('填写 GitHub 仓库地址；公开仓库无需 Token，私有仓库才需要访问令牌。'));
 		var repo = s.option(form.Value, 'repo_url', _('GitHub 仓库地址'));
 		repo.placeholder = 'https://github.com/OWNER/REPO';
-		repo.description = _('可留空；留空时不会保存仓库地址。点击“检查更新”时才检查地址是否有效；需要填写仓库完整 HTTPS 地址，例如 https://github.com/OWNER/REPO。');
+		repo.description = _('填写完整的 HTTPS 仓库地址，例如 https://github.com/OWNER/REPO；留空则不配置仓库。');
 		repo.optional = true;
 		repo.rmempty = true;
 		repo.cfgvalue = function() {
@@ -105,7 +106,7 @@ return view.extend({
 		visibility.value('public', _('公开'));
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
-		visibility.description = _('公开仓库无需 Token；私有仓库请填写下方访问令牌。');
+		visibility.description = _('公开仓库不需要 Token；选择私有后填写访问令牌。');
 		var originalVisibilityRender = visibility.renderWidget;
 		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
@@ -115,7 +116,7 @@ return view.extend({
 		token.optional = true;
 		token.depends('repo_visibility', 'private');
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置；留空保持已有 Token。格式和访问权限在检查私有仓库时验证，不影响保存其他设置。');
+		token.description = _('建议使用 Fine-grained PAT，并仅授予目标仓库 Contents: Read-only。Token 单独安全保存；留空可保留已配置的 Token。');
 		token.cfgvalue = function() { return ''; };
 		var originalTokenRender = token.renderWidget;
 		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
@@ -143,12 +144,13 @@ return view.extend({
 		var originalAutoTimeRender = autoTime.renderWidget;
 		autoTime.renderWidget = function() { return E('div', { 'class': 'myupdate-field-time' }, [ originalAutoTimeRender.apply(this, arguments) ]); };
 
+		addSettingsHeading('_heading_verify', _('固件签名验证'), _('配置项目对应的 Minisign 公钥；只有签名、设备兼容性和 SHA256 校验通过才允许升级。'));
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
 		pubkey.monospace = true;
 		pubkey.optional = true;
 		pubkey.rmempty = true;
-		pubkey.description = _('输入匹配的 Minisign 公钥验证，验证通过后才允许继续升级；如为 minisign.pub 两行内容，点击“识别并转换”按钮后保存。');
+		pubkey.description = _('粘贴公钥内容；若为 minisign.pub 两行格式，可点“识别并转换”，再点击页面底部“保存并应用”。');
 
 		var convertKey = E('button', {
 			'class': 'btn cbi-button cbi-button-action',
@@ -199,7 +201,7 @@ return view.extend({
 			}
 			return true;
 		};
-		keepPaths.description = _('输入绝对路径后点击“添加”，或通过设备文件浏览器选择。📁 表示目录，📄 表示文件；悬停标签可查看完整路径。新增和删除仅暂存，点击底部“保存并应用”后生效。');
+		keepPaths.description = _('输入绝对路径后添加，或使用设备文件浏览器选择。📁 为目录，📄 为文件；悬停可查看完整路径。增删操作先暂存，最后点击底部“保存并应用”生效。');
 		keepPaths.renderWidget = function(section_id) {
 			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
 			var chipsHeading = E('div', { 'class': 'myupdate-path-chips-heading' }, _('已添加保留项'));
@@ -593,7 +595,7 @@ return view.extend({
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
-				.myupdate-path-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;width:100%;max-width:none;box-sizing:border-box;align-items:start}
+				.myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr);gap:14px;width:100%;max-width:none;box-sizing:border-box;align-items:start}
 				.myupdate-path-left,.myupdate-path-right{min-width:0}
 				.myupdate-path-entry-row{display:flex;align-items:center;gap:8px;width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
@@ -611,16 +613,18 @@ return view.extend({
 				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#778397)}
 				.myupdate-browser-hint{padding-top:6px}
 				.myupdate-path-chips-heading{margin:0 0 8px;font-weight:650;color:var(--text-color-high,#344054)}
-				.myupdate-path-chips{display:flex;flex-wrap:wrap;align-content:flex-start;align-items:flex-start;gap:7px;margin:0;width:100%;box-sizing:border-box}
+				.myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,136px);align-content:start;justify-content:start;gap:7px;margin:0;width:100%;box-sizing:border-box}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
-				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:5px;flex:0 1 auto;width:auto;max-width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:5px;flex:0 0 136px;width:136px;min-width:136px;max-width:136px;box-sizing:border-box;padding:5px 7px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 				.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
-				.myupdate-path-chip-text{flex:0 1 auto;min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92em}
+				.myupdate-path-chip-text{flex:1 1 auto;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92em}
 				.myupdate-path-chip-icon{flex:0 0 auto}
 				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;min-height:18px;max-height:18px;box-sizing:border-box;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.05em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:767px){
+					.myupdate-path-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,136px)}
 					.myupdate-page{padding-bottom:20px}
 					.myupdate-hero{align-items:flex-start;gap:12px;padding:16px}
 					.myupdate-hero-mark{flex-basis:46px;height:46px;border-radius:11px;font-size:14px}
@@ -644,6 +648,8 @@ return view.extend({
 					.myupdate-browser-toolbar{align-items:flex-start;flex-direction:column}
 				}
 				@media(max-width:420px){
+					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,minmax(0,1fr))}
+					.myupdate-path-chip{width:100%;min-width:0;max-width:100%}
 					.myupdate-hero-mark{display:none}
 					.myupdate-actions-primary{grid-template-columns:1fr}
 
