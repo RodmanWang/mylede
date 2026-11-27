@@ -432,9 +432,8 @@ return view.extend({
 						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
 					} }, _('执行升级')),
-				]),
-				E('div', { 'class': 'myupdate-action-controls' }),
-			])
+					E('div', { 'class': 'myupdate-action-controls' }),
+				])
 		]);
 		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
 
