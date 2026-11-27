@@ -427,7 +427,7 @@ return view.extend({
 					} }, _('检查更新')),
 					E('button', { 'class': 'btn cbi-button cbi-button-positive', click: function() {
 						return reportTaskStart(callDownload(), _('下载并验证任务启动失败'), notify);
-					} }, _('下载并验证')),
+					} }, _('下载验证')),
 					E('button', { 'class': 'btn cbi-button cbi-button-negative myupdate-upgrade-button', click: function() {
 						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
@@ -531,15 +531,15 @@ return view.extend({
 				.myupdate-actions{display:block;margin-top:9px;padding-top:8px;border-top:1px solid var(--border-color-low,#e6eaf0)}
 				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}
 				.myupdate-actions-final{display:flex;justify-content:flex-end}
-				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:34px;padding:5px 11px;border-radius:6px;font-weight:650}
+				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:38px;padding:6px 13px;border:0;border-radius:7px;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.12)}.myupdate-actions-primary>.cbi-button-action{background:#1673e6!important;color:#fff!important}.myupdate-actions-primary>.cbi-button-positive{background:#16a34a!important;color:#fff!important}.myupdate-actions-primary>.myupdate-upgrade-button{background:#ef5548!important;color:#fff!important}
 				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:3px;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
-				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0!important;color:var(--text-color-high,#344054);font-size:.86em;font-weight:650;line-height:1.25;white-space:nowrap}
+				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0 0 5px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.25;white-space:nowrap;text-align:left}
 				.myupdate-action-controls>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
-				.myupdate-action-controls>.myupdate-inline-control .cbi-value-description{display:none}
-				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){display:grid!important;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto;align-items:start;column-gap:7px;row-gap:3px;padding-top:0!important}
-				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-title{grid-column:1;grid-row:1}.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-field{grid-column:2;grid-row:1}.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-description{display:block;max-width:230px;margin:0;color:var(--gray-color-medium,#778397);font-size:.76em;line-height:1.3;white-space:normal}
-				.myupdate-field-mode select{width:100%;max-width:112px}
-				.myupdate-field-time input{width:100%;max-width:92px}
+				.myupdate-action-controls>.myupdate-inline-control .cbi-value-description{display:none}.myupdate-action-controls>.myupdate-inline-control .cbi-value-field select,.myupdate-action-controls>.myupdate-inline-control .cbi-value-field input{height:36px;min-height:36px;border:1px solid var(--border-color-medium,#cbd5e1);border-radius:7px;padding:5px 9px;background:var(--background-color-high,#fff);box-shadow:inset 0 1px 2px rgba(15,23,42,.04)}
+				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){display:flex!important;flex-direction:row;align-items:center;gap:8px;padding:0 2px 3px!important}
+				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-title{display:none!important}.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-description{display:none}
+				.myupdate-field-mode select{width:112px;max-width:112px}
+				.myupdate-field-time input{width:100px;max-width:100px}
 				.myupdate-field-downgrade input{margin:0}
 				.myupdate-progress{margin-top:12px;padding:12px 14px;border:1px solid var(--border-color-low,#e4e9ef);border-radius:8px;background:var(--background-color,#fafbfc)}
 				.myupdate-progress-track{height:9px;border-radius:20px;background:var(--border-color-low,#e5eaf0);overflow:hidden}
@@ -559,14 +559,14 @@ return view.extend({
 				.myupdate-settings-heading{padding:0 0 6px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.86em;line-height:1.4}
-				.myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,38fr) minmax(110px,16fr) minmax(0,46fr);gap:14px;width:100%;align-items:start}
+				.myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,34fr) minmax(110px,14fr) minmax(0,52fr);gap:14px;width:100%;align-items:start}
 				.myupdate-repo-grid>.cbi-value{display:block;width:auto;min-width:0;margin:0;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-field-token{display:block;width:100%;max-width:none}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input input,.myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
-				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}.myupdate-repo-grid>.myupdate-token-visible{grid-column:1/-1}
+				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
