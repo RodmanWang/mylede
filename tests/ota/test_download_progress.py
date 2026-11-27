@@ -154,12 +154,17 @@ class DownloadProgressContractTests(unittest.TestCase):
         self.assertIn("option allow_downgrade '0'", config)
         self.assertIn("out.allow_downgrade = c.get(CONFIG, 'main', 'allow_downgrade') ?? '0';", rpc)
 
-    def test_partition_layout_is_checked_before_download_and_again_before_upgrade(self):
+    def test_download_checks_tmp_space_and_upgrade_checks_partition_layout(self):
         task = TASK.read_text(encoding="utf-8")
         verifier = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/verify-manifest.sh").read_text(encoding="utf-8")
         checker = (ROOT / "luci-app-myupdate/root/usr/libexec/myupdate/check-partition-layout.sh").read_text(encoding="utf-8")
         self.assertIn("KERNEL_PARTSIZE=\"$(sed -n '6p' \"$R/verified-manifest.txt\")\"", task)
-        self.assertGreaterEqual(task.count('check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE"'), 2)
+        self.assertEqual(task.count('check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE"'), 1)
+        download_branch = task.split('if [ "$ACTION" = download ]; then', 1)[1].split('if [ "$ACTION" = download ]; then', 1)[0]
+        self.assertIn('df -Pk /tmp', download_branch)
+        self.assertIn('NEED_KB=$(( (SIZE + 1023) / 1024 + 32768 ))', download_branch)
+        self.assertNotIn('check-partition-layout.sh', download_branch)
+        self.assertLess(task.index('sysupgrade -T "$R/firmware.bin"'), task.index('check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE"'))
         self.assertIn("get '@.partition_layout.kernel_partsize_mib'", verifier)
         self.assertIn("get '@.partition_layout.rootfs_partsize_mib'", verifier)
         self.assertIn("get '@.partition_layout.uses_boot_part'", verifier)
