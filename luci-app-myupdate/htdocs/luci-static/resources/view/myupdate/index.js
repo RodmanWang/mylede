@@ -90,7 +90,7 @@ return view.extend({
 		addSettingsHeading('_heading_repo', _('仓库与访问设置'), _('填写 GitHub 仓库地址；公开仓库无需 Token，私有仓库才需要访问令牌。'));
 		var repo = s.option(form.Value, 'repo_url', _('GitHub 仓库地址'));
 		repo.placeholder = 'https://github.com/OWNER/REPO';
-		repo.description = _('填写完整的 HTTPS 仓库地址，例如 https://github.com/OWNER/REPO；留空则不配置仓库。');
+		repo.description = _('HTTPS 地址，例如 github.com/OWNER/REPO。');
 		repo.optional = true;
 		repo.rmempty = true;
 		repo.cfgvalue = function() {
@@ -106,7 +106,7 @@ return view.extend({
 		visibility.value('public', _('公开'));
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
-		visibility.description = _('公开仓库不需要 Token；选择私有后填写访问令牌。');
+		visibility.description = _('公开无需 Token；私有仓库需填写。');
 		var originalVisibilityRender = visibility.renderWidget;
 		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
@@ -116,7 +116,7 @@ return view.extend({
 		token.optional = true;
 		token.depends('repo_visibility', 'private');
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('建议使用 Fine-grained PAT，并仅授予目标仓库 Contents: Read-only。Token 单独安全保存；留空可保留已配置的 Token。');
+		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。');
 		token.cfgvalue = function() { return ''; };
 		var originalTokenRender = token.renderWidget;
 		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
@@ -150,7 +150,7 @@ return view.extend({
 		pubkey.monospace = true;
 		pubkey.optional = true;
 		pubkey.rmempty = true;
-		pubkey.description = _('粘贴公钥内容；若为 minisign.pub 两行格式，可点“识别并转换”，再点击页面底部“保存并应用”。');
+		pubkey.description = _('粘贴 Minisign 公钥；两行格式可点“识别并转换”。');
 
 		var convertKey = E('button', {
 			'class': 'btn cbi-button cbi-button-action',
@@ -201,7 +201,7 @@ return view.extend({
 			}
 			return true;
 		};
-		keepPaths.description = _('输入绝对路径后添加，或使用设备文件浏览器选择。📁 为目录，📄 为文件；悬停标签可查看完整路径。增删操作先暂存，最后点击底部“保存并应用”生效。');
+		keepPaths.description = _('手动输入绝对路径或浏览选择；📁 为目录、📄 为文件，悬停标签查看完整路径。增删后统一点击底部“保存并应用”。');
 		keepPaths.renderWidget = function(section_id) {
 			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
 			var chipsHeading = E('div', { 'class': 'myupdate-path-chips-heading' }, _('已添加保留项'));
@@ -382,6 +382,7 @@ return view.extend({
 			browserPanel.appendChild(browserHint);
 			renderChips();
 			var leftPane = E('div', { 'class': 'myupdate-path-left' }, [
+				E('div', { 'class': 'myupdate-path-left-heading' }, _('自定义文件保留路径')),
 				E('div', { 'class': 'myupdate-path-entry-row' }, [ input, addButton ]),
 				browserToggle,
 				browserPanel
@@ -477,6 +478,7 @@ return view.extend({
 			if (visibilitySelect && tokenRow) {
 				var syncTokenVisibility = function() {
 					var isPrivate = visibilitySelect.value == 'private';
+					mapNode.classList.toggle('myupdate-repo-private', isPrivate);
 					tokenRow.hidden = !isPrivate;
 					tokenRow.setAttribute('aria-hidden', isPrivate ? 'false' : 'true');
 				};
@@ -544,14 +546,15 @@ return view.extend({
 				.myupdate-page input:not([type=checkbox]),.myupdate-page select,.myupdate-page textarea{border-radius:6px}
 				.myupdate-page input:focus,.myupdate-page select:focus,.myupdate-page textarea:focus{outline:2px solid rgba(37,99,235,.18);outline-offset:1px}
 				.myupdate-page .cbi-value-description{margin-top:5px;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
-				.myupdate-page .cbi-value:has(.myupdate-settings-heading){padding:10px 0 5px;border-bottom:0}
+				.myupdate-page .cbi-value:has(.myupdate-settings-heading){display:block;width:100%;margin:0;padding:9px 0 6px;border-bottom:0}
 				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-title{display:none}
+				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-field{display:block;width:100%;margin:0;padding:0}
 				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
-				.myupdate-field-token input{display:block;width:100%;max-width:600px;box-sizing:border-box}
+				.myupdate-field-token input{display:block;width:100%;max-width:680px;box-sizing:border-box}
 				.myupdate-downgrade-setting{display:block;width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-downgrade-setting>.cbi-value{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%;margin:0;padding:0;border:0}
-				.myupdate-downgrade-setting .cbi-value-title{display:none}
+				.myupdate-downgrade-setting .cbi-value-title{display:block;flex:0 0 auto;width:auto;margin:0;padding:0;color:var(--text-color-high,#344054);font-weight:700}
 				.myupdate-downgrade-setting .cbi-value-field{display:block;flex:0 0 auto;padding:0}
 				.myupdate-downgrade-setting .myupdate-field-downgrade{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 				.myupdate-downgrade-setting .cbi-value-description{display:inline-block;flex:1 1 320px;margin:0}
@@ -562,10 +565,10 @@ return view.extend({
 				.myupdate-action-settings .cbi-value-title{padding-top:4px}
 				.myupdate-action-settings .cbi-value-field{min-width:0}
 				.myupdate-action-settings .cbi-value-description{display:none}
-				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
+				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,760px)}
 				.myupdate-key-input textarea{min-height:2.5em!important;height:2.5em!important}
-				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
-				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
+				.myupdate-key-input{flex:0 1 680px;max-width:680px;min-width:0}
+				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:680px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
 				.myupdate-settings-heading{padding:0 0 6px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
@@ -574,12 +577,22 @@ return view.extend({
 				#myupdate-status + div{margin-top:8px}
 				.myupdate-repo-input{width:100%;max-width:422px}
 				.myupdate-page .cbi-value[hidden]{display:none!important}
-				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:36%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:34%;padding-right:12px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{display:block;padding:0 0 5px}
 				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-field,.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-field{display:block;margin:0;padding:0}
-				.myupdate-page .cbi-value:has(.myupdate-key-input-row){display:block;width:100%}
-				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:12%;padding-right:10px;box-sizing:border-box}
-				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:50%;box-sizing:border-box}\n\t\t\t\t.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block;padding:0 0 5px}\n\t\t\t\t.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-field{display:block;width:100%;margin:0;padding:0}\n\t\t\t\t.myupdate-field-token{display:block;width:100%;max-width:600px}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row){display:block;width:100%;padding-top:4px}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{display:block;width:auto;padding:0 0 5px;text-align:left}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-field{display:block;width:100%;margin:0;padding:0}
+				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:18%;padding-right:12px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:46%;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block;padding:0 0 5px}
+				.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-field{display:block;width:100%;margin:0;padding:0}
+				.myupdate-field-token{display:block;width:100%;max-width:680px}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-visibility) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-description{white-space:nowrap;overflow:visible;font-size:.78em;line-height:1.25;margin-top:4px}
+				.myupdate-page.myupdate-repo-private .cbi-value:has(.myupdate-repo-input){width:34%}
+				.myupdate-page.myupdate-repo-private .cbi-value:has(.myupdate-field-visibility){width:18%}
+				.myupdate-page:not(.myupdate-repo-private) .cbi-value:has(.myupdate-repo-input){width:58%}
+				.myupdate-page:not(.myupdate-repo-private) .cbi-value:has(.myupdate-field-visibility){width:20%}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-time){display:inline-block;vertical-align:top;width:30%;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-description{display:none}
@@ -595,8 +608,12 @@ return view.extend({
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
-				.myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr);gap:14px;width:100%;max-width:none;box-sizing:border-box;align-items:start}
+				.myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.30fr) minmax(0,0.70fr);gap:14px;width:100%;max-width:none;box-sizing:border-box;align-items:start}
 				.myupdate-path-left,.myupdate-path-right{min-width:0}
+				.myupdate-page .cbi-value:has(.myupdate-path-editor){display:block;width:100%;margin:0;padding:0}
+				.myupdate-page .cbi-value:has(.myupdate-path-editor) .cbi-value-title{display:none}
+				.myupdate-page .cbi-value:has(.myupdate-path-editor) .cbi-value-field{display:block;width:100%;margin:0;padding:0}
+				.myupdate-path-left-heading{margin:0 0 7px;font-weight:700;color:var(--text-color-high,#344054);line-height:1.35}
 				.myupdate-path-entry-row{display:flex;align-items:center;gap:8px;width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-path-batch-input{flex:1;min-width:0;width:100%;height:4.2em!important;min-height:4.2em!important;resize:vertical}
 				.myupdate-path-manual-add{align-self:center;min-width:0;padding:5px 12px}
@@ -613,9 +630,9 @@ return view.extend({
 				.myupdate-browser-restricted,.myupdate-browser-empty,.myupdate-browser-hint{font-size:.88em;color:var(--gray-color-medium,#778397)}
 				.myupdate-browser-hint{padding-top:6px}
 				.myupdate-path-chips-heading{margin:0 0 8px;font-weight:650;color:var(--text-color-high,#344054)}
-				.myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,136px);align-content:flex-start;justify-content:start;gap:7px;margin:0;width:100%;box-sizing:border-box}
+				.myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,168px);align-content:flex-start;justify-content:start;gap:7px;margin:0;width:100%;box-sizing:border-box}
 				.myupdate-path-hint{min-height:1.5em;margin-top:8px;color:var(--gray-color-medium,#778397);font-size:.9em}
-				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:5px;flex:0 0 136px;width:136px;min-width:136px;max-width:136px;box-sizing:border-box;padding:5px 7px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
+				.myupdate-path-chip{position:relative;display:inline-flex;align-items:center;gap:5px;flex:0 0 168px;width:168px;min-width:168px;max-width:168px;box-sizing:border-box;padding:5px 7px;border-radius:6px;background:var(--background-color,#f6f8fa);border:1px solid var(--border-color-medium,#dce2e9);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease}
 				.myupdate-path-chip:hover,.myupdate-path-chip:focus-within{background:var(--background-color-high,#fff);border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 2px rgba(37,99,235,.10)}
 				.myupdate-path-chip-text{flex:1 1 auto;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92em}
 				.myupdate-path-chip-icon{flex:0 0 auto}
@@ -624,7 +641,7 @@ return view.extend({
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:767px){
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
-					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,136px)}
+					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,168px)}
 					.myupdate-page{padding-bottom:20px}
 					.myupdate-hero{align-items:flex-start;gap:12px;padding:16px}
 					.myupdate-hero-mark{flex-basis:46px;height:46px;border-radius:11px;font-size:14px}
