@@ -58,7 +58,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("keepPathTypes[entry.path] = entry.type", source)
         self.assertIn("keepPathTypes[path] == 'directory' ? '📁' : '📄'", source)
         self.assertIn("callListKeepPaths(parent)", source)
-        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)", source)
+        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr)", source)
         self.assertIn(".myupdate-path-chips{display:grid;grid-template-columns:repeat(auto-fill,136px)", source)
         self.assertIn("width:136px;min-width:136px;max-width:136px", source)
         self.assertIn("grid-template-columns:repeat(auto-fill,136px)", source)
@@ -176,7 +176,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
 
     def test_keep_path_chips_use_split_layout_and_detect_file_types(self):
         source = VIEW.read_text(encoding="utf-8")
-        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)", source)
+        self.assertIn(".myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.82fr) minmax(0,1.18fr)", source)
         self.assertIn(".myupdate-path-entry-row{display:flex;align-items:center;gap:8px;width:100%;max-width:none;box-sizing:border-box}", source)
         self.assertIn("path.substring(path.lastIndexOf('/') + 1) || path", source)
         self.assertIn("已添加保留项", source)
@@ -191,7 +191,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("grid-template-columns:minmax(0,1fr) minmax(0,1fr)", source)
         self.assertIn("align-content:flex-start", source)
         self.assertNotIn("width:var(--myupdate-path-chip-width)", source)
-        self.assertIn("max-width:150px", source)
+        self.assertIn("width:136px;min-width:136px;max-width:136px", source)
         self.assertNotIn(";width:150px", source)
 
 
