@@ -585,7 +585,7 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){display:block!important;width:471px!important;min-width:471px!important;max-width:471px!important;box-sizing:border-box}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-field,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token{display:block!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token input{display:block!important;width:471px!important;min-width:471px!important;max-width:471px!important;box-sizing:border-box!important}
-				.myupdate-token-description{grid-column:2/4;grid-row:2;margin:0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:normal}
+				.myupdate-token-description{grid-column:2/4;grid-row:2;margin:0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:nowrap}
 				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
