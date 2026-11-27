@@ -498,7 +498,7 @@ return view.extend({
 				});
 				if (tokenDescription) {
 					tokenDescription.classList.add('myupdate-token-description');
-					repoGrid.appendChild(tokenDescription);
+					visibilityRow.appendChild(tokenDescription);
 				}
 			}
 
@@ -580,7 +580,7 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){display:block!important;width:471px!important;min-width:471px!important;max-width:471px!important;box-sizing:border-box}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block!important;float:none!important;width:auto!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-field,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token input{display:block!important;float:none!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important}
-				.myupdate-token-description{grid-column:2/4;grid-row:2;margin:0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:nowrap}
+				.myupdate-token-description{display:block;margin:4px 0 0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:nowrap;text-align:left}
 				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
@@ -626,7 +626,7 @@ return view.extend({
 				@media(max-width:1000px){
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px;width:100%;min-width:0;max-width:100%}
 					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:1/-1;width:100%!important;min-width:0!important;max-width:100%!important}
-					.myupdate-token-description{grid-column:1/-1;grid-row:auto}
+					.myupdate-token-description{white-space:normal}
 					.myupdate-repo-grid>.myupdate-token-hidden{display:none}
 				}
 				@media(max-width:767px){
@@ -640,7 +640,7 @@ return view.extend({
 					.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){padding-top:0!important}
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr);width:100%;min-width:0;max-width:100%}
 					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:auto;width:100%!important;min-width:0!important;max-width:100%!important}
-					.myupdate-token-description{grid-column:1;grid-row:auto}
+					.myupdate-token-description{white-space:normal}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr);gap:14px}
 					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,168px)}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
