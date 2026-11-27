@@ -84,7 +84,6 @@ return view.extend({
 			};
 		}
 
-		addSettingsHeading('_heading_repository', _('仓库与访问权限'), _('配置固件来源，以及访问公开或私有 GitHub 仓库所需的凭据。'));
 		var noticeNode = E('div', { 'class': 'myupdate-inline-notice', role: 'status', 'aria-live': 'polite', style: 'display:none' });
 		var notify = createInlineNotifier(noticeNode);
 
@@ -124,25 +123,24 @@ return view.extend({
 			});
 		};
 
-		var mode = s.option(form.ListValue, 'upgrade_mode', _('检查模式'));
+		var mode = s.option(form.ListValue, 'upgrade_mode', _('升级模式'));
 		mode.value('manual', _('手动'));
 		mode.value('notify', _('定时提醒'));
 		mode.value('auto', _('自动升级'));
 		mode.default = 'manual';
 		mode.description = _('手动不执行定时任务；定时提醒每天检查一次；自动升级每天检查、下载、验证并在设定时间升级。');
 
-		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('每天自动升级时间（路由器本地时间）'));
+		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('升级时间'));
 		autoTime.default = '03:30';
 		autoTime.datatype = 'time';
 		autoTime.description = _('路由器本地时间；仅自动升级模式生效，每天执行一次。');
 
-		addSettingsHeading('_heading_verification', _('固件验证'), _('使用与发布流程匹配的 Minisign 公钥验证固件来源，验证通过后才允许继续升级。'));
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
 		pubkey.monospace = true;
 		pubkey.optional = true;
 		pubkey.rmempty = true;
-		pubkey.description = _('可留空并先保存其他设置。公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对；检查更新时会验证 56 位 Base64 公钥主体格式及实际签名，不正确时会在“更新状态”中提示。支持粘贴 minisign.pub 完整两行内容，点击“识别并转换”后再保存。');
+		pubkey.description = _('输入匹配的 Minisign 公钥验证，验证通过后才允许继续升级；如为 minisign.pub 两行内容，点击“识别并转换”按钮后保存。');
 
 		var convertKey = E('button', {
 			'class': 'btn cbi-button cbi-button-action',
@@ -403,15 +401,12 @@ return view.extend({
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [
 				E('div', { 'class': 'myupdate-status-title' }, [
-					E('span', { 'class': 'myupdate-status-kicker' }, _('UPDATE CENTER')),
 					E('h3', _('更新状态'))
 				]),
-				E('span', { 'class': 'myupdate-status-caption' }, _('检查 · 下载 · 验证 · 升级'))
 			]),
 			noticeNode,
 			E('div', { 'class': 'myupdate-status-overview' }, [
-				statusText,
-				E('p', { 'class': 'myupdate-status-note' }, _('固件下载完成后会验证 Minisign 签名、设备兼容性和 SHA256。只有验证通过，才可确认执行 sysupgrade。升级会重启设备，并按 LEDE 默认机制恢复配置备份。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'))
+				E('p', { 'class': 'myupdate-status-note' }, _('固件下载后验证 Minisign 签名、设备兼容和 SHA256。验证通过可升级，并按配置恢复，仅接受本项目生成的镜像。'))
 			]),
 			progressPanel,
 			E('div', { 'class': 'myupdate-actions' }, [
@@ -425,7 +420,8 @@ return view.extend({
 					E('button', { 'class': 'btn cbi-button cbi-button-negative myupdate-upgrade-button', click: function() {
 						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
-					} }, _('执行升级'))
+					} }, _('执行升级')),
+					downgrade.render('main')
 				]),
 			])
 		]);
@@ -595,13 +591,13 @@ return view.extend({
 					E('div', { 'class': 'myupdate-hero-copy' }, [
 						E('span', { 'class': 'myupdate-hero-eyebrow' }, _('SYSTEM MAINTENANCE')),
 						E('h2', _('固件在线升级')),
-						E('p', _('管理固件更新、完整性验证与升级后的配置恢复。'))
+						E('p', _('固件下载后验证 Minisign 签名、设备兼容和 SHA256。验证通过可升级，并按配置恢复，仅接受本项目生成的镜像。'))
 					])
 				]),
 				statusPanel,
 				E('div', { 'class': 'myupdate-settings-intro' }, [
 					E('h3', _('升级设置')),
-					E('p', _('仓库、更新方式、每日升级时间和验证密钥均可在此设置；保留项和允许降级仅暂存，点击底部“保存并应用”后生效。'))
+					
 				]),
 				mapNode
 			]);
