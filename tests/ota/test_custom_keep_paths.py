@@ -83,7 +83,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-action-settings{display:flex;align-items:flex-start", source)
         self.assertNotIn("s.option(form.Value, 'check_interval'", source)
         self.assertIn(".myupdate-path-editor{grid-template-columns:1fr}", source)
-        self.assertIn(".myupdate-repo-input{width:100%;max-width:220px}", source)
+        self.assertIn(".myupdate-repo-input{width:100%;max-width:293px}", source)
         self.assertIn("repo.renderWidget = function()", source)
         self.assertIn(".myupdate-key-input-row{display:flex;align-items:center", source)
         self.assertIn(".myupdate-key-convert{display:flex;align-items:center;align-self:center", source)
