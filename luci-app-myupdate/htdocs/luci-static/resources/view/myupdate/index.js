@@ -434,6 +434,7 @@ return view.extend({
 					} }, _('执行升级')),
 					E('div', { 'class': 'myupdate-action-controls' }),
 				])
+			])
 		]);
 		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
 
