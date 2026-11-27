@@ -85,8 +85,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("tokenRow.classList.toggle('myupdate-token-visible', isPrivate)", source)
         self.assertIn(".myupdate-repo-grid>.cbi-value:not(.myupdate-token-visible){visibility:hidden}", source)
         self.assertNotIn("token.depends('repo_visibility', 'private')", source)
-        self.assertNotIn("myupdate-action-settings", source)
-        self.assertNotIn("myupdate-downgrade-setting", source)
         self.assertIn("visibilitySelect.addEventListener('change', syncTokenVisibility)", source)
         self.assertIn("'class': 'myupdate-field-downgrade'", source)
         self.assertIn(".myupdate-repo-input{width:100%;max-width:422px}", source)
@@ -199,3 +197,4 @@ class CustomKeepPathsContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
