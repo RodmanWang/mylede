@@ -115,7 +115,7 @@ return view.extend({
 		token.optional = true;
 		// Token visibility is managed by the fixed three-column layout.
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('私有仓库需填写 Token，建议使用 Fine-grained PAT，并仅授予目标仓库 Contents: Read-only 权限。');
+		token.description = _('私有仓库需填写 Token，建议仅授予该 Token 对目标仓库的只读权限。');
 		token.cfgvalue = function() { return ''; };
 		var originalTokenRender = token.renderWidget;
 		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
@@ -504,14 +504,9 @@ return view.extend({
 
 			var visibilitySelect = mapNode.querySelector('.myupdate-field-visibility select');
 			if (visibilitySelect && tokenRow) {
-				var tokenInput = tokenRow.querySelector('.myupdate-field-token input');
-				if (tokenInput) {
-					tokenInput.style.setProperty('display', 'block', 'important');
-					tokenInput.style.setProperty('width', '471px', 'important');
-					tokenInput.style.setProperty('min-width', '471px', 'important');
-					tokenInput.style.setProperty('max-width', '471px', 'important');
-					tokenInput.style.setProperty('box-sizing', 'border-box', 'important');
-				}
+				// Let the grid track define the Token width; force every LuCI CBI
+				// wrapper in the field chain to fill that track instead of relying
+				// on LuCI's default floated/table-like field sizing.
 				var syncTokenVisibility = function() {
 					var isPrivate = visibilitySelect.value == 'private';
 					tokenRow.classList.toggle('myupdate-token-visible', isPrivate);
@@ -574,17 +569,17 @@ return view.extend({
 				.myupdate-settings-heading{padding:0 0 6px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.86em;line-height:1.4}
-				.myupdate-repo-grid{display:grid;grid-template-columns:515px 110px 471px;gap:14px;width:max-content;max-width:100%;justify-content:start;align-items:start}
+				.myupdate-repo-grid{display:grid;grid-template-columns:515px 110px 471px;gap:14px;width:1124px;min-width:1124px;max-width:none;justify-content:start;align-items:start}
 				.myupdate-repo-grid>.cbi-value{display:block;width:auto;min-width:0;margin:0;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
-				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){border-bottom:0}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){border-bottom:0!important;box-shadow:none!important}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-field-token{display:block;width:100%;max-width:none}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input input,.myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){display:block!important;width:471px!important;min-width:471px!important;max-width:471px!important;box-sizing:border-box}
-				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-field,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token{display:block!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box}
-				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token input{display:block!important;width:471px!important;min-width:471px!important;max-width:471px!important;box-sizing:border-box!important}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block!important;float:none!important;width:auto!important}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-field,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token input{display:block!important;float:none!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important}
 				.myupdate-token-description{grid-column:2/4;grid-row:2;margin:0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:nowrap}
 				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
@@ -629,8 +624,8 @@ return view.extend({
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:1000px){
-					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px}
-					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:1/-1}
+					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px;width:100%;min-width:0;max-width:100%}
+					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:1/-1;width:100%!important;min-width:0!important;max-width:100%!important}
 					.myupdate-token-description{grid-column:1/-1;grid-row:auto}
 					.myupdate-repo-grid>.myupdate-token-hidden{display:none}
 				}
@@ -643,8 +638,8 @@ return view.extend({
 					.myupdate-actions-primary{align-items:flex-end;flex-wrap:wrap}.myupdate-action-controls{flex:1 1 100%;margin:8px 0 0}
 					.myupdate-actions-primary>.btn{min-width:0}
 					.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){padding-top:0!important}
-					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr)}
-					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:auto}
+					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr);width:100%;min-width:0;max-width:100%}
+					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:auto;width:100%!important;min-width:0!important;max-width:100%!important}
 					.myupdate-token-description{grid-column:1;grid-row:auto}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr);gap:14px}
 					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,168px)}
