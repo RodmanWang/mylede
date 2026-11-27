@@ -122,7 +122,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("下载验证", source)
         self.assertIn(".myupdate-actions-primary>.cbi-button-action{background:#1673e6!important;color:#fff!important}", source)
         self.assertIn(".myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important", source)
-        self.assertIn("padding:0 0 2px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.2", source)
+        self.assertIn("padding:0!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.2", source)
         self.assertIn(".myupdate-repo-grid>.cbi-value .cbi-value-title{display:block", source)
         self.assertIn(".myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%", source)
         self.assertNotIn("s.option(form.Value, 'check_interval'", source)
