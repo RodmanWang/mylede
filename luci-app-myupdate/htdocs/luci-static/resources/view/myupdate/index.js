@@ -645,7 +645,6 @@ return view.extend({
 						E('p', _('固件下载后验证 Minisign 签名、设备兼容和 SHA256。验证通过可升级，并按配置恢复，仅接受本项目生成的镜像。'))
 					])
 				]),
-				statusPanel,
 				mapNode
 			]);
 		});
