@@ -555,7 +555,10 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-repo-input input{display:block;width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-token-row{display:block;width:100%;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
-				.myupdate-token-row>.cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left}\n\t\t\t\t.myupdate-token-row>.cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}\n\t\t\t\t.myupdate-token-row .myupdate-field-token,.myupdate-token-row .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}\n\t\t\t\t.myupdate-token-row.myupdate-token-hidden{display:none}
+				.myupdate-token-row>.cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left}
+				.myupdate-token-row>.cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
+				.myupdate-token-row .myupdate-field-token,.myupdate-token-row .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
+				.myupdate-token-row.myupdate-token-hidden{display:none}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
