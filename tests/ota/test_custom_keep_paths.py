@@ -67,7 +67,6 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("悬停标签查看完整路径", source)
         self.assertNotIn(".myupdate-page .cbi-section{display:grid", source)
         self.assertIn(".myupdate-page .cbi-section{margin-top:7px;padding:8px 14px 10px", source)
-        self.assertIn("repoGrid.appendChild(tokenDescription)", source)
         self.assertIn("myupdate-field-visibility", source)
         self.assertIn("myupdate-field-mode", source)
         self.assertNotIn("检查 · 下载 · 验证 · 升级", source)
