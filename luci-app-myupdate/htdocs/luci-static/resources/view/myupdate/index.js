@@ -623,7 +623,7 @@ return view.extend({
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
-				.myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.32fr) minmax(0,0.68fr);gap:14px;width:100%;max-width:none;box-sizing:border-box;align-items:start}
+				.myupdate-path-editor{display:grid;grid-template-columns:minmax(0,0.31fr) minmax(0,0.69fr);gap:12px;width:100%;max-width:none;box-sizing:border-box;align-items:start}
 				.myupdate-path-left,.myupdate-path-right{min-width:0}
 				.myupdate-page .cbi-value:has(.myupdate-path-editor){display:block;width:100%;margin:0;padding:0}
 				.myupdate-page .cbi-value:has(.myupdate-path-editor) .cbi-value-title{display:none}
