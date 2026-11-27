@@ -433,6 +433,7 @@ return view.extend({
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
 					} }, _('执行升级')),
 				]),
+				E('div', { 'class': 'myupdate-action-controls' }),
 			])
 		]);
 		showStatus(statusText, status, progressFill, progressLabel, progressPanel);
@@ -471,15 +472,16 @@ return view.extend({
 				formContainer.insertBefore(statusPanel, formContainer.firstChild);
 
 			var primaryActions = statusPanel.querySelector('.myupdate-actions-primary');
+			var actionControls = statusPanel.querySelector('.myupdate-action-controls');
 			var downgradeWidget = mapNode.querySelector('.myupdate-field-downgrade');
 			var downgradeRow = downgradeWidget && downgradeWidget.closest('.cbi-value');
 			var modeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-mode)');
 			var timeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-time)');
-			if (primaryActions) {
+			if (primaryActions && actionControls) {
 				[ modeRow, timeRow, downgradeRow ].forEach(function(row) {
 					if (!row || !formContainer.contains(row)) return;
 					row.classList.add('myupdate-inline-control');
-					primaryActions.appendChild(row);
+					actionControls.appendChild(row);
 				});
 			}
 
@@ -527,15 +529,15 @@ return view.extend({
 				.myupdate-inline-notice.notice-info{background:var(--info-bg,#eff6ff);color:var(--info-color,#1d4ed8);border:1px solid rgba(59,130,246,.22)}
 				.myupdate-inline-notice.notice-error{background:var(--error-bg,#fef2f2);color:var(--error-color,#b91c1c);border:1px solid rgba(220,38,38,.22)}
 				.myupdate-actions{display:block;margin-top:9px;padding-top:8px;border-top:1px solid var(--border-color-low,#e6eaf0)}
-				.myupdate-actions-primary{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}
 				.myupdate-actions-final{display:flex;justify-content:flex-end}
 				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:34px;padding:5px 11px;border-radius:6px;font-weight:650}
-				.myupdate-actions-primary>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:3px;width:auto!important;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
-				.myupdate-actions-primary>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0!important;color:var(--text-color-high,#344054);font-size:.86em;font-weight:650;line-height:1.25;white-space:nowrap}
-				.myupdate-actions-primary>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
-				.myupdate-actions-primary>.myupdate-inline-control .cbi-value-description{display:none}
-				.myupdate-actions-primary>.myupdate-inline-control:has(.myupdate-field-downgrade){display:flex!important;flex-direction:row;align-items:center;gap:7px;padding-top:12px!important}
-				.myupdate-actions-primary>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-description{display:block;max-width:210px;margin:0;color:var(--gray-color-medium,#778397);font-size:.76em;line-height:1.3;white-space:normal}
+				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:3px;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
+				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0!important;color:var(--text-color-high,#344054);font-size:.86em;font-weight:650;line-height:1.25;white-space:nowrap}
+				.myupdate-action-controls>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
+				.myupdate-action-controls>.myupdate-inline-control .cbi-value-description{display:none}
+				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){display:grid!important;grid-template-columns:auto auto;grid-template-rows:auto auto;align-items:center;column-gap:7px;row-gap:3px;padding-top:0!important}
+				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-title{grid-column:1;grid-row:1}.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-field{grid-column:2;grid-row:1}.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-description{display:block;grid-column:1/-1;max-width:230px;margin:0;color:var(--gray-color-medium,#778397);font-size:.76em;line-height:1.3;white-space:normal}
 				.myupdate-field-mode select{width:100%;max-width:112px}
 				.myupdate-field-time input{width:100%;max-width:92px}
 				.myupdate-field-downgrade input{margin:0}
@@ -564,7 +566,7 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-field-token{display:block;width:100%;max-width:none}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input input,.myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
-				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
+				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}.myupdate-repo-grid>.myupdate-token-visible{grid-column:1/-1}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
@@ -617,9 +619,9 @@ return view.extend({
 					.myupdate-hero-mark{flex-basis:46px;height:46px;border-radius:11px;font-size:14px}
 					.myupdate-hero h2{font-size:1.35rem}
 					.myupdate-status-panel{padding:12px}
-					.myupdate-actions-primary{align-items:flex-start}
+					.myupdate-actions-primary{align-items:flex-end;flex-wrap:wrap}.myupdate-action-controls{flex:1 1 100%;margin:8px 0 0}
 					.myupdate-actions-primary>.btn{min-width:0}
-					.myupdate-actions-primary>.myupdate-inline-control:has(.myupdate-field-downgrade){padding-top:0!important}
+					.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){padding-top:0!important}
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr)}
 					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:auto}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr);gap:14px}
@@ -628,7 +630,7 @@ return view.extend({
 				}
 				@media(max-width:420px){
 					.myupdate-hero-mark{display:none}
-					.myupdate-actions-primary{align-items:stretch}
+					.myupdate-actions-primary{align-items:stretch;flex-wrap:wrap}.myupdate-action-controls{flex:1 1 100%;flex-wrap:wrap;margin:8px 0 0}
 					.myupdate-actions-primary>.btn{flex:1 1 100%}
 					.myupdate-path-entry-row{align-items:center}
 					.myupdate-path-batch-input{min-width:0}
