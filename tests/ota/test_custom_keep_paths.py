@@ -94,7 +94,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("repoGrid.appendChild(row)", source)
         self.assertIn("tokenRow.classList.toggle('myupdate-token-visible', isPrivate)", source)
         self.assertNotIn("公开无需 Token；私有仓库需填写。", source)
-        self.assertIn("私有仓库需要 Token。建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。", source)
+        self.assertIn("私有仓库需填写 Token，建议仅授予该 Token 对目标仓库的只读权限。", source)
         self.assertIn("tokenDescription.style.display = isPrivate ? '' : 'none'", source)
         self.assertIn(".myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}", source)
         self.assertNotIn(".myupdate-repo-grid>.cbi-value:not(.myupdate-token-visible)", source)
