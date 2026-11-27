@@ -483,8 +483,10 @@ return view.extend({
 					row.classList.add('myupdate-repo-grid-cell');
 					repoGrid.appendChild(row);
 				});
+				var tokenGrid = E('div', { 'class': 'myupdate-token-grid' });
 				tokenRow.classList.add('myupdate-token-row');
-				repoGrid.parentNode.insertBefore(tokenRow, repoGrid.nextSibling);
+				tokenGrid.appendChild(tokenRow);
+				repoGrid.parentNode.insertBefore(tokenGrid, repoGrid.nextSibling);
 			}
 
 			var visibilitySelect = mapNode.querySelector('.myupdate-field-visibility select');
@@ -554,7 +556,8 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-repo-input input{display:block;width:100%;max-width:none;box-sizing:border-box}
-				.myupdate-token-row{display:block;width:100%;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-token-grid{display:grid;grid-template-columns:minmax(0,70fr) minmax(150px,30fr);gap:14px;width:100%;align-items:start}
+				.myupdate-token-row{display:block;width:100%;min-width:0;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-token-row>.cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left}
 				.myupdate-token-row>.cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-token-row .myupdate-field-token,.myupdate-token-row .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
@@ -601,7 +604,7 @@ return view.extend({
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:1000px){
-					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px}
+					.myupdate-repo-grid,.myupdate-token-grid{grid-template-columns:minmax(0,1fr) 120px}
 				}
 				@media(max-width:767px){
 					.myupdate-page .cbi-value:has(.myupdate-field-mode),.myupdate-page .cbi-value:has(.myupdate-field-time),.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-template-columns:minmax(0,1fr);row-gap:3px}
@@ -613,7 +616,7 @@ return view.extend({
 					.myupdate-status-panel{padding:12px}
 					.myupdate-actions-primary{align-items:flex-end;flex-wrap:wrap}
 					.myupdate-actions-primary>.btn{min-width:0}
-					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr)}
+					.myupdate-repo-grid,.myupdate-token-grid{grid-template-columns:minmax(0,1fr)}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr);gap:14px}
 					.myupdate-path-chips{grid-template-columns:repeat(auto-fill,168px)}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
