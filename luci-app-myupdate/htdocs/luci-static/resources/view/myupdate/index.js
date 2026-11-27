@@ -99,7 +99,7 @@ return view.extend({
 		var originalRepoRender = repo.renderWidget;
 		repo.renderWidget = function() {
 			var inputWidget = originalRepoRender.apply(this, arguments);
-			return E('div', { 'class': 'myupdate-field-repo myupdate-repo-input' }, [ inputWidget ]);
+			return E('div', { 'class': 'myupdate-repo-input' }, [ inputWidget ]);
 		};
 
 		var visibility = s.option(form.ListValue, 'repo_visibility', _('仓库可见性'));
@@ -107,8 +107,6 @@ return view.extend({
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
 		visibility.description = _('公开仓库无需 Token；私有仓库请填写下方访问令牌。');
-		var originalVisibilityRender = visibility.renderWidget;
-		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
 		var token = s.option(form.Value, '_github_token', _('GitHub Token'));
 		token.password = true;
@@ -125,8 +123,6 @@ return view.extend({
 					throw new Error(result && result.error ? result.error : _('GitHub Token 保存失败'));
 			});
 		};
-		var originalTokenRender = token.renderWidget;
-		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
 
 		var mode = s.option(form.ListValue, 'upgrade_mode', _('检查模式'));
 		mode.value('manual', _('手动'));
@@ -134,15 +130,11 @@ return view.extend({
 		mode.value('auto', _('自动升级'));
 		mode.default = 'manual';
 		mode.description = _('手动不执行定时任务；定时提醒每天检查一次；自动升级每天检查、下载、验证并在设定时间升级。');
-		var originalModeRender = mode.renderWidget;
-		mode.renderWidget = function() { return E('div', { 'class': 'myupdate-field-mode' }, [ originalModeRender.apply(this, arguments) ]); };
 
 		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('每天自动升级时间（路由器本地时间）'));
 		autoTime.default = '03:30';
 		autoTime.datatype = 'time';
 		autoTime.description = _('路由器本地时间；仅自动升级模式生效，每天执行一次。');
-		var originalAutoTimeRender = autoTime.renderWidget;
-		autoTime.renderWidget = function() { return E('div', { 'class': 'myupdate-field-time' }, [ originalAutoTimeRender.apply(this, arguments) ]); };
 
 		addSettingsHeading('_heading_verification', _('固件验证'), _('使用与发布流程匹配的 Minisign 公钥验证固件来源，验证通过后才允许继续升级。'));
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
@@ -407,8 +399,6 @@ return view.extend({
 		downgrade.default = '0';
 		downgrade.rmempty = false;
 		downgrade.description = _('默认关闭；开启后允许安装低于当前版本的固件。点击“保存并应用”后生效。');
-		var originalDowngradeRender = downgrade.renderWidget;
-		downgrade.renderWidget = function() { return E('div', { 'class': 'myupdate-field-downgrade' }, [ originalDowngradeRender.apply(this, arguments) ]); };
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [
@@ -458,7 +448,7 @@ return view.extend({
 						keyInput.dispatchEvent(new Event('change', { bubbles: true }));
 					}
 				});
-				return E('div', { 'class': 'myupdate-key-input-row myupdate-field-pubkey' }, [
+				return E('div', { 'class': 'myupdate-key-input-row' }, [
 					E('div', { 'class': 'myupdate-key-input' }, [ inputWidget ]),
 					E('div', { 'class': 'myupdate-key-convert' }, [ convertKey ])
 				]);
@@ -507,26 +497,22 @@ return view.extend({
 				.myupdate-settings-intro{margin:0 0 4px;padding:0 2px}
 				.myupdate-settings-intro h3{margin:0;font-size:1.2rem;font-weight:750}
 				.myupdate-settings-intro p{margin:4px 0 0;color:var(--gray-color-medium,#6b7280);font-size:.92em;line-height:1.6}
-				.myupdate-page .cbi-section{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:14px;row-gap:0;margin-top:6px;padding:8px 14px 10px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:11px;background:var(--background-color-high,#fff);box-shadow:0 3px 12px rgba(15,23,42,.025)}
-				.myupdate-page .cbi-value{min-width:0;padding:7px 0;border-bottom:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-page .cbi-section{margin-top:6px;padding:8px 14px 10px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:11px;background:var(--background-color-high,#fff);box-shadow:0 3px 12px rgba(15,23,42,.025)}
+				.myupdate-page .cbi-value{padding:8px 0;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-page .cbi-value:last-child{border-bottom:0}
-				.myupdate-page .cbi-value-title{padding-top:7px;color:var(--text-color-high,#344054);font-weight:650}
+				.myupdate-page .cbi-value-title{padding-top:5px;color:var(--text-color-high,#344054);font-weight:650}
 				.myupdate-page .cbi-value-field{min-width:0}
 				.myupdate-page input:not([type=checkbox]),.myupdate-page select,.myupdate-page textarea{border-radius:6px}
 				.myupdate-page input:focus,.myupdate-page select:focus,.myupdate-page textarea:focus{outline:2px solid rgba(37,99,235,.18);outline-offset:1px}
-				.myupdate-page .cbi-value-description{margin-top:6px;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.55}
-				.myupdate-page .cbi-value:has(.myupdate-settings-heading){grid-column:1/-1;padding:7px 0 5px;border-bottom:0;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-repo){grid-column:1/span 6;grid-row:2;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-visibility){grid-column:7/span 2;grid-row:2;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-token){grid-column:9/span 4;grid-row:2;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-mode){grid-column:1/span 4;grid-row:3;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-time){grid-column:5/span 3;grid-row:3;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-column:8/span 5;grid-row:3;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-pubkey){grid-column:1/-1;grid-row:5;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-path-editor){grid-column:1/-1;grid-row:7;display:block}
-				.myupdate-page .cbi-value:has(.myupdate-field-repo) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-visibility) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-downgrade) .cbi-value-title{display:block;padding:0 0 4px}
-				.myupdate-page .cbi-value:has(.myupdate-field-pubkey) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-path-editor) .cbi-value-title{display:block;padding:0 0 4px}
+				.myupdate-page .cbi-value-description{margin-top:5px;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
+				.myupdate-page .cbi-value:has(.myupdate-settings-heading){padding:10px 0 5px;border-bottom:0}
 				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-title{display:none}
+				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
+				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
+				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
+				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
+				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
+				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
 				.myupdate-settings-heading{padding:0 0 6px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
@@ -570,16 +556,6 @@ return view.extend({
 				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;min-height:18px;max-height:18px;box-sizing:border-box;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.05em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
-				@media(max-width:900px){
-					.myupdate-page .cbi-section{grid-template-columns:repeat(2,minmax(0,1fr))}
-					.myupdate-page .cbi-value:has(.myupdate-settings-heading),.myupdate-page .cbi-value:has(.myupdate-field-pubkey),.myupdate-page .cbi-value:has(.myupdate-path-editor){grid-column:1/-1;grid-row:auto}
-					.myupdate-page .cbi-value:has(.myupdate-field-repo){grid-column:1/-1;grid-row:auto}
-					.myupdate-page .cbi-value:has(.myupdate-field-visibility){grid-column:1;grid-row:auto}
-					.myupdate-page .cbi-value:has(.myupdate-field-token){grid-column:2;grid-row:auto}
-					.myupdate-page .cbi-value:has(.myupdate-field-mode){grid-column:1;grid-row:auto}
-					.myupdate-page .cbi-value:has(.myupdate-field-time){grid-column:2;grid-row:auto}
-					.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-column:1/-1;grid-row:auto}
-				}
 				@media(max-width:767px){
 					.myupdate-page{padding-bottom:20px}
 					.myupdate-hero{align-items:flex-start;gap:12px;padding:16px}
@@ -592,9 +568,8 @@ return view.extend({
 					.myupdate-actions-primary .btn{min-width:0;width:100%;white-space:normal}
 					.myupdate-actions-primary .btn{min-width:0;padding-left:7px;padding-right:7px}
 					.myupdate-downgrade-row{align-items:flex-start;flex-direction:column;gap:5px}
-					.myupdate-page .cbi-section{padding:8px 12px 12px;grid-template-columns:1fr}
-					.myupdate-page .cbi-value:has(.myupdate-field-visibility),.myupdate-page .cbi-value:has(.myupdate-field-token),.myupdate-page .cbi-value:has(.myupdate-field-mode),.myupdate-page .cbi-value:has(.myupdate-field-time),.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-column:1/-1;grid-row:auto}
-					.myupdate-page .cbi-value{display:block;padding:7px 0}
+					.myupdate-page .cbi-section{padding:8px 12px 12px}
+					.myupdate-page .cbi-value{display:block;padding:8px 0}
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
