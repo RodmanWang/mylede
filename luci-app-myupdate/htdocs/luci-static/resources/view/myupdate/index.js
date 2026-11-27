@@ -514,6 +514,26 @@ return view.extend({
 				if (repoDescription) {
 					repoDescription.style.gridColumn = '1';
 					repoDescription.style.gridRow = '2';
+					// Align the repository helper's leading icon/text with the
+					// first character of the repository title, after its help icon.
+					var repoTitle = repoRow.querySelector('.cbi-value-title');
+					if (repoTitle) {
+						var repoTitleWalker = document.createTreeWalker(repoTitle, NodeFilter.SHOW_TEXT);
+						var repoTitleTextNode;
+						while ((repoTitleTextNode = repoTitleWalker.nextNode())) {
+							var repoTitleTextIndex = repoTitleTextNode.nodeValue.indexOf('GitHub 仓库地址');
+							if (repoTitleTextIndex < 0)
+								continue;
+							var repoTitleRange = document.createRange();
+							repoTitleRange.setStart(repoTitleTextNode, repoTitleTextIndex);
+							repoTitleRange.setEnd(repoTitleTextNode, repoTitleTextIndex + 1);
+							var repoTitleTextLeft = repoTitleRange.getBoundingClientRect().left;
+							var repoCellLeft = repoRow.getBoundingClientRect().left;
+							repoDescription.style.setProperty('--myupdate-repo-title-offset',
+								Math.max(0, repoTitleTextLeft - repoCellLeft) + 'px');
+							break;
+						}
+					}
 				}
 				visibilityRow.style.gridColumn = '2';
 				visibilityRow.style.gridRow = '1';
@@ -522,6 +542,26 @@ return view.extend({
 				if (tokenDescription) {
 					tokenDescription.style.gridColumn = '2 / 4';
 					tokenDescription.style.gridRow = '2';
+					// Align the private-repository hint with the first title character,
+					// not with a leading LuCI help/tooltip icon in the title cell.
+					var visibilityTitle = visibilityRow.querySelector('.cbi-value-title');
+					if (visibilityTitle) {
+						var titleWalker = document.createTreeWalker(visibilityTitle, NodeFilter.SHOW_TEXT);
+						var titleTextNode;
+						while ((titleTextNode = titleWalker.nextNode())) {
+							var titleTextIndex = titleTextNode.nodeValue.indexOf('仓库可见性');
+							if (titleTextIndex < 0)
+								continue;
+							var titleRange = document.createRange();
+							titleRange.setStart(titleTextNode, titleTextIndex);
+							titleRange.setEnd(titleTextNode, titleTextIndex + 1);
+							var titleTextLeft = titleRange.getBoundingClientRect().left;
+							var visibilityCellLeft = visibilityRow.getBoundingClientRect().left;
+							tokenDescription.style.setProperty('--myupdate-visibility-title-offset',
+								Math.max(0, titleTextLeft - visibilityCellLeft) + 'px');
+							break;
+						}
+					}
 				}
 			}
 
@@ -598,8 +638,8 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-title{display:block!important;float:none!important;width:auto!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-field{display:block!important;float:none!important;width:100%!important}
 				.myupdate-repo-grid>.myupdate-repo-description,.myupdate-repo-grid>.myupdate-token-description{align-self:start;justify-self:start;margin:0!important;padding:0!important;white-space:nowrap;font-size:.76em;line-height:1.35;color:var(--gray-color-medium,#748094)}
-				.myupdate-repo-grid>.myupdate-repo-description{grid-column:1;grid-row:2}
-				.myupdate-repo-grid>.myupdate-token-description{grid-column:2/4;grid-row:2}
+				.myupdate-repo-grid>.myupdate-repo-description{grid-column:1;grid-row:2;margin-left:var(--myupdate-repo-title-offset,0)!important}
+				.myupdate-repo-grid>.myupdate-token-description{grid-column:2/4;grid-row:2;margin-left:var(--myupdate-visibility-title-offset,0)!important}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
@@ -656,8 +696,8 @@ return view.extend({
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:1000px){
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px;width:100%;min-width:0;max-width:100%}
-					.myupdate-repo-grid>.myupdate-repo-description{grid-column:1;grid-row:2}
-					.myupdate-repo-grid>.myupdate-token-description{grid-column:2;grid-row:2}
+					.myupdate-repo-grid>.myupdate-repo-description{grid-column:1;grid-row:2;margin-left:0!important}
+					.myupdate-repo-grid>.myupdate-token-description{grid-column:2;grid-row:2;margin-left:0!important}
 					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:1/-1;width:100%!important;min-width:0!important;max-width:100%!important}
 					.myupdate-token-description{white-space:normal}
 					.myupdate-repo-grid>.myupdate-token-hidden{display:none}
