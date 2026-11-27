@@ -528,6 +528,7 @@ return view.extend({
 				.myupdate-inline-notice.notice-error{background:var(--error-bg,#fef2f2);color:var(--error-color,#b91c1c);border:1px solid rgba(220,38,38,.22)}
 				.myupdate-actions{display:block;margin-top:9px;padding-top:8px;border-top:1px solid var(--border-color-low,#e6eaf0)}
 				.myupdate-actions-primary{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+				.myupdate-actions-final{display:flex;justify-content:flex-end}
 				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:34px;padding:5px 11px;border-radius:6px;font-weight:650}
 				.myupdate-actions-primary>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:3px;width:auto!important;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
 				.myupdate-actions-primary>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0!important;color:var(--text-color-high,#344054);font-size:.86em;font-weight:650;line-height:1.25;white-space:nowrap}
@@ -565,7 +566,7 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input input,.myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
 				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
-				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
+				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
@@ -608,6 +609,7 @@ return view.extend({
 				@media(max-width:1000px){
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px}
 					.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){grid-column:1/-1}
+					.myupdate-repo-grid>.myupdate-token-hidden{display:none}
 				}
 				@media(max-width:767px){
 					.myupdate-page{padding-bottom:20px}
