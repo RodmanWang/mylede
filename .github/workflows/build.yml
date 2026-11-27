@@ -41,8 +41,8 @@ on:
 
   schedule:
     - cron: '0 1 * * *'
-    timezone: 'Asia/Shanghai'
-    
+      timezone: 'Asia/Shanghai'
+
 permissions:
   contents: read
   actions: write
