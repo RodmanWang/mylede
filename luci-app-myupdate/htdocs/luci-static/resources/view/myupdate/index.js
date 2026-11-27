@@ -84,7 +84,6 @@ return view.extend({
 			};
 		}
 
-		addSettingsHeading('_heading_repository', _('仓库与访问权限'), _('配置固件来源，以及访问公开或私有 GitHub 仓库所需的凭据。'));
 		var noticeNode = E('div', { 'class': 'myupdate-inline-notice', role: 'status', 'aria-live': 'polite', style: 'display:none' });
 		var notify = createInlineNotifier(noticeNode);
 
@@ -107,6 +106,8 @@ return view.extend({
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
 		visibility.description = _('公开仓库无需 Token；私有仓库请填写下方访问令牌。');
+		var originalVisibilityRender = visibility.renderWidget;
+		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
 		var token = s.option(form.Value, '_github_token', _('GitHub Token'));
 		token.password = true;
@@ -116,6 +117,8 @@ return view.extend({
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
 		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置；留空保持已有 Token。格式和访问权限在检查私有仓库时验证，不影响保存其他设置。');
 		token.cfgvalue = function() { return ''; };
+		var originalTokenRender = token.renderWidget;
+		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
 		token.write = function(section_id, value) {
 			if (!value) return Promise.resolve();
 			return callToken(value).then(function(result) {
@@ -124,25 +127,28 @@ return view.extend({
 			});
 		};
 
-		var mode = s.option(form.ListValue, 'upgrade_mode', _('检查模式'));
+		var mode = s.option(form.ListValue, 'upgrade_mode', _('升级模式'));
 		mode.value('manual', _('手动'));
 		mode.value('notify', _('定时提醒'));
 		mode.value('auto', _('自动升级'));
 		mode.default = 'manual';
 		mode.description = _('手动不执行定时任务；定时提醒每天检查一次；自动升级每天检查、下载、验证并在设定时间升级。');
+		var originalModeRender = mode.renderWidget;
+		mode.renderWidget = function() { return E('div', { 'class': 'myupdate-field-mode' }, [ originalModeRender.apply(this, arguments) ]); };
 
-		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('每天自动升级时间（路由器本地时间）'));
+		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('升级时间'));
 		autoTime.default = '03:30';
 		autoTime.datatype = 'time';
 		autoTime.description = _('路由器本地时间；仅自动升级模式生效，每天执行一次。');
+		var originalAutoTimeRender = autoTime.renderWidget;
+		autoTime.renderWidget = function() { return E('div', { 'class': 'myupdate-field-time' }, [ originalAutoTimeRender.apply(this, arguments) ]); };
 
-		addSettingsHeading('_heading_verification', _('固件验证'), _('使用与发布流程匹配的 Minisign 公钥验证固件来源，验证通过后才允许继续升级。'));
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
 		pubkey.monospace = true;
 		pubkey.optional = true;
 		pubkey.rmempty = true;
-		pubkey.description = _('可留空并先保存其他设置。公钥必须与 GitHub Actions 的 MINISIGN_SECRET_KEY 配对；检查更新时会验证 56 位 Base64 公钥主体格式及实际签名，不正确时会在“更新状态”中提示。支持粘贴 minisign.pub 完整两行内容，点击“识别并转换”后再保存。');
+		pubkey.description = _('输入匹配的 Minisign 公钥验证，验证通过后才允许继续升级；如为 minisign.pub 两行内容，点击“识别并转换”按钮后保存。');
 
 		var convertKey = E('button', {
 			'class': 'btn cbi-button cbi-button-action',
@@ -401,17 +407,10 @@ return view.extend({
 		downgrade.description = _('默认关闭；开启后允许安装低于当前版本的固件。点击“保存并应用”后生效。');
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
-			E('div', { 'class': 'myupdate-status-heading' }, [
-				E('div', { 'class': 'myupdate-status-title' }, [
-					E('span', { 'class': 'myupdate-status-kicker' }, _('UPDATE CENTER')),
-					E('h3', _('更新状态'))
-				]),
-				E('span', { 'class': 'myupdate-status-caption' }, _('检查 · 下载 · 验证 · 升级'))
-			]),
+			E('div', { 'class': 'myupdate-status-heading' }, [ statusText ]),
 			noticeNode,
 			E('div', { 'class': 'myupdate-status-overview' }, [
-				statusText,
-				E('p', { 'class': 'myupdate-status-note' }, _('固件下载完成后会验证 Minisign 签名、设备兼容性和 SHA256。只有验证通过，才可确认执行 sysupgrade。升级会重启设备，并按 LEDE 默认机制恢复配置备份。仅接受本项目生成的 x86_64 squashfs UEFI combined 镜像。'))
+				E('p', { 'class': 'myupdate-status-note' }, _('固件下载后验证 Minisign 签名、设备兼容和 SHA256。验证通过可升级，并按配置恢复，仅接受本项目生成的镜像。'))
 			]),
 			progressPanel,
 			E('div', { 'class': 'myupdate-actions' }, [
@@ -425,7 +424,7 @@ return view.extend({
 					E('button', { 'class': 'btn cbi-button cbi-button-negative myupdate-upgrade-button', click: function() {
 						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
-					} }, _('执行升级'))
+					} }, _('执行升级')),
 				]),
 			])
 		]);
@@ -454,6 +453,9 @@ return view.extend({
 				]);
 			};
 		return m.render().then(function(mapNode) {
+			var downgradeRow = mapNode.querySelector('.cbi-value:has([name*="allow_downgrade"])');
+			var actionRow = statusPanel.querySelector('.myupdate-actions-primary');
+			if (downgradeRow && actionRow) actionRow.appendChild(downgradeRow);
 			var style = E('style', {}, `
 				.myupdate-page{max-width:1440px;margin:0 auto;padding-bottom:18px}
 				.myupdate-hero{position:static!important;top:auto!important;z-index:auto!important}
@@ -464,7 +466,16 @@ return view.extend({
 				.myupdate-hero h2{margin:0;color:var(--text-color-high,#1f2937);font-size:1.65rem;font-weight:750;letter-spacing:-.025em}
 				.myupdate-hero p{margin:5px 0 0;color:var(--gray-color-medium,#697586);line-height:1.55}
 				.myupdate-status-panel{border:1px solid var(--border-color-medium,#d5dce5);border-radius:10px;background:var(--background-color-high,#fff);padding:12px 16px;margin:0 0 10px;box-shadow:0 5px 18px rgba(15,23,42,.045)}
-				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+				.myupdate-status-heading{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+				.myupdate-status-title h3{flex:0 0 auto}
+				.myupdate-status-message{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+				.myupdate-status-overview{display:block}
+				.myupdate-status-note{margin:0 0 8px;padding:5px 8px;line-height:1.35}
+				.myupdate-actions-primary .cbi-value{display:inline-flex;align-items:center;margin:0;padding:0;border:0}
+				.myupdate-actions-primary .cbi-value-title{display:none}
+				.myupdate-actions-primary .cbi-value-field{padding:0}
+				.myupdate-actions-primary .cbi-value-description{display:none}
+				.myupdate-actions-primary .cbi-value label{margin:0}
 				.myupdate-status-title h3{margin:0;font-size:1.18rem;font-weight:750}
 				.myupdate-status-kicker{margin-bottom:3px}
 				.myupdate-status-caption{font-size:.85em;color:var(--gray-color-medium,#778397)}
@@ -510,6 +521,7 @@ return view.extend({
 				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
+				.myupdate-key-input textarea{min-height:2.5em!important;height:2.5em!important}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
@@ -518,10 +530,18 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-repo-input{width:100%;max-width:none}
-				.myupdate-field-visibility select{width:100%;max-width:112px}
-				.myupdate-field-mode select{width:100%;max-width:170px}
-				.myupdate-field-time input{width:100%;max-width:150px}
+				.myupdate-repo-input{width:100%;max-width:220px}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:16%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:49%;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-time){display:inline-block;vertical-align:top;width:30%;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-description{display:none}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row){padding-top:2px}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{padding-top:0}
+				.myupdate-field-visibility select{width:100%;max-width:72px}
+				.myupdate-field-mode select{width:100%;max-width:96px}
+				.myupdate-field-time input{width:100%;max-width:92px}
 				.myupdate-field-downgrade .cbi-value-description{margin-top:3px}
 				.myupdate-field-downgrade input{margin-right:7px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
@@ -595,14 +615,10 @@ return view.extend({
 					E('div', { 'class': 'myupdate-hero-copy' }, [
 						E('span', { 'class': 'myupdate-hero-eyebrow' }, _('SYSTEM MAINTENANCE')),
 						E('h2', _('固件在线升级')),
-						E('p', _('管理固件更新、完整性验证与升级后的配置恢复。'))
+						E('p', _('固件下载后验证 Minisign 签名、设备兼容和 SHA256。验证通过可升级，并按配置恢复，仅接受本项目生成的镜像。'))
 					])
 				]),
 				statusPanel,
-				E('div', { 'class': 'myupdate-settings-intro' }, [
-					E('h3', _('升级设置')),
-					E('p', _('仓库、更新方式、每日升级时间和验证密钥均可在此设置；保留项和允许降级仅暂存，点击底部“保存并应用”后生效。'))
-				]),
 				mapNode
 			]);
 		});
