@@ -136,10 +136,8 @@ fi
 [ "$UPDATE" = true ] || { write_status current '当前已经是最新版本，不需要重复刷写' false false false; exit 1; }
 KERNEL_PARTSIZE="$(sed -n '6p' "$R/verified-manifest.txt")"
 ROOTFS_PARTSIZE="$(sed -n '7p' "$R/verified-manifest.txt")"
-/bin/sh /usr/libexec/myupdate/check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE" || {
-	write_status error '当前设备的内核或根文件系统分区容量不足，已阻止下载和升级' true false false
-	exit 1
-}
+# Download stores the image under /tmp/myupdate, so only /tmp capacity
+# matters here. Partition layout is checked immediately before flashing.
 if [ "$ACTION" = download ]; then
 	write_status downloading "正在下载 $ASSET" true false false
 	# Avoid filling tmpfs; sysupgrade needs working space while validating and flashing.
@@ -167,7 +165,8 @@ if ! sysupgrade -T "$R/firmware.bin"; then
 	write_status error 'LEDE sysupgrade 镜像预检查失败，已取消刷写' true true true
 	exit 1
 fi
-# Re-read sysfs immediately before sysupgrade; never rely only on the earlier download check.
+# Partition layout matters for flashing, not for downloading to /tmp.
+# Re-read sysfs immediately before sysupgrade.
 /bin/sh /usr/libexec/myupdate/check-partition-layout.sh "$KERNEL_PARTSIZE" "$ROOTFS_PARTSIZE" || {
 	write_status error '刷写前再次检查发现分区容量不足，已取消升级' true true true
 	exit 1
