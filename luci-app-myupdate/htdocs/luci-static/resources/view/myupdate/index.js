@@ -115,7 +115,7 @@ return view.extend({
 		token.optional = true;
 		// Token visibility is managed by the fixed three-column layout.
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
-		token.description = _('私有仓库需要 Token。建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。');
+		token.description = _('私有仓库需填写 Token，建议仅授予该 Token 对目标仓库的只读权限。');
 		token.cfgvalue = function() { return ''; };
 		var originalTokenRender = token.renderWidget;
 		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
