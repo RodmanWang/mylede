@@ -492,7 +492,6 @@ return view.extend({
 			var visibilityRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-visibility)');
 			var tokenRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-token)');
 			var repoGrid = null;
-			var repoDescription = repoRow && repoRow.querySelector('.cbi-value-description');
 			var tokenDescription = tokenRow && tokenRow.querySelector('.cbi-value-description');
 			if (repoRow && visibilityRow && tokenRow && repoRow.parentNode == visibilityRow.parentNode && repoRow.parentNode == tokenRow.parentNode) {
 				repoGrid = E('div', { 'class': 'myupdate-repo-grid' });
@@ -501,68 +500,14 @@ return view.extend({
 					row.classList.add('myupdate-repo-grid-cell');
 					repoGrid.appendChild(row);
 				});
-				if (repoDescription) {
-					repoDescription.classList.add('myupdate-repo-description');
-					repoGrid.appendChild(repoDescription);
-				}
-				if (tokenDescription) {
-					tokenDescription.classList.add('myupdate-token-description');
-					repoGrid.appendChild(tokenDescription);
-				}
+				// Keep LuCI descriptions inside their native CBI value rows.
+				// This preserves the same title/field alignment used by Minisign.
 				repoRow.style.gridColumn = '1';
 				repoRow.style.gridRow = '1';
-				if (repoDescription) {
-					repoDescription.style.gridColumn = '1';
-					repoDescription.style.gridRow = '2';
-					// Align the repository helper's leading icon/text with the
-					// first character of the repository title, after its help icon.
-					var repoTitle = repoRow.querySelector('.cbi-value-title');
-					if (repoTitle) {
-						var repoTitleWalker = document.createTreeWalker(repoTitle, NodeFilter.SHOW_TEXT);
-						var repoTitleTextNode;
-						while ((repoTitleTextNode = repoTitleWalker.nextNode())) {
-							var repoTitleTextIndex = repoTitleTextNode.nodeValue.indexOf('GitHub 仓库地址');
-							if (repoTitleTextIndex < 0)
-								continue;
-							var repoTitleRange = document.createRange();
-							repoTitleRange.setStart(repoTitleTextNode, repoTitleTextIndex);
-							repoTitleRange.setEnd(repoTitleTextNode, repoTitleTextIndex + 1);
-							var repoTitleTextLeft = repoTitleRange.getBoundingClientRect().left;
-							var repoCellLeft = repoRow.getBoundingClientRect().left;
-							repoDescription.style.setProperty('--myupdate-repo-title-offset',
-								Math.max(0, repoTitleTextLeft - repoCellLeft) + 'px');
-							break;
-						}
-					}
-				}
 				visibilityRow.style.gridColumn = '2';
 				visibilityRow.style.gridRow = '1';
 				tokenRow.style.gridColumn = '3';
 				tokenRow.style.gridRow = '1';
-				if (tokenDescription) {
-					tokenDescription.style.gridColumn = '2 / 4';
-					tokenDescription.style.gridRow = '2';
-					// Align the private-repository hint with the first title character,
-					// not with a leading LuCI help/tooltip icon in the title cell.
-					var visibilityTitle = visibilityRow.querySelector('.cbi-value-title');
-					if (visibilityTitle) {
-						var titleWalker = document.createTreeWalker(visibilityTitle, NodeFilter.SHOW_TEXT);
-						var titleTextNode;
-						while ((titleTextNode = titleWalker.nextNode())) {
-							var titleTextIndex = titleTextNode.nodeValue.indexOf('仓库可见性');
-							if (titleTextIndex < 0)
-								continue;
-							var titleRange = document.createRange();
-							titleRange.setStart(titleTextNode, titleTextIndex);
-							titleRange.setEnd(titleTextNode, titleTextIndex + 1);
-							var titleTextLeft = titleRange.getBoundingClientRect().left;
-							var visibilityCellLeft = visibilityRow.getBoundingClientRect().left;
-							tokenDescription.style.setProperty('--myupdate-visibility-title-offset',
-								Math.max(0, titleTextLeft - visibilityCellLeft) + 'px');
-							break;
-						}
-					}
-				}
 			}
 
 			var visibilitySelect = mapNode.querySelector('.myupdate-field-visibility select');
@@ -637,9 +582,6 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){display:block!important;border-bottom:0!important;box-shadow:none!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-title{display:block!important;float:none!important;width:auto!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-field{display:block!important;float:none!important;width:100%!important}
-				.myupdate-repo-grid>.myupdate-repo-description,.myupdate-repo-grid>.myupdate-token-description{align-self:start;justify-self:start;margin:0!important;padding:0!important;white-space:nowrap;font-size:.76em;line-height:1.35;color:var(--gray-color-medium,#748094)}
-				.myupdate-repo-grid>.myupdate-repo-description{grid-column:1;grid-row:2;margin-left:var(--myupdate-repo-title-offset,0)!important}
-				.myupdate-repo-grid>.myupdate-token-description{grid-column:2/4;grid-row:2;margin-left:var(--myupdate-visibility-title-offset,0)!important}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
@@ -651,8 +593,7 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-field{width:471px!important;min-width:471px!important;max-width:471px!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token{width:471px!important;min-width:471px!important;max-width:471px!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token input{width:471px!important;min-width:471px!important;max-width:471px!important}
-				.myupdate-token-description{display:block;margin:0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:nowrap;text-align:left}
-				.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
+								.myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
