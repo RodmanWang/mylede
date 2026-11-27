@@ -504,7 +504,17 @@ return view.extend({
 				});
 				if (tokenDescription) {
 					tokenDescription.classList.add('myupdate-token-description');
-					visibilityRow.appendChild(tokenDescription);
+					repoGrid.appendChild(tokenDescription);
+				}
+				repoRow.style.gridColumn = '1';
+				repoRow.style.gridRow = '1 / 3';
+				visibilityRow.style.gridColumn = '2';
+				visibilityRow.style.gridRow = '1';
+				tokenRow.style.gridColumn = '3';
+				tokenRow.style.gridRow = '1';
+				if (tokenDescription) {
+					tokenDescription.style.gridColumn = '2 / 4';
+					tokenDescription.style.gridRow = '2';
 				}
 			}
 
@@ -548,7 +558,7 @@ return view.extend({
 				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}
 				.myupdate-actions-final{display:flex;justify-content:flex-end}
 				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:38px;padding:6px 13px;border:0;border-radius:7px;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.12)}.myupdate-actions-primary>.cbi-button-action{background:#1673e6!important;color:#fff!important}.myupdate-actions-primary>.cbi-button-positive{background:#16a34a!important;color:#fff!important}.myupdate-actions-primary>.myupdate-upgrade-button{background:#ef5548!important;color:#fff!important}
-				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:0;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0!important;border:0!important}.myupdate-downgrade-row{display:grid!important;grid-template-columns:18px auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-items:center;width:100%;margin:8px 0 0!important;padding:0!important;border:0!important}.myupdate-downgrade-row .cbi-value-title{grid-column:2;grid-row:1;margin:0!important;padding:0!important;align-self:center;line-height:1.3}.myupdate-downgrade-row .cbi-value-field{display:contents!important}.myupdate-downgrade-row .cbi-value-field input[type=checkbox]{grid-column:1;grid-row:1;justify-self:center;align-self:center;margin:0!important}.myupdate-downgrade-row .cbi-value-description{grid-column:2;grid-row:2;margin:0!important;padding:0!important;line-height:1.3}
+				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:0;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0!important;border:0!important}.myupdate-downgrade-row{display:grid!important;grid-template-columns:18px minmax(0,1fr);grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-items:center;width:100%;margin:8px 0 0!important;padding:0!important;border:0!important}.myupdate-downgrade-row .cbi-value-title{grid-column:2;grid-row:1;margin:0!important;padding:0!important;align-self:center;line-height:1.3}.myupdate-downgrade-row .cbi-value-field{display:contents!important}.myupdate-downgrade-row .cbi-value-field input[type=checkbox]{grid-column:1;grid-row:1;justify-self:center;align-self:center;margin:0!important}.myupdate-downgrade-row .cbi-value-description{grid-column:2;grid-row:2;margin:0!important;padding:0!important;line-height:1.3}
 				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0 0 2px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.2;white-space:nowrap;text-align:left}
 				.myupdate-action-controls>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
 				.myupdate-action-controls>.myupdate-inline-control .cbi-value-description{display:none}.myupdate-action-controls>.myupdate-inline-control .cbi-value-field select,.myupdate-action-controls>.myupdate-inline-control .cbi-value-field input{height:36px;min-height:36px;border:1px solid var(--border-color-medium,#cbd5e1);border-radius:7px;padding:5px 9px;background:var(--background-color-high,#fff);box-shadow:inset 0 1px 2px rgba(15,23,42,.04)}
@@ -577,13 +587,16 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.86em;line-height:1.4}
 				.myupdate-repo-grid{display:grid;grid-template-columns:515px 110px 471px;gap:14px;width:1124px;min-width:1124px;max-width:none;justify-content:start;align-items:start}
 				.myupdate-repo-grid>.cbi-value{display:block;width:auto;min-width:0;margin:0;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
-				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){display:grid!important;grid-template-columns:minmax(0,1fr) 100px;grid-template-rows:auto auto;column-gap:8px;align-content:start;border-bottom:0!important;box-shadow:none!important}.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-title{grid-column:1;grid-row:1;align-self:center}.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-field{grid-column:2;grid-row:1;align-self:center}.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .myupdate-token-description{grid-column:1/-1;grid-row:2;justify-self:start}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){display:block!important;border-bottom:0!important;box-shadow:none!important}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-title{display:block!important;float:none!important;width:auto!important}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-field{display:block!important;float:none!important;width:100%!important}
+				.myupdate-repo-grid>.myupdate-token-description{grid-column:2/4;grid-row:2;align-self:start;justify-self:start;margin:0!important;padding:0!important;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-field-token{display:block;width:100%;max-width:none}
 				.myupdate-repo-grid>.cbi-value .myupdate-repo-input input,.myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
-				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){display:block!important;width:471px!important;min-width:471px!important;max-width:471px!important;box-sizing:border-box}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token){display:block!important;grid-column:3!important;grid-row:1!important;width:471px!important;min-width:471px!important;max-width:471px!important;flex:0 0 471px!important;box-sizing:border-box}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block!important;float:none!important;width:auto!important}
 				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .cbi-value-field,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token,.myupdate-repo-grid>.cbi-value:has(.myupdate-field-token) .myupdate-field-token input{display:block!important;float:none!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important}
 				.myupdate-token-description{display:block;margin:4px 0 0!important;padding:0!important;color:var(--gray-color-medium,#748094);font-size:.76em;line-height:1.35;white-space:nowrap;text-align:left}
