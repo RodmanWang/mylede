@@ -571,7 +571,7 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.86em;line-height:1.4}
 				.myupdate-repo-grid{display:grid;grid-template-columns:515px 110px 471px;gap:14px;width:1124px;min-width:1124px;max-width:none;justify-content:start;align-items:start}
 				.myupdate-repo-grid>.cbi-value{display:block;width:auto;min-width:0;margin:0;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
-				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){border-bottom:0!important;box-shadow:none!important}
+				.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility){display:grid!important;grid-template-columns:minmax(0,1fr) 100px;grid-template-rows:auto auto;column-gap:8px;align-content:start;border-bottom:0!important;box-shadow:none!important}.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-title{grid-column:1;grid-row:1;align-self:center}.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .cbi-value-field{grid-column:2;grid-row:1;align-self:center}.myupdate-repo-grid>.cbi-value:has(.myupdate-field-visibility) .myupdate-token-description{grid-column:1/-1;grid-row:2;justify-self:start}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
