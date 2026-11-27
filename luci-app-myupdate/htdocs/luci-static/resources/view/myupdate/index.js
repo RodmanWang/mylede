@@ -478,10 +478,18 @@ return view.extend({
 			var modeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-mode)');
 			var timeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-time)');
 			if (primaryActions && actionControls) {
-				[ modeRow, timeRow, downgradeRow ].forEach(function(row) {
+				var downgradeControls = E('div', { 'class': 'myupdate-downgrade-controls' });
+				var scheduleControls = E('div', { 'class': 'myupdate-schedule-controls' });
+				actionControls.appendChild(downgradeControls);
+				actionControls.appendChild(scheduleControls);
+				if (downgradeRow && formContainer.contains(downgradeRow)) {
+					downgradeRow.classList.add('myupdate-downgrade-row');
+					downgradeControls.appendChild(downgradeRow);
+				}
+				[ modeRow, timeRow ].forEach(function(row) {
 					if (!row || !formContainer.contains(row)) return;
 					row.classList.add('myupdate-inline-control');
-					actionControls.appendChild(row);
+					scheduleControls.appendChild(row);
 				});
 			}
 
@@ -532,12 +540,20 @@ return view.extend({
 				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}
 				.myupdate-actions-final{display:flex;justify-content:flex-end}
 				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:38px;padding:6px 13px;border:0;border-radius:7px;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.12)}.myupdate-actions-primary>.cbi-button-action{background:#1673e6!important;color:#fff!important}.myupdate-actions-primary>.cbi-button-positive{background:#16a34a!important;color:#fff!important}.myupdate-actions-primary>.myupdate-upgrade-button{background:#ef5548!important;color:#fff!important}
-				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:3px;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
-				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0 0 5px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.25;white-space:nowrap;text-align:left}
-				.myupdate-action-controls>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
-				.myupdate-action-controls>.myupdate-inline-control .cbi-value-description{display:none}.myupdate-action-controls>.myupdate-inline-control .cbi-value-field select,.myupdate-action-controls>.myupdate-inline-control .cbi-value-field input{height:36px;min-height:36px;border:1px solid var(--border-color-medium,#cbd5e1);border-radius:7px;padding:5px 9px;background:var(--background-color-high,#fff);box-shadow:inset 0 1px 2px rgba(15,23,42,.04)}
-				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){display:flex!important;flex-direction:row;align-items:center;gap:8px;padding:0 2px 3px!important}
-				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-title{display:none!important}.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-description{display:none}
+				.myupdate-action-controls{display:flex;flex:1 1 100%;flex-direction:column;align-items:stretch;min-width:0;gap:8px;margin-left:8px}
+				.myupdate-downgrade-controls{display:block;width:100%;padding:2px 0 5px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-downgrade-row{display:flex!important;align-items:center;gap:10px;width:100%;margin:0!important;padding:0!important;border:0!important}
+				.myupdate-downgrade-row .cbi-value-title{display:block!important;float:none!important;flex:0 0 auto;width:auto!important;margin:0!important;padding:0!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.3;white-space:nowrap}
+				.myupdate-downgrade-row .cbi-value-field{display:flex!important;flex:1 1 auto;align-items:center;flex-wrap:wrap;gap:8px;width:auto!important;min-width:0;margin:0!important;padding:0!important}
+				.myupdate-downgrade-row .myupdate-field-downgrade{display:inline-flex;align-items:center;margin:0}
+				.myupdate-downgrade-row .myupdate-field-downgrade input{margin:0;width:17px;height:17px}
+				.myupdate-downgrade-row .cbi-value-description{display:block;flex:1 1 260px;min-width:200px;margin:0!important;padding:0!important;color:var(--gray-color-medium,#778397);font-size:.8em;line-height:1.35}
+				.myupdate-schedule-controls{display:flex;align-items:flex-start;flex-wrap:wrap;gap:18px;width:100%}
+				.myupdate-schedule-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;gap:4px;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
+				.myupdate-schedule-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0 0 3px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.25;white-space:nowrap;text-align:left}
+				.myupdate-schedule-controls>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
+				.myupdate-schedule-controls>.myupdate-inline-control .cbi-value-description{display:none}
+				.myupdate-schedule-controls>.myupdate-inline-control .cbi-value-field select,.myupdate-schedule-controls>.myupdate-inline-control .cbi-value-field input{height:36px;min-height:36px;border:1px solid var(--border-color-medium,#cbd5e1);border-radius:7px;padding:5px 9px;background:var(--background-color-high,#fff);box-shadow:inset 0 1px 2px rgba(15,23,42,.04)}
 				.myupdate-field-mode select{width:112px;max-width:112px}
 				.myupdate-field-time input{width:100px;max-width:100px}
 				.myupdate-field-downgrade input{margin:0}
