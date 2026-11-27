@@ -97,7 +97,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-repo-input{display:block;width:100%;max-width:none}", source)
         self.assertIn(".myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none", source)
         self.assertIn(".myupdate-repo-grid>.cbi-value .cbi-value-title{display:block", source)
-        self.assertIn(" .myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;width:100%", source)
+        self.assertIn(".myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;width:100%", source)
         self.assertNotIn("s.option(form.Value, 'check_interval'", source)
         self.assertIn(".myupdate-path-editor{grid-template-columns:minmax(0,1fr);gap:14px}", source)
         self.assertIn(".myupdate-repo-input{display:block;width:100%;max-width:none}", source)
