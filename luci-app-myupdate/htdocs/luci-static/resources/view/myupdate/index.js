@@ -669,6 +669,34 @@ return view.extend({
 					.myupdate-key-input-row{flex-direction:column;align-items:stretch}
 					.myupdate-key-convert .btn{width:100%}
 				}
+
+				/* Visual polish only: preserve the established LuCI layout and control geometry. */
+				.myupdate-page .cbi-section{border-color:var(--border-color-medium,#d8dee7);box-shadow:0 5px 18px rgba(15,23,42,.045)}
+				.myupdate-settings-heading{border-bottom-color:var(--border-color-medium,#dce2e9)}
+				.myupdate-settings-heading h3{letter-spacing:-.012em}
+				.myupdate-settings-heading p,.myupdate-page .cbi-value-description{color:var(--gray-color-medium,#748094)}
+				.myupdate-hero{border-color:var(--border-color-medium,#d7dee7);box-shadow:0 7px 22px rgba(15,23,42,.045)}
+				.myupdate-hero-mark{background:linear-gradient(145deg,var(--primary-color,#2563eb),#0f5fc4);box-shadow:0 6px 16px rgba(37,99,235,.2)}
+				.myupdate-status-panel{box-shadow:0 5px 18px rgba(15,23,42,.045)}
+				.myupdate-status-message{box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+				.myupdate-inline-notice{box-shadow:0 2px 8px rgba(15,23,42,.035)}
+				.myupdate-page input:not([type=checkbox]),.myupdate-page select,.myupdate-page textarea{border-color:var(--border-color-medium,#cbd5e1);background-color:var(--background-color-high,#fff);transition:border-color .16s ease,box-shadow .16s ease,background-color .16s ease}
+				.myupdate-page input:not([type=checkbox]):hover,.myupdate-page select:hover,.myupdate-page textarea:hover{border-color:var(--gray-color-high,#94a3b8)}
+				.myupdate-page input:not([type=checkbox]):focus,.myupdate-page select:focus,.myupdate-page textarea:focus{border-color:var(--primary-color,#2563eb);box-shadow:0 0 0 3px rgba(37,99,235,.11)}
+				.myupdate-page input[type=checkbox]{accent-color:var(--primary-color,#2563eb)}
+				.myupdate-actions-primary>.btn,.myupdate-browser-toggle,.myupdate-path-manual-add,.myupdate-browser-add,.myupdate-key-convert .btn{transition:filter .15s ease,box-shadow .15s ease,transform .15s ease}
+				.myupdate-actions-primary>.btn:hover,.myupdate-browser-toggle:hover,.myupdate-path-manual-add:hover,.myupdate-browser-add:hover,.myupdate-key-convert .btn:hover{filter:brightness(1.045);box-shadow:0 4px 10px rgba(15,23,42,.14)}
+				.myupdate-actions-primary>.btn:active,.myupdate-browser-toggle:active,.myupdate-path-manual-add:active,.myupdate-browser-add:active,.myupdate-key-convert .btn:active{transform:translateY(1px)}
+				.myupdate-actions-primary>.btn:focus-visible,.myupdate-page button:focus-visible{outline:2px solid var(--primary-color,#2563eb);outline-offset:2px}
+				.myupdate-file-browser{box-shadow:inset 0 1px 2px rgba(15,23,42,.025)}
+				.myupdate-browser-entry{transition:background-color .14s ease}
+				.myupdate-browser-entry:hover{background:rgba(100,116,139,.055)}
+				.myupdate-browser-directory:hover{text-decoration:underline}
+				.myupdate-path-chip{box-shadow:0 1px 2px rgba(15,23,42,.035)}
+				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{box-shadow:0 1px 4px rgba(220,38,38,.12)}
+				.myupdate-progress{box-shadow:inset 0 1px 2px rgba(15,23,42,.025)}
+				@media(prefers-reduced-motion:reduce){.myupdate-page *{transition:none!important;scroll-behavior:auto!important}}
+
 			`);
 
 			return E('div', { 'class': 'cbi-map myupdate-page' }, [
