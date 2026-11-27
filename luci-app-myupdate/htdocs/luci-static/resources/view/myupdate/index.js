@@ -575,7 +575,7 @@ return view.extend({
 				.myupdate-settings-heading{padding:0 0 6px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.86em;line-height:1.4}
-				.myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,24fr) minmax(110px,10fr) minmax(0,66fr);gap:14px;width:100%;align-items:start}
+				.myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,18fr) minmax(110px,10fr) minmax(0,72fr);gap:14px;width:100%;align-items:start}
 				.myupdate-repo-grid>.cbi-value{display:block;width:auto;min-width:0;margin:0;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
