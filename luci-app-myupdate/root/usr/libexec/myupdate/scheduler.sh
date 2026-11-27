@@ -96,9 +96,8 @@ run_auto_upgrade() {
 while :; do
 	process_manual_request
 	MODE="$(uci -q get myupdate.main.upgrade_mode || echo manual)"
-	INTERVAL="$(uci -q get myupdate.main.check_interval || echo 86400)"
-	case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=86400;; esac
-	[ "$INTERVAL" -ge 900 ] 2>/dev/null && [ "$INTERVAL" -le 604800 ] 2>/dev/null || INTERVAL=86400
+	# The recurring check cadence is fixed at one day; only the daily run time is configurable.
+	INTERVAL=86400
 
 	case "$MODE" in
 		notify)
