@@ -477,11 +477,17 @@ return view.extend({
 			var modeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-mode)');
 			var timeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-time)');
 			if (primaryActions && actionControls) {
-				[ modeRow, timeRow, downgradeRow ].forEach(function(row) {
+				[ modeRow, timeRow ].forEach(function(row) {
 					if (!row || !formContainer.contains(row)) return;
 					row.classList.add('myupdate-inline-control');
 					actionControls.appendChild(row);
 				});
+			}
+			if (downgradeRow && formContainer.contains(downgradeRow)) {
+				downgradeRow.classList.add('myupdate-downgrade-row');
+				var actions = statusPanel.querySelector('.myupdate-actions');
+				if (actions)
+					statusPanel.insertBefore(downgradeRow, actions);
 			}
 
 			var repoRow = mapNode.querySelector('.cbi-value:has(.myupdate-repo-input)');
@@ -542,8 +548,8 @@ return view.extend({
 				.myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}
 				.myupdate-actions-final{display:flex;justify-content:flex-end}
 				.myupdate-actions-primary>.btn{flex:0 0 auto;min-width:104px;min-height:38px;padding:6px 13px;border:0;border-radius:7px;font-weight:700;box-shadow:0 2px 5px rgba(15,23,42,.12)}.myupdate-actions-primary>.cbi-button-action{background:#1673e6!important;color:#fff!important}.myupdate-actions-primary>.cbi-button-positive{background:#16a34a!important;color:#fff!important}.myupdate-actions-primary>.myupdate-upgrade-button{background:#ef5548!important;color:#fff!important}
-				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:3px;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0 2px!important;border:0!important}
-				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0 0 5px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.25;white-space:nowrap;text-align:left}
+				.myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}.myupdate-action-controls>.myupdate-inline-control{display:flex!important;flex:0 0 auto!important;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:0;width:auto!important;min-width:0;max-width:none;margin:0!important;padding:0!important;border:0!important}.myupdate-downgrade-row{display:grid!important;grid-template-columns:18px auto;grid-template-rows:auto auto;column-gap:8px;row-gap:2px;align-items:center;width:100%;margin:8px 0 0!important;padding:0!important;border:0!important}.myupdate-downgrade-row .cbi-value-title{grid-column:2;grid-row:1;margin:0!important;padding:0!important;align-self:center;line-height:1.3}.myupdate-downgrade-row .cbi-value-field{display:contents!important}.myupdate-downgrade-row .cbi-value-field input[type=checkbox]{grid-column:1;grid-row:1;justify-self:center;align-self:center;margin:0!important}.myupdate-downgrade-row .cbi-value-description{grid-column:2;grid-row:2;margin:0!important;padding:0!important;line-height:1.3}
+				.myupdate-action-controls>.myupdate-inline-control .cbi-value-title{display:block!important;float:none!important;width:auto!important;margin:0!important;padding:0 0 2px!important;color:var(--text-color-high,#344054);font-size:.9em;font-weight:700;line-height:1.2;white-space:nowrap;text-align:left}
 				.myupdate-action-controls>.myupdate-inline-control .cbi-value-field{display:block!important;float:none!important;width:auto!important;min-width:0;margin:0!important;padding:0!important}
 				.myupdate-action-controls>.myupdate-inline-control .cbi-value-description{display:none}.myupdate-action-controls>.myupdate-inline-control .cbi-value-field select,.myupdate-action-controls>.myupdate-inline-control .cbi-value-field input{height:36px;min-height:36px;border:1px solid var(--border-color-medium,#cbd5e1);border-radius:7px;padding:5px 9px;background:var(--background-color-high,#fff);box-shadow:inset 0 1px 2px rgba(15,23,42,.04)}
 				.myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade){display:flex!important;flex-direction:row;align-items:center;gap:8px;padding:0 2px 3px!important}
