@@ -90,7 +90,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("E('div', { 'class': 'myupdate-action-controls' })", source)
         self.assertIn(".myupdate-actions-primary{display:flex;align-items:flex-end;flex-wrap:nowrap;gap:8px}", source)
         self.assertIn(".myupdate-action-controls{display:flex;align-items:flex-end;flex:1 1 auto;min-width:0;gap:14px;margin-left:8px}", source)
-        self.assertIn(".myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,34fr) minmax(110px,14fr) minmax(0,52fr)", source)
+        self.assertIn(".myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(0,0.9fr)", source)
         self.assertIn("repoGrid.appendChild(row)", source)
         self.assertIn("tokenRow.classList.toggle('myupdate-token-visible', isPrivate)", source)
         self.assertIn(".myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}", source)
