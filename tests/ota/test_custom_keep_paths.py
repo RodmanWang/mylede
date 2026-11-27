@@ -98,7 +98,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-downgrade-row .cbi-value-description{display:block", source)
         self.assertIn(".myupdate-schedule-controls>.myupdate-inline-control .cbi-value-title{display:block!important", source)
         self.assertNotIn(".myupdate-action-controls>.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-title{display:none!important}", source)
-        self.assertIn(".myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,24fr) minmax(110px,10fr) minmax(0,66fr)", source)
+        self.assertIn(".myupdate-repo-grid{display:grid;grid-template-columns:minmax(0,18fr) minmax(110px,10fr) minmax(0,72fr)", source)
         self.assertIn("repoGrid.appendChild(row)", source)
         self.assertIn("tokenRow.classList.toggle('myupdate-token-visible', isPrivate)", source)
         self.assertIn(".myupdate-repo-grid>.myupdate-token-hidden{visibility:hidden}", source)
