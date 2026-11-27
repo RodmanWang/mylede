@@ -202,7 +202,7 @@ return view.extend({
 		};
 		keepPaths.description = _('手动输入绝对路径或浏览选择；📁 为目录、📄 为文件，悬停标签查看完整路径。增删后统一点击底部“保存并应用”。');
 		keepPaths.renderWidget = function(section_id) {
-			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('手动输入绝对路径，每行一条'), 'rows': '2' });
+			var input = E('textarea', { 'class': 'myupdate-path-batch-input', 'placeholder': _('输入绝对路径，可每行一条，可用逗号隔离连续输入'), 'rows': '2' });
 			var chipsHeading = E('div', { 'class': 'myupdate-path-chips-heading' }, _('已添加保留项'));
 			var chips = E('div', { 'class': 'myupdate-path-chips' });
 			var message = E('div', { 'class': 'myupdate-path-hint', 'aria-live': 'polite' });
