@@ -99,14 +99,16 @@ return view.extend({
 		var originalRepoRender = repo.renderWidget;
 		repo.renderWidget = function() {
 			var inputWidget = originalRepoRender.apply(this, arguments);
-			return E('div', { 'class': 'myupdate-repo-input' }, [ inputWidget ]);
+			return E('div', { 'class': 'myupdate-field-repo myupdate-repo-input' }, [ inputWidget ]);
 		};
 
 		var visibility = s.option(form.ListValue, 'repo_visibility', _('仓库可见性'));
 		visibility.value('public', _('公开'));
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
-		visibility.description = _('公开仓库无需访问令牌；选择私有后，需要在下方配置 GitHub Token。');
+		visibility.description = _('公开仓库无需 Token；私有仓库请填写下方访问令牌。');
+		var originalVisibilityRender = visibility.renderWidget;
+		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
 		var token = s.option(form.Value, '_github_token', _('GitHub Token'));
 		token.password = true;
@@ -123,30 +125,24 @@ return view.extend({
 					throw new Error(result && result.error ? result.error : _('GitHub Token 保存失败'));
 			});
 		};
+		var originalTokenRender = token.renderWidget;
+		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
 
-		addSettingsHeading('_heading_schedule', _('更新策略'), _('选择检查方式，并设置定时任务的执行频率与时间。'));
 		var mode = s.option(form.ListValue, 'upgrade_mode', _('检查模式'));
-		mode.value('manual', _('手动检查'));
-		mode.value('notify', _('定时检查，有更新时显示状态'));
-		mode.value('auto', _('每天定时检查并自动下载、验证和升级'));
+		mode.value('manual', _('手动'));
+		mode.value('notify', _('定时提醒'));
+		mode.value('auto', _('自动升级'));
 		mode.default = 'manual';
-
-		var interval = s.option(form.Value, 'check_interval', _('检查间隔（秒）'));
-		interval.datatype = 'uinteger';
-		interval.default = '86400';
-		interval.rmempty = false;
-		interval.validate = function(section_id, value) {
-			var n = Number(value);
-			if (!Number.isInteger(n) || n < 900 || n > 604800)
-				return _('检查间隔必须为 900 至 604800 秒。86400 秒为一天。');
-			return true;
-		};
-		interval.description = _('用于定时检查模式；默认 86400 秒（一天）。');
+		mode.description = _('手动不执行定时任务；定时提醒每天检查一次；自动升级每天检查、下载、验证并在设定时间升级。');
+		var originalModeRender = mode.renderWidget;
+		mode.renderWidget = function() { return E('div', { 'class': 'myupdate-field-mode' }, [ originalModeRender.apply(this, arguments) ]); };
 
 		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('每天自动升级时间（路由器本地时间）'));
 		autoTime.default = '03:30';
 		autoTime.datatype = 'time';
-		autoTime.description = _('仅在选择自动升级模式时生效；每天最多自动执行一次。');
+		autoTime.description = _('路由器本地时间；仅自动升级模式生效，每天执行一次。');
+		var originalAutoTimeRender = autoTime.renderWidget;
+		autoTime.renderWidget = function() { return E('div', { 'class': 'myupdate-field-time' }, [ originalAutoTimeRender.apply(this, arguments) ]); };
 
 		addSettingsHeading('_heading_verification', _('固件验证'), _('使用与发布流程匹配的 Minisign 公钥验证固件来源，验证通过后才允许继续升级。'));
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
@@ -410,7 +406,9 @@ return view.extend({
 		var downgrade = s.option(form.Flag, 'allow_downgrade', _('允许降级'));
 		downgrade.default = '0';
 		downgrade.rmempty = false;
-		downgrade.description = _('默认关闭。启用后，执行升级时允许安装低于当前版本的固件；修改仅暂存在当前页面，点击“保存并应用”后生效。');
+		downgrade.description = _('默认关闭；开启后允许安装低于当前版本的固件。点击“保存并应用”后生效。');
+		var originalDowngradeRender = downgrade.renderWidget;
+		downgrade.renderWidget = function() { return E('div', { 'class': 'myupdate-field-downgrade' }, [ originalDowngradeRender.apply(this, arguments) ]); };
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [
@@ -460,22 +458,22 @@ return view.extend({
 						keyInput.dispatchEvent(new Event('change', { bubbles: true }));
 					}
 				});
-				return E('div', { 'class': 'myupdate-key-input-row' }, [
+				return E('div', { 'class': 'myupdate-key-input-row myupdate-field-pubkey' }, [
 					E('div', { 'class': 'myupdate-key-input' }, [ inputWidget ]),
 					E('div', { 'class': 'myupdate-key-convert' }, [ convertKey ])
 				]);
 			};
 		return m.render().then(function(mapNode) {
 			var style = E('style', {}, `
-				.myupdate-page{max-width:1180px;margin:0 auto;padding-bottom:32px}
+				.myupdate-page{max-width:1440px;margin:0 auto;padding-bottom:18px}
 				.myupdate-hero{position:static!important;top:auto!important;z-index:auto!important}
-				.myupdate-hero{display:flex;align-items:center;gap:18px;margin:4px 0 22px;padding:22px 24px;border:1px solid var(--border-color-medium,#d7dee7);border-radius:12px;background:linear-gradient(115deg,var(--background-color-high,#fff),var(--background-color,#f5f7fa));}
+				.myupdate-hero{display:flex;align-items:center;gap:14px;margin:2px 0 10px;padding:12px 16px;border:1px solid var(--border-color-medium,#d7dee7);border-radius:12px;background:linear-gradient(115deg,var(--background-color-high,#fff),var(--background-color,#f5f7fa));}
 				.myupdate-hero-mark{display:flex;align-items:center;justify-content:center;flex:0 0 58px;height:58px;border-radius:14px;background:var(--primary-color,#2563eb);color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;box-shadow:0 5px 16px rgba(37,99,235,.18)}
 				.myupdate-hero-copy{min-width:0}
 				.myupdate-hero-eyebrow,.myupdate-status-kicker{display:block;margin-bottom:4px;color:var(--gray-color-medium,#778397);font-size:10px;font-weight:800;letter-spacing:.14em}
 				.myupdate-hero h2{margin:0;color:var(--text-color-high,#1f2937);font-size:1.65rem;font-weight:750;letter-spacing:-.025em}
 				.myupdate-hero p{margin:5px 0 0;color:var(--gray-color-medium,#697586);line-height:1.55}
-				.myupdate-status-panel{border:1px solid var(--border-color-medium,#d5dce5);border-radius:12px;background:var(--background-color-high,#fff);padding:20px 22px;margin:0 0 28px;box-shadow:0 5px 18px rgba(15,23,42,.045)}
+				.myupdate-status-panel{border:1px solid var(--border-color-medium,#d5dce5);border-radius:10px;background:var(--background-color-high,#fff);padding:12px 16px;margin:0 0 10px;box-shadow:0 5px 18px rgba(15,23,42,.045)}
 				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 				.myupdate-status-title h3{margin:0;font-size:1.18rem;font-weight:750}
 				.myupdate-status-kicker{margin-bottom:3px}
@@ -483,16 +481,16 @@ return view.extend({
 				.myupdate-inline-notice{margin:0 0 14px;padding:10px 13px;border-radius:7px;font-weight:600;line-height:1.55;overflow-wrap:anywhere}
 				.myupdate-inline-notice.notice-info{background:var(--info-bg,#eff6ff);color:var(--info-color,#1d4ed8);border:1px solid rgba(59,130,246,.22)}
 				.myupdate-inline-notice.notice-error{background:var(--error-bg,#fef2f2);color:var(--error-color,#b91c1c);border:1px solid rgba(220,38,38,.22)}
-				.myupdate-status-overview{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(250px,.85fr);gap:18px;align-items:stretch}
-				.myupdate-status-message{display:flex;align-items:center;min-height:72px;padding:15px 17px;border:1px solid var(--border-color-medium,#e0e6ed);border-left:4px solid #94a3b8;border-radius:8px;background:var(--background-color,#f7f9fc);color:var(--text-color-high,#334155);font-weight:650;line-height:1.65;overflow-wrap:anywhere}
+				.myupdate-status-overview{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(220px,.85fr);gap:12px;align-items:stretch}
+				.myupdate-status-message{display:flex;align-items:center;min-height:48px;padding:9px 12px;border:1px solid var(--border-color-medium,#e0e6ed);border-left:4px solid #94a3b8;border-radius:8px;background:var(--background-color,#f7f9fc);color:var(--text-color-high,#334155);font-weight:650;line-height:1.65;overflow-wrap:anywhere}
 				.myupdate-status-message.state-checked,.myupdate-status-message.state-downloaded,.myupdate-status-message.state-current{background:rgba(22,163,74,.07);color:var(--success-color,#166534);border-left-color:#16a34a}
 				.myupdate-status-message.state-downloading,.myupdate-status-message.state-running,.myupdate-status-message.state-verifying{background:rgba(37,99,235,.07);color:var(--info-color,#1d4ed8);border-left-color:#3b82f6}
 				.myupdate-status-message.state-error{background:rgba(220,38,38,.07);color:var(--error-color,#b91c1c);border-left-color:#dc2626}
 				.myupdate-status-message.state-upgrading{background:rgba(234,88,12,.08);color:var(--warning-color,#c2410c);border-left-color:#f97316}
-				.myupdate-status-note{display:flex;align-items:center;margin:0;padding:13px 15px;border:1px solid var(--border-color-low,#e7ebf0);border-radius:8px;background:var(--background-color,#fafbfc);color:var(--gray-color-medium,#687385);font-size:.9em;line-height:1.7}
-				.myupdate-actions{display:flex;flex-direction:column;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border-color-low,#e6eaf0)}
+				.myupdate-status-note{display:flex;align-items:center;margin:0;padding:8px 10px;border:1px solid var(--border-color-low,#e7ebf0);border-radius:8px;background:var(--background-color,#fafbfc);color:var(--gray-color-medium,#687385);font-size:.9em;line-height:1.7}
+				.myupdate-actions{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--border-color-low,#e6eaf0)}
 				.myupdate-actions-primary,.myupdate-actions-final{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
-				.myupdate-actions-primary .btn{min-width:142px}
+				.myupdate-actions-primary .btn{min-width:118px;min-height:32px;padding-top:5px;padding-bottom:5px}
 				.myupdate-actions-final{justify-content:flex-end}
 				.myupdate-downgrade-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-downgrade-toggle{margin:0;padding:6px 9px;border-color:rgba(217,119,6,.28);background:rgba(217,119,6,.045)}
@@ -506,25 +504,40 @@ return view.extend({
 				.myupdate-progress-track{height:9px;border-radius:20px;background:var(--border-color-low,#e5eaf0);overflow:hidden}
 				.myupdate-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#2563eb,#0d9488);border-radius:20px;transition:width .35s ease}
 				.myupdate-progress-label{margin-top:8px;text-align:right;font-size:.85em;color:var(--gray-color-medium,#64748b);font-variant-numeric:tabular-nums}
-				.myupdate-settings-intro{margin:0 0 8px;padding:0 2px}
+				.myupdate-settings-intro{margin:0 0 4px;padding:0 2px}
 				.myupdate-settings-intro h3{margin:0;font-size:1.2rem;font-weight:750}
 				.myupdate-settings-intro p{margin:4px 0 0;color:var(--gray-color-medium,#6b7280);font-size:.92em;line-height:1.6}
-				.myupdate-page .cbi-section{margin-top:10px;padding:12px 20px 18px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:11px;background:var(--background-color-high,#fff);box-shadow:0 3px 12px rgba(15,23,42,.025)}
-				.myupdate-page .cbi-value{padding:13px 0;border-bottom:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-page .cbi-section{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:14px;row-gap:0;margin-top:6px;padding:8px 14px 10px;border:1px solid var(--border-color-medium,#d8dee7);border-radius:11px;background:var(--background-color-high,#fff);box-shadow:0 3px 12px rgba(15,23,42,.025)}
+				.myupdate-page .cbi-value{min-width:0;padding:7px 0;border-bottom:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-page .cbi-value:last-child{border-bottom:0}
 				.myupdate-page .cbi-value-title{padding-top:7px;color:var(--text-color-high,#344054);font-weight:650}
 				.myupdate-page .cbi-value-field{min-width:0}
 				.myupdate-page input:not([type=checkbox]),.myupdate-page select,.myupdate-page textarea{border-radius:6px}
 				.myupdate-page input:focus,.myupdate-page select:focus,.myupdate-page textarea:focus{outline:2px solid rgba(37,99,235,.18);outline-offset:1px}
 				.myupdate-page .cbi-value-description{margin-top:6px;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.55}
-				.myupdate-page .cbi-value:has(.myupdate-settings-heading){padding:18px 0 8px;border-bottom:0}
+				.myupdate-page .cbi-value:has(.myupdate-settings-heading){grid-column:1/-1;padding:7px 0 5px;border-bottom:0;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-repo){grid-column:1/span 6;grid-row:2;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-visibility){grid-column:7/span 2;grid-row:2;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-token){grid-column:9/span 4;grid-row:2;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-mode){grid-column:1/span 4;grid-row:3;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-time){grid-column:5/span 3;grid-row:3;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-column:8/span 5;grid-row:3;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-pubkey){grid-column:1/-1;grid-row:5;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-path-editor){grid-column:1/-1;grid-row:7;display:block}
+				.myupdate-page .cbi-value:has(.myupdate-field-repo) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-visibility) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-field-downgrade) .cbi-value-title{display:block;padding:0 0 4px}
+				.myupdate-page .cbi-value:has(.myupdate-field-pubkey) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-path-editor) .cbi-value-title{display:block;padding:0 0 4px}
 				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-title{display:none}
-				.myupdate-settings-heading{padding:0 0 10px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
+				.myupdate-settings-heading{padding:0 0 6px;border-bottom:1px solid var(--border-color-medium,#dce2e9)}
 				.myupdate-settings-heading h3{margin:0;color:var(--text-color-high,#253246);font-size:1.02rem;font-weight:750}
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
+				.myupdate-repo-input{width:100%;max-width:none}
+				.myupdate-field-visibility select{width:100%;max-width:112px}
+				.myupdate-field-mode select{width:100%;max-width:170px}
+				.myupdate-field-time input{width:100%;max-width:150px}
+				.myupdate-field-downgrade .cbi-value-description{margin-top:3px}
+				.myupdate-field-downgrade input{margin-right:7px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
@@ -557,6 +570,16 @@ return view.extend({
 				.myupdate-path-chip-remove{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;flex:0 0 18px;width:18px;height:18px;min-width:18px;min-height:18px;max-height:18px;box-sizing:border-box;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--gray-color-high,#555);font-size:1.05em;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;transition:background-color .15s ease,color .15s ease}
 				.myupdate-path-chip-remove:hover,.myupdate-path-chip-remove:focus-visible{background:rgba(220,38,38,.12);color:#dc2626;outline:2px solid rgba(220,38,38,.18);outline-offset:1px}
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
+				@media(max-width:900px){
+					.myupdate-page .cbi-section{grid-template-columns:repeat(2,minmax(0,1fr))}
+					.myupdate-page .cbi-value:has(.myupdate-settings-heading),.myupdate-page .cbi-value:has(.myupdate-field-pubkey),.myupdate-page .cbi-value:has(.myupdate-path-editor){grid-column:1/-1;grid-row:auto}
+					.myupdate-page .cbi-value:has(.myupdate-field-repo){grid-column:1/-1;grid-row:auto}
+					.myupdate-page .cbi-value:has(.myupdate-field-visibility){grid-column:1;grid-row:auto}
+					.myupdate-page .cbi-value:has(.myupdate-field-token){grid-column:2;grid-row:auto}
+					.myupdate-page .cbi-value:has(.myupdate-field-mode){grid-column:1;grid-row:auto}
+					.myupdate-page .cbi-value:has(.myupdate-field-time){grid-column:2;grid-row:auto}
+					.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-column:1/-1;grid-row:auto}
+				}
 				@media(max-width:767px){
 					.myupdate-page{padding-bottom:20px}
 					.myupdate-hero{align-items:flex-start;gap:12px;padding:16px}
@@ -569,8 +592,9 @@ return view.extend({
 					.myupdate-actions-primary .btn{min-width:0;width:100%;white-space:normal}
 					.myupdate-actions-primary .btn{min-width:0;padding-left:7px;padding-right:7px}
 					.myupdate-downgrade-row{align-items:flex-start;flex-direction:column;gap:5px}
-					.myupdate-page .cbi-section{padding:8px 12px 12px}
-					.myupdate-page .cbi-value{display:block;padding:11px 0}
+					.myupdate-page .cbi-section{padding:8px 12px 12px;grid-template-columns:1fr}
+					.myupdate-page .cbi-value:has(.myupdate-field-visibility),.myupdate-page .cbi-value:has(.myupdate-field-token),.myupdate-page .cbi-value:has(.myupdate-field-mode),.myupdate-page .cbi-value:has(.myupdate-field-time),.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-column:1/-1;grid-row:auto}
+					.myupdate-page .cbi-value{display:block;padding:7px 0}
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
 					.myupdate-key-input-row,.myupdate-path-entry-row{flex-direction:row}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
@@ -602,7 +626,7 @@ return view.extend({
 				statusPanel,
 				E('div', { 'class': 'myupdate-settings-intro' }, [
 					E('h3', _('升级设置')),
-					E('p', _('配置更新来源、检查策略和验证密钥后，请使用页面底部的“保存并应用”统一提交；添加或删除自定义保留路径、切换“允许降级”均只暂存，不会立即写入配置。'))
+					E('p', _('仓库、更新方式、每日升级时间和验证密钥均可在此设置；保留项和允许降级仅暂存，点击底部“保存并应用”后生效。'))
 				]),
 				mapNode
 			]);
