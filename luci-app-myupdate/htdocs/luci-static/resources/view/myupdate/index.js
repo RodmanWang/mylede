@@ -106,6 +106,8 @@ return view.extend({
 		visibility.value('private', _('私有'));
 		visibility.default = 'public';
 		visibility.description = _('公开仓库无需 Token；私有仓库请填写下方访问令牌。');
+		var originalVisibilityRender = visibility.renderWidget;
+		visibility.renderWidget = function() { return E('div', { 'class': 'myupdate-field-visibility' }, [ originalVisibilityRender.apply(this, arguments) ]); };
 
 		var token = s.option(form.Value, '_github_token', _('GitHub Token'));
 		token.password = true;
@@ -115,6 +117,8 @@ return view.extend({
 		token.placeholder = cfg.token_configured ? _('已配置；留空则保持当前 Token') : _('私有仓库必填');
 		token.description = _('建议使用 Fine-grained PAT，仅授予目标仓库 Contents: Read-only。Token 单独以仅 root 可读的权限保存，不写入 UCI 配置；留空保持已有 Token。格式和访问权限在检查私有仓库时验证，不影响保存其他设置。');
 		token.cfgvalue = function() { return ''; };
+		var originalTokenRender = token.renderWidget;
+		token.renderWidget = function() { return E('div', { 'class': 'myupdate-field-token' }, [ originalTokenRender.apply(this, arguments) ]); };
 		token.write = function(section_id, value) {
 			if (!value) return Promise.resolve();
 			return callToken(value).then(function(result) {
@@ -129,11 +133,15 @@ return view.extend({
 		mode.value('auto', _('自动升级'));
 		mode.default = 'manual';
 		mode.description = _('手动不执行定时任务；定时提醒每天检查一次；自动升级每天检查、下载、验证并在设定时间升级。');
+		var originalModeRender = mode.renderWidget;
+		mode.renderWidget = function() { return E('div', { 'class': 'myupdate-field-mode' }, [ originalModeRender.apply(this, arguments) ]); };
 
 		var autoTime = s.option(form.Value, 'auto_upgrade_time', _('升级时间'));
 		autoTime.default = '03:30';
 		autoTime.datatype = 'time';
 		autoTime.description = _('路由器本地时间；仅自动升级模式生效，每天执行一次。');
+		var originalAutoTimeRender = autoTime.renderWidget;
+		autoTime.renderWidget = function() { return E('div', { 'class': 'myupdate-field-time' }, [ originalAutoTimeRender.apply(this, arguments) ]); };
 
 		var pubkey = s.option(form.TextValue, 'minisign_public_key', _('Minisign 公钥'));
 		pubkey.rows = 2;
@@ -399,11 +407,7 @@ return view.extend({
 		downgrade.description = _('默认关闭；开启后允许安装低于当前版本的固件。点击“保存并应用”后生效。');
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
-			E('div', { 'class': 'myupdate-status-heading' }, [
-				E('div', { 'class': 'myupdate-status-title' }, [
-					E('h3', _('更新状态'))
-				]),
-			]),
+			E('div', { 'class': 'myupdate-status-heading' }, [ statusText ]),
 			noticeNode,
 			E('div', { 'class': 'myupdate-status-overview' }, [
 				E('p', { 'class': 'myupdate-status-note' }, _('固件下载后验证 Minisign 签名、设备兼容和 SHA256。验证通过可升级，并按配置恢复，仅接受本项目生成的镜像。'))
@@ -527,6 +531,14 @@ return view.extend({
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
 				.myupdate-repo-input{width:100%;max-width:220px}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:16%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:49%;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-time){display:inline-block;vertical-align:top;width:30%;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-description{display:none}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row){padding-top:2px}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{padding-top:0}
 				.myupdate-field-visibility select{width:100%;max-width:72px}
 				.myupdate-field-mode select{width:100%;max-width:58px}
 				.myupdate-field-time input{width:100%;max-width:58px}
