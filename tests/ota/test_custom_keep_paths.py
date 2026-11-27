@@ -75,6 +75,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block", source)
         self.assertIn("actionSettings.appendChild(downgradeRow)", source)
+        self.assertIn("'class': 'myupdate-field-downgrade'", source)
         self.assertIn("actionSettings.appendChild(modeRow)", source)
         self.assertIn("actionSettings.appendChild(timeRow)", source)
         self.assertIn(".myupdate-repo-input{width:100%;max-width:293px}", source)
