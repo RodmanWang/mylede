@@ -553,9 +553,9 @@ return view.extend({
 				.myupdate-repo-grid>.cbi-value .cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left;white-space:nowrap}
 				.myupdate-repo-grid>.cbi-value .cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}
 				.myupdate-repo-grid>.cbi-value .cbi-value-description{margin-top:4px;font-size:.76em;line-height:1.25;white-space:nowrap}
-				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-field-token{display:block;width:100%;max-width:none}
-				.myupdate-repo-grid>.cbi-value .myupdate-repo-input input,.myupdate-repo-grid>.cbi-value .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}
-				.myupdate-token-row{display:block;width:100%;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}\n\t\t\t\t.myupdate-token-row>.cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left}\n\t\t\t\t.myupdate-token-row>.cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}\n\t\t\t\t.myupdate-token-row .myupdate-field-token,.myupdate-token-row .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}\n\t\t\t\t.myupdate-token-row.myupdate-token-hidden{display:none}
+				.myupdate-repo-grid>.cbi-value .myupdate-repo-input,.myupdate-repo-grid>.cbi-value .myupdate-repo-input input{display:block;width:100%;max-width:none;box-sizing:border-box}
+				.myupdate-token-row{display:block;width:100%;margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-token-row>.cbi-value-title{display:block;float:none;width:auto;margin:0;padding:0 0 5px;text-align:left}\n\t\t\t\t.myupdate-token-row>.cbi-value-field{display:block;float:none;width:100%;min-width:0;margin:0;padding:0}\n\t\t\t\t.myupdate-token-row .myupdate-field-token,.myupdate-token-row .myupdate-field-token input{display:block;width:100%;max-width:none;box-sizing:border-box}\n\t\t\t\t.myupdate-token-row.myupdate-token-hidden{display:none}
 				.myupdate-field-visibility select{width:100%;max-width:100px}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px);max-width:680px}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
@@ -599,15 +599,16 @@ return view.extend({
 				.myupdate-path-chip-remove:disabled{cursor:wait;opacity:.55}
 				@media(max-width:1000px){
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr) 120px}
-					.myupdate-repo-grid>.myupdate-token-hidden{display:none}
 				}
 				@media(max-width:767px){
+					.myupdate-page .cbi-value:has(.myupdate-field-mode),.myupdate-page .cbi-value:has(.myupdate-field-time),.myupdate-page .cbi-value:has(.myupdate-field-downgrade){grid-template-columns:minmax(0,1fr);row-gap:3px}
+					.myupdate-page .cbi-value:has(.myupdate-field-mode)>.cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time)>.cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-downgrade)>.cbi-value-description{grid-column:1}
 					.myupdate-page{padding-bottom:20px}
 					.myupdate-hero{align-items:flex-start;gap:12px;padding:14px}
 					.myupdate-hero-mark{flex-basis:46px;height:46px;border-radius:11px;font-size:14px}
 					.myupdate-hero h2{font-size:1.35rem}
 					.myupdate-status-panel{padding:12px}
-					.myupdate-actions-primary{align-items:flex-end;flex-wrap:wrap}.myupdate-action-controls{flex:1 1 100%;margin:8px 0 0}
+					.myupdate-actions-primary{align-items:flex-end;flex-wrap:wrap}
 					.myupdate-actions-primary>.btn{min-width:0}
 					.myupdate-repo-grid{grid-template-columns:minmax(0,1fr)}
 					.myupdate-path-editor{grid-template-columns:minmax(0,1fr);gap:14px}
@@ -616,7 +617,7 @@ return view.extend({
 				}
 				@media(max-width:420px){
 					.myupdate-hero-mark{display:none}
-					.myupdate-actions-primary{align-items:stretch;flex-wrap:wrap}.myupdate-action-controls{flex:1 1 100%;flex-wrap:wrap;margin:8px 0 0}
+					.myupdate-actions-primary{align-items:stretch;flex-wrap:wrap}
 					.myupdate-actions-primary>.btn{flex:1 1 100%}
 					.myupdate-path-entry-row{align-items:center}
 					.myupdate-path-batch-input{min-width:0}
