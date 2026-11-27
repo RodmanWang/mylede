@@ -421,7 +421,6 @@ return view.extend({
 						if (!confirm(_('确定升级吗？设备将执行保留系统配置的升级并自动重启。建议提前备份重要配置，并确保有本地或带外访问方式。'))) return;
 						return reportTaskStart(callUpgrade(), _('升级任务启动失败，请先下载并验证固件'), notify);
 					} }, _('执行升级')),
-					downgrade.render('main')
 				]),
 			])
 		]);
@@ -450,6 +449,9 @@ return view.extend({
 				]);
 			};
 		return m.render().then(function(mapNode) {
+			var downgradeRow = mapNode.querySelector('.cbi-value:has(input[name="cbid.myupdate.main.allow_downgrade"])');
+			var actionRow = statusPanel.querySelector('.myupdate-actions-primary');
+			if (downgradeRow && actionRow) actionRow.appendChild(downgradeRow);
 			var style = E('style', {}, `
 				.myupdate-page{max-width:1440px;margin:0 auto;padding-bottom:18px}
 				.myupdate-hero{position:static!important;top:auto!important;z-index:auto!important}
@@ -460,7 +462,16 @@ return view.extend({
 				.myupdate-hero h2{margin:0;color:var(--text-color-high,#1f2937);font-size:1.65rem;font-weight:750;letter-spacing:-.025em}
 				.myupdate-hero p{margin:5px 0 0;color:var(--gray-color-medium,#697586);line-height:1.55}
 				.myupdate-status-panel{border:1px solid var(--border-color-medium,#d5dce5);border-radius:10px;background:var(--background-color-high,#fff);padding:12px 16px;margin:0 0 10px;box-shadow:0 5px 18px rgba(15,23,42,.045)}
-				.myupdate-status-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+				.myupdate-status-heading{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+				.myupdate-status-title h3{flex:0 0 auto}
+				.myupdate-status-message{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+				.myupdate-status-overview{display:block}
+				.myupdate-status-note{margin:0 0 8px;padding:5px 8px;line-height:1.35}
+				.myupdate-actions-primary .cbi-value{display:inline-flex;align-items:center;margin:0;padding:0;border:0}
+				.myupdate-actions-primary .cbi-value-title{display:none}
+				.myupdate-actions-primary .cbi-value-field{padding:0}
+				.myupdate-actions-primary .cbi-value-description{display:none}
+				.myupdate-actions-primary .cbi-value label{margin:0}
 				.myupdate-status-title h3{margin:0;font-size:1.18rem;font-weight:750}
 				.myupdate-status-kicker{margin-bottom:3px}
 				.myupdate-status-caption{font-size:.85em;color:var(--gray-color-medium,#778397)}
@@ -506,6 +517,7 @@ return view.extend({
 				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
 				.myupdate-key-input-row{display:flex;align-items:center;gap:10px;width:min(100%,620px)}
+				.myupdate-key-input textarea{min-height:2.5em!important;height:2.5em!important}
 				.myupdate-key-input{flex:0 1 560px;max-width:560px;min-width:0}
 				.myupdate-key-input textarea{width:100%;min-height:3.6em!important;height:3.6em!important;max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-all;resize:vertical}
 				.myupdate-key-convert{display:flex;align-items:center;align-self:center;flex:0 0 auto}
@@ -514,10 +526,10 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-repo-input{width:100%;max-width:none}
-				.myupdate-field-visibility select{width:100%;max-width:112px}
-				.myupdate-field-mode select{width:100%;max-width:170px}
-				.myupdate-field-time input{width:100%;max-width:150px}
+				.myupdate-repo-input{width:100%;max-width:220px}
+				.myupdate-field-visibility select{width:100%;max-width:72px}
+				.myupdate-field-mode select{width:100%;max-width:58px}
+				.myupdate-field-time input{width:100%;max-width:58px}
 				.myupdate-field-downgrade .cbi-value-description{margin-top:3px}
 				.myupdate-field-downgrade input{margin-right:7px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
