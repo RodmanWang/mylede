@@ -68,7 +68,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("myupdate-field-downgrade", source)
         self.assertNotIn("s.option(form.Value, 'check_interval'", source)
         self.assertIn(".myupdate-path-editor{grid-template-columns:1fr}", source)
-        self.assertIn(".myupdate-repo-input{width:min(100%,680px);max-width:680px}", source)
+        self.assertIn(".myupdate-repo-input{width:100%;max-width:none}", source)
         self.assertIn("repo.renderWidget = function()", source)
         self.assertIn(".myupdate-key-input-row{display:flex;align-items:center", source)
         self.assertIn(".myupdate-key-convert{display:flex;align-items:center;align-self:center", source)
