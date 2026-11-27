@@ -74,7 +74,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("固件下载后验证 Minisign 签名、设备兼容和 SHA256", source)
         self.assertIn("s.option(form.ListValue, 'upgrade_mode', _('升级模式'))", source)
         self.assertIn("s.option(form.Value, 'auto_upgrade_time', _('升级时间'))", source)
-        self.assertIn("输入匹配的 Minisign 公钥验证", source)
+        self.assertIn("粘贴公钥内容；若为 minisign.pub 两行格式", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block", source)
         self.assertIn("downgradeWidget.closest('.cbi-value')", source)
