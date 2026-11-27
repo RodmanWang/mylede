@@ -153,7 +153,8 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("grid-template-columns:minmax(0,1fr) minmax(0,1fr)", source)
         self.assertIn("align-content:flex-start", source)
         self.assertNotIn("width:var(--myupdate-path-chip-width)", source)
-        self.assertNotIn("width:150px", source)
+        self.assertIn("max-width:150px", source)
+        self.assertNotIn(";width:150px", source)
 
 
 if __name__ == "__main__":
