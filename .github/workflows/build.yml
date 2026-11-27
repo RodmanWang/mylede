@@ -39,8 +39,9 @@ on:
         required: false
         default: false
   schedule:
-    - cron: '0 19 * * *'
-
+    - cron: '0 1 * * *'
+    timezone: 'Asia/Shanghai'
+    
 permissions:
   contents: read
   actions: write
