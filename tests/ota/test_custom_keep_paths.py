@@ -89,7 +89,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-field-token input{display:block;width:100%;max-width:680px", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:34%", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:18%", source)
-        self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:50%", source)
+        self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:46%", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block", source)
         self.assertIn(".myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-field{display:block;width:100%", source)
         self.assertIn(".myupdate-downgrade-setting .myupdate-field-downgrade{display:flex;align-items:center", source)
