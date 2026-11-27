@@ -453,7 +453,7 @@ return view.extend({
 				]);
 			};
 		return m.render().then(function(mapNode) {
-			var downgradeRow = mapNode.querySelector('.cbi-value:has(input[name="cbid.myupdate.main.allow_downgrade"])');
+			var downgradeRow = mapNode.querySelector('.cbi-value:has([name*="allow_downgrade"])');
 			var actionRow = statusPanel.querySelector('.myupdate-actions-primary');
 			if (downgradeRow && actionRow) actionRow.appendChild(downgradeRow);
 			var style = E('style', {}, `
@@ -540,8 +540,8 @@ return view.extend({
 				.myupdate-page .cbi-value:has(.myupdate-key-input-row){padding-top:2px}
 				.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{padding-top:0}
 				.myupdate-field-visibility select{width:100%;max-width:72px}
-				.myupdate-field-mode select{width:100%;max-width:58px}
-				.myupdate-field-time input{width:100%;max-width:58px}
+				.myupdate-field-mode select{width:100%;max-width:96px}
+				.myupdate-field-time input{width:100%;max-width:92px}
 				.myupdate-field-downgrade .cbi-value-description{margin-top:3px}
 				.myupdate-field-downgrade input{margin-right:7px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
@@ -619,10 +619,6 @@ return view.extend({
 					])
 				]),
 				statusPanel,
-				E('div', { 'class': 'myupdate-settings-intro' }, [
-					E('h3', _('升级设置')),
-					
-				]),
 				mapNode
 			]);
 		});
