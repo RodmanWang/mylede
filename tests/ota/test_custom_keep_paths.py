@@ -26,6 +26,8 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn("keepPaths.formvalue = function() { return keepPathValues.slice(); };", source)
         self.assertNotIn("keepPaths.cfgvalue = function() { return keepPathValues.slice(); };", source)
         self.assertIn("keepPaths.renderWidget = function(section_id)", source)
+        self.assertIn("'placeholder': _('输入绝对路径，可每行一条，可用逗号隔离连续输入')", source)
+        self.assertIn("split(/[\\n,，]+/)", source)
         self.assertNotIn("keepPaths.write =", source)
         self.assertIn("function stageKeepPaths(paths, successMessage)", source)
         self.assertIn("stageKeepPaths(next", source)
