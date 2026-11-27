@@ -405,6 +405,10 @@ return view.extend({
 		downgrade.default = '0';
 		downgrade.rmempty = false;
 		downgrade.description = _('默认关闭；开启后允许安装低于当前版本的固件。点击“保存并应用”后生效。');
+		var originalDowngradeRender = downgrade.renderWidget;
+		downgrade.renderWidget = function() {
+			return E('div', { 'class': 'myupdate-field-downgrade' }, [ originalDowngradeRender.apply(this, arguments) ]);
+		};
 
 		var statusPanel = E('section', { 'class': 'myupdate-status-panel' }, [
 			E('div', { 'class': 'myupdate-status-heading' }, [ statusText ]),
@@ -454,7 +458,6 @@ return view.extend({
 			};
 		return m.render().then(function(mapNode) {
 			var downgradeRow = mapNode.querySelector('.cbi-value:has([name*="allow_downgrade"])');
-			var actionRow = statusPanel.querySelector('.myupdate-actions-primary');
 			var actionSettings = E('div', { 'class': 'myupdate-action-settings' });
 			var actionContainer = statusPanel.querySelector('.myupdate-actions');
 			if (actionContainer) actionContainer.appendChild(actionSettings);
