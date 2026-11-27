@@ -589,10 +589,10 @@ return view.extend({
 				.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-field{display:block;width:100%;margin:0;padding:0}
 				.myupdate-field-token{display:block;width:100%;max-width:680px}
 				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-visibility) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-description{white-space:nowrap;overflow:visible;font-size:.78em;line-height:1.25;margin-top:4px}
-				.myupdate-page.myupdate-repo-private .cbi-value:has(.myupdate-repo-input){width:34%}
-				.myupdate-page.myupdate-repo-private .cbi-value:has(.myupdate-field-visibility){width:18%}
-				.myupdate-page:not(.myupdate-repo-private) .cbi-value:has(.myupdate-repo-input){width:58%}
-				.myupdate-page:not(.myupdate-repo-private) .cbi-value:has(.myupdate-field-visibility){width:20%}
+				.myupdate-page:has(.myupdate-repo-private) .cbi-value:has(.myupdate-repo-input){width:38%}
+				.myupdate-page:has(.myupdate-repo-private) .cbi-value:has(.myupdate-field-visibility){width:16%}
+				.myupdate-page:not(:has(.myupdate-repo-private)) .cbi-value:has(.myupdate-repo-input){width:58%}
+				.myupdate-page:not(:has(.myupdate-repo-private)) .cbi-value:has(.myupdate-field-visibility){width:20%}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-time){display:inline-block;vertical-align:top;width:30%;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-description{display:none}
