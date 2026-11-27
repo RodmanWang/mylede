@@ -603,6 +603,13 @@ return view.extend({
 				.myupdate-field-token{display:block;width:100%;max-width:680px}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-time){display:inline-block;vertical-align:top;width:30%;box-sizing:border-box}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control{display:inline-flex!important;flex:0 0 auto!important;width:auto!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;vertical-align:middle!important}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control:has(.myupdate-field-mode),.myupdate-actions-primary>.cbi-value.myupdate-inline-control:has(.myupdate-field-time){flex-direction:column!important;align-items:flex-start!important;gap:2px!important}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control:has(.myupdate-field-downgrade){flex-direction:row!important;align-items:center!important;gap:7px!important}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control .cbi-value-title{display:block!important;width:auto!important;float:none!important;margin:0!important;padding:0 0 4px!important;text-align:left!important;white-space:nowrap}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-title{padding:0!important}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control .cbi-value-field{display:block!important;width:auto!important;float:none!important;margin:0!important;padding:0!important}
+				.myupdate-actions-primary>.cbi-value.myupdate-inline-control:has(.myupdate-field-downgrade) .cbi-value-description{display:inline-block!important;margin:0!important;max-width:230px;font-size:.78em;line-height:1.25;white-space:nowrap}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-description{display:none}
 				.myupdate-page .cbi-value:has(.myupdate-key-input-row){padding-top:2px}
 				.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{padding-top:0}
