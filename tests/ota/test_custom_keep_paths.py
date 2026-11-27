@@ -105,7 +105,7 @@ class CustomKeepPathsContractTests(unittest.TestCase):
         self.assertIn(".myupdate-key-input-row{display:flex;align-items:center", source)
         self.assertIn(".myupdate-key-convert{display:flex;align-items:center;align-self:center", source)
         self.assertIn(".myupdate-path-entry-row{display:flex;align-items:center", source)
-        self.assertIn(".myupdate-path-manual-add{align-self:center", source)
+        self.assertIn(".myupdate-path-manual-add{flex:0 0 auto;align-self:center", source)
         self.assertNotIn(".myupdate-path-manual-add{align-self:flex-end}", source)
         self.assertIn("overflow:hidden;text-overflow:ellipsis;white-space:nowrap", source)
         self.assertIn("myupdate-browser-entry", source)
