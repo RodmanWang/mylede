@@ -546,7 +546,7 @@ return view.extend({
 				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-title{display:none}
 				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
-				.myupdate-field-token input{width:180%;max-width:600px;box-sizing:border-box}
+				.myupdate-field-token input{display:block;width:100%;max-width:600px;box-sizing:border-box}
 				.myupdate-downgrade-setting{display:block;width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color-low,#edf0f4)}
 				.myupdate-downgrade-setting>.cbi-value{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%;margin:0;padding:0;border:0}
 				.myupdate-downgrade-setting .cbi-value-title{display:none}
@@ -570,14 +570,14 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-repo-input{width:100%;max-width:352px}
+				.myupdate-repo-input{width:100%;max-width:422px}
 				.myupdate-page .cbi-value[hidden]{display:none!important}
-				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:36%;padding-right:10px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{display:block;padding:0 0 5px}
 				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-field,.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-field{display:block;margin:0;padding:0}
 				.myupdate-page .cbi-value:has(.myupdate-key-input-row){display:block;width:100%}
-				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:16%;padding-right:10px;box-sizing:border-box}
-				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:49%;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:12%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:50%;box-sizing:border-box}\n\t\t\t\t.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-title{display:block;padding:0 0 5px}\n\t\t\t\t.myupdate-page .cbi-value:has(.myupdate-field-token) .cbi-value-field{display:block;width:100%;margin:0;padding:0}\n\t\t\t\t.myupdate-field-token{display:block;width:100%;max-width:600px}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-time){display:inline-block;vertical-align:top;width:30%;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode) .cbi-value-description,.myupdate-page .cbi-value:has(.myupdate-field-time) .cbi-value-description{display:none}
