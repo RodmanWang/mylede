@@ -457,15 +457,31 @@ return view.extend({
 				]);
 			};
 		return m.render().then(function(mapNode) {
-			var downgradeRow = mapNode.querySelector('.cbi-value:has([name*="allow_downgrade"])');
-			var actionSettings = E('div', { 'class': 'myupdate-action-settings' });
+			var downgradeWidget = mapNode.querySelector('.myupdate-field-downgrade');
+			var downgradeRow = downgradeWidget && downgradeWidget.closest('.cbi-value');
 			var actionContainer = statusPanel.querySelector('.myupdate-actions');
-			if (actionContainer) actionContainer.appendChild(actionSettings);
-			if (downgradeRow && actionSettings) actionSettings.appendChild(downgradeRow);
+			var primaryActions = statusPanel.querySelector('.myupdate-actions-primary');
+			var downgradeSetting = E('div', { 'class': 'myupdate-downgrade-setting' });
+			if (actionContainer && primaryActions) actionContainer.insertBefore(downgradeSetting, primaryActions.nextSibling);
+			if (downgradeRow && downgradeSetting) downgradeSetting.appendChild(downgradeRow);
+			var actionSettings = E('div', { 'class': 'myupdate-action-settings' });
+			if (actionContainer && downgradeSetting) actionContainer.insertBefore(actionSettings, downgradeSetting.nextSibling);
 			var modeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-mode)');
 			var timeRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-time)');
 			if (modeRow && actionSettings) actionSettings.appendChild(modeRow);
 			if (timeRow && actionSettings) actionSettings.appendChild(timeRow);
+			var visibilitySelect = mapNode.querySelector('.myupdate-field-visibility select');
+			var tokenRow = mapNode.querySelector('.cbi-value:has(.myupdate-field-token)');
+			if (visibilitySelect && tokenRow) {
+				var syncTokenVisibility = function() {
+					var isPrivate = visibilitySelect.value == 'private';
+					tokenRow.hidden = !isPrivate;
+					tokenRow.setAttribute('aria-hidden', isPrivate ? 'false' : 'true');
+				};
+				visibilitySelect.addEventListener('change', syncTokenVisibility);
+				visibilitySelect.addEventListener('input', syncTokenVisibility);
+				syncTokenVisibility();
+			}
 			var style = E('style', {}, `
 				.myupdate-page{max-width:1440px;margin:0 auto;padding-bottom:18px}
 				.myupdate-hero{position:static!important;top:auto!important;z-index:auto!important}
@@ -530,8 +546,14 @@ return view.extend({
 				.myupdate-page .cbi-value:has(.myupdate-settings-heading) .cbi-value-title{display:none}
 				.myupdate-repo-input{width:min(100%,680px);max-width:680px}
 				.myupdate-repo-input input{width:100%;max-width:100%;box-sizing:border-box}
-				.myupdate-field-token input{width:150%;max-width:480px;box-sizing:border-box}
-				.myupdate-action-settings{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px 18px;margin-top:8px;padding-top:9px;border-top:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-field-token input{width:180%;max-width:600px;box-sizing:border-box}
+				.myupdate-downgrade-setting{display:block;width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color-low,#edf0f4)}
+				.myupdate-downgrade-setting>.cbi-value{display:block;width:100%;margin:0;padding:0;border:0}
+				.myupdate-downgrade-setting .cbi-value-title{display:none}
+				.myupdate-downgrade-setting .cbi-value-field{display:block;padding:0}
+				.myupdate-downgrade-setting .myupdate-field-downgrade{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+				.myupdate-downgrade-setting .cbi-value-description{display:inline-block;margin:0}
+				.myupdate-action-settings{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px 18px;margin-top:2px;padding-top:5px;border-top:0}
 				.myupdate-action-settings>.cbi-value:has(.myupdate-field-downgrade){display:block;flex:0 0 100%;width:100%;margin:0;padding:0}
 				.myupdate-action-settings>.cbi-value:has(.myupdate-field-mode){display:inline-flex;align-items:flex-start;flex:0 1 260px;width:auto;margin:0;padding:0}
 				.myupdate-action-settings>.cbi-value:has(.myupdate-field-time){display:inline-flex;align-items:flex-start;flex:0 1 220px;width:auto;margin:0;padding:0}
@@ -548,8 +570,11 @@ return view.extend({
 				.myupdate-settings-heading p{margin:4px 0 0;color:var(--gray-color-medium,#748094);font-size:.88em;line-height:1.5}
 				#myupdate-status{min-width:0}
 				#myupdate-status + div{margin-top:8px}
-				.myupdate-repo-input{width:100%;max-width:293px}
+				.myupdate-repo-input{width:100%;max-width:352px}
 				.myupdate-page .cbi-value:has(.myupdate-repo-input){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-title,.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-title{display:block;padding:0 0 5px}
+				.myupdate-page .cbi-value:has(.myupdate-repo-input) .cbi-value-field,.myupdate-page .cbi-value:has(.myupdate-key-input-row) .cbi-value-field{display:block;margin:0;padding:0}
+				.myupdate-page .cbi-value:has(.myupdate-key-input-row){display:block;width:100%}
 				.myupdate-page .cbi-value:has(.myupdate-field-visibility){display:inline-block;vertical-align:top;width:16%;padding-right:10px;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-token){display:inline-block;vertical-align:top;width:49%;box-sizing:border-box}
 				.myupdate-page .cbi-value:has(.myupdate-field-mode){display:inline-block;vertical-align:top;width:34%;padding-right:10px;box-sizing:border-box}
@@ -605,7 +630,7 @@ return view.extend({
 					.myupdate-actions-primary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 					.myupdate-actions-primary .btn{min-width:0;width:100%;white-space:normal}
 					.myupdate-actions-primary .btn{min-width:0;padding-left:7px;padding-right:7px}
-					.myupdate-downgrade-row{align-items:flex-start;flex-direction:column;gap:5px}
+					.myupdate-downgrade-row{align-items:flex-start;flex-direction:row;gap:8px}
 					.myupdate-page .cbi-section{padding:8px 12px 12px}
 					.myupdate-page .cbi-value{display:block;padding:8px 0}
 					.myupdate-page .cbi-value-title{display:block;padding:0 0 5px}
