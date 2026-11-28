@@ -60,18 +60,24 @@ class MinisignFallbackTests(unittest.TestCase):
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
         self.assertIn("PKG_VERSION:=$(MINISIGN_LOCK_VERSION)", content)
         self.assertIn("PKG_HASH:=$(MINISIGN_LOCK_HASH)", content)
+        self.assertIn("PKG_VERSION:=0.12", versions)
+        self.assertIn("PKG_HASH:=" + NEW_HASH, versions)
 
     def test_same_release_is_idempotent(self):
         result, content, versions = self.run_update("0.12", NEW_HASH, "0.12", NEW_HASH)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PKG_VERSION:=0.12", content)
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
+        self.assertIn("PKG_VERSION:=0.12", versions)
+        self.assertIn("PKG_HASH:=" + NEW_HASH, versions)
 
     def test_older_release_never_downgrades_fallback(self):
         result, content, versions = self.run_update("0.13", NEW_HASH, "0.12", INITIAL_HASH)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PKG_VERSION:=0.13", content)
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
+        self.assertIn("PKG_VERSION:=0.13", versions)
+        self.assertIn("PKG_HASH:=" + NEW_HASH, versions)
 
     def test_same_version_with_different_hash_is_rejected(self):
         result, content, versions = self.run_update("0.12", INITIAL_HASH, "0.12", NEW_HASH)
