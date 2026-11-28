@@ -20,6 +20,12 @@ class MinisignFallbackTests(unittest.TestCase):
         root = Path(temp.name)
         makefile = root / "Makefile"
         manifest = root / "manifest.json"
+        versions = root / "versions.mk"
+        versions.write_text(
+            "PKG_VERSION:=" + current_version + "\n"
+            "PKG_HASH:=" + current_hash + "\n",
+            encoding="utf-8",
+        )
         makefile.write_text(
             "PKG_VERSION:=" + current_version + "\n"
             "PKG_RELEASE:=1\n"
@@ -34,19 +40,21 @@ class MinisignFallbackTests(unittest.TestCase):
             "minisign_release": {"version": new_version, "sha256": new_hash}
         }), encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(UPDATER), str(manifest), str(makefile)],
+            [sys.executable, str(UPDATER), str(manifest), str(makefile), str(versions)],
             capture_output=True, text=True,
         )
-        return result, makefile.read_text(encoding="utf-8")
+        return result, makefile.read_text(encoding="utf-8"), versions.read_text(encoding="utf-8")
 
     def test_newer_successful_release_updates_version_and_hash(self):
-        result, content = self.run_update("0.11", INITIAL_HASH, "0.12", NEW_HASH)
+        result, content, versions = self.run_update("0.11", INITIAL_HASH, "0.12", NEW_HASH)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PKG_VERSION:=0.12", content)
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
+        self.assertIn("PKG_VERSION:=0.12", versions)
+        self.assertIn("PKG_HASH:=" + NEW_HASH, versions)
 
     def test_makefile_lock_overrides_do_not_confuse_fallback_detection(self):
-        result, content = self.run_update("0.11", INITIAL_HASH, "0.12", NEW_HASH)
+        result, content, versions = self.run_update("0.11", INITIAL_HASH, "0.12", NEW_HASH)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PKG_VERSION:=0.12", content)
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
@@ -54,22 +62,24 @@ class MinisignFallbackTests(unittest.TestCase):
         self.assertIn("PKG_HASH:=$(MINISIGN_LOCK_HASH)", content)
 
     def test_same_release_is_idempotent(self):
-        result, content = self.run_update("0.12", NEW_HASH, "0.12", NEW_HASH)
+        result, content, versions = self.run_update("0.12", NEW_HASH, "0.12", NEW_HASH)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PKG_VERSION:=0.12", content)
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
 
     def test_older_release_never_downgrades_fallback(self):
-        result, content = self.run_update("0.13", NEW_HASH, "0.12", INITIAL_HASH)
+        result, content, versions = self.run_update("0.13", NEW_HASH, "0.12", INITIAL_HASH)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PKG_VERSION:=0.13", content)
         self.assertIn("PKG_HASH:=" + NEW_HASH, content)
 
     def test_same_version_with_different_hash_is_rejected(self):
-        result, content = self.run_update("0.12", INITIAL_HASH, "0.12", NEW_HASH)
+        result, content, versions = self.run_update("0.12", INITIAL_HASH, "0.12", NEW_HASH)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("different archive digest", result.stderr)
         self.assertIn("PKG_HASH:=" + INITIAL_HASH, content)
+        self.assertIn("PKG_VERSION:=0.12", versions)
+        self.assertIn("PKG_HASH:=" + INITIAL_HASH, versions)
 
     def test_workflow_updates_fallback_only_after_release_creation(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
@@ -78,7 +88,8 @@ class MinisignFallbackTests(unittest.TestCase):
         commit = workflow.index('git commit -m "ci(build): remember last successful firmware partition layout"')
         self.assertLess(release, update)
         self.assertLess(update, commit)
-        self.assertIn("git add build-config/last-successful-partition-layout.json .github/workflows/build.yml minisign/Makefile", workflow)
+        self.assertIn("release-input/manifest.json minisign/Makefile minisign/versions.mk", workflow)
+        self.assertIn("git add build-config/last-successful-partition-layout.json .github/workflows/build.yml minisign/Makefile minisign/versions.mk", workflow)
 
     def test_release_notes_hide_internal_manifest_and_minisign_metadata(self):
         workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
