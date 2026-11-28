@@ -1683,10 +1683,10 @@ jobs:
           # Only a successfully compiled, signed, validated and published firmware
           # may advance the standalone Minisign fallback used without a CI lock.
           python3 scripts/update-minisign-fallback.py \
-            release-input/manifest.json minisign/Makefile
+            release-input/manifest.json minisign/Makefile minisign/versions.mk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build-config/last-successful-partition-layout.json .github/workflows/build.yml minisign/Makefile
+          git add build-config/last-successful-partition-layout.json .github/workflows/build.yml minisign/Makefile minisign/versions.mk
           if ! git diff --cached --quiet; then
             git commit -m "ci(build): remember last successful firmware partition layout"
             git push origin "HEAD:${GITHUB_REF}"
