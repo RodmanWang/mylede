@@ -2,8 +2,9 @@ name: 清理仓库历史与记录
 
 on:
   schedule:
-    # 每天北京时间 03:00（UTC 前一天 19:00）执行历史保留清理。
-    - cron: '0 16 * * *'
+    - cron: "0 5 * * *"
+      timezone: "Asia/Shanghai"
+
   workflow_dispatch:
     inputs:
       keep_days:
