@@ -25,8 +25,8 @@ def replace_once(text: str, pattern: str, replacement: str, label: str) -> str:
 
 def read_literal_fallback(makefile: Path) -> tuple[str, str, str]:
     original = makefile.read_text(encoding="utf-8")
-    version_pattern = r"(?m)^(PKG_VERSION:=)(v?(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)\\s*$"
-    hash_pattern = r"(?m)^(PKG_HASH:=)([0-9a-f]{64})\\s*$"
+    version_pattern = r"(?m)^(PKG_VERSION:=)(v?(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))+)\s*$"
+    hash_pattern = r"(?m)^(PKG_HASH:=)([0-9a-f]{64})\s*$"
     versions = re.findall(version_pattern, original)
     hashes = re.findall(hash_pattern, original)
     if len(versions) != 1 or len(hashes) != 1:
