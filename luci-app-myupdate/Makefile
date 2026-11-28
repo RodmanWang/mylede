@@ -45,13 +45,28 @@ endef
 # services that enforce strict file permissions.
 define Package/luci-app-myupdate/postinst
 #!/bin/sh
-[ -n "$${IPKG_INSTROOT}" ] && exit 0
 
-chmod 0755 /etc/init.d/myupdate || exit 1
-chmod 0644 /usr/share/rpcd/ucode/myupdate.uc || exit 1
-chmod 0600 /etc/config/myupdate || exit 1
-chmod 0755 /usr/libexec/myupdate/*.sh || exit 1
-[ ! -e /etc/myupdate/token ] || chmod 0600 /etc/myupdate/token || exit 1
+# Normalize permissions in the target root during offline image installation
+# and in the live root during a normal package installation.
+ROOT="$${IPKG_INSTROOT}"
+[ -n "$$ROOT" ] || ROOT=""
+
+chmod 0755 "$$ROOT/etc/init.d/myupdate" || exit 1
+chmod 0755 "$$ROOT/etc/uci-defaults/90-myupdate" || exit 1
+chmod 0644 "$$ROOT/usr/share/rpcd/ucode/myupdate.uc" || exit 1
+chmod 0644 "$$ROOT/usr/share/rpcd/acl.d/luci-app-myupdate.json" || exit 1
+chmod 0600 "$$ROOT/etc/config/myupdate" || exit 1
+
+for script in "$$ROOT"/usr/libexec/myupdate/*.sh; do
+	[ -f "$$script" ] || continue
+	chmod 0755 "$$script" || exit 1
+done
+
+[ ! -e "$$ROOT/etc/myupdate/token" ] || chmod 0600 "$$ROOT/etc/myupdate/token" || exit 1
+
+# Image construction only needs the file modes normalized. Runtime migration
+# and service management must run only on the live router.
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
 
 # Migrate the previous package default (6 hours) to the new default (1 day).
 # Preserve any non-default interval explicitly chosen by the administrator.
