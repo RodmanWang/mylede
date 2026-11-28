@@ -40,7 +40,8 @@ on:
         default: false
 
   schedule:
-    - cron: '35 0 * * *'
+    - cron: "35 0 * * *"
+      timezone: "Asia/Shanghai"
 
 permissions:
   contents: read
